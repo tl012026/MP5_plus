@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+# per-run outputs
+runs/
+MP5_agent/images/
+MP5_agent/video/
+MP5_agent/logs/
+# local secrets
+.env
+*.key
+# large artifacts
+*.sif
+LAMM/
