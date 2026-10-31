@@ -5,7 +5,7 @@ A fork of [MP5](https://arxiv.org/abs/2312.07472v2) (CVPR 2024, [project page](h
 This fork has two goals:
 
 1. **Baseline.** Run the original MP5 decision loop unchanged, but with YAML configs, per-episode outputs, batch evaluation and Slurm templates, so results are reproducible.
-2. **Improvement.** Replace modules one at a time and measure the effect on a fixed task set. The planned direction is an **LLM-free** agent built from small trainable models (see [Planned direction](#planned-direction-llm-free-agent)).
+2. **(?)Improvement.** Replace modules one at a time and measure the effect on a fixed task set. The planned direction is an **LLM-free** agent built from small trainable models (see [Planned direction](#planned-direction-llm-free-agent)).
 
 The decision loop and everything in `MP5_agent/agent/prompts/` are unchanged from the original release.
 
@@ -103,7 +103,7 @@ For each subgoal, repeat until it succeeds or the retry limit (300) is reached:
 
 ---
 
-## Planned direction: LLM-free agent
+## (?)Planned direction: LLM-free agent
 
 **Status: planned, not implemented.**
 
