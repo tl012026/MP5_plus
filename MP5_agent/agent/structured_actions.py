@@ -1,5 +1,4 @@
 # generate data of different biomes at different times of the day
-from re import T
 import minedojo
 import random
 import string
@@ -34,6 +33,27 @@ try_steps = 0
 action_stack = []# each element is a tuple with 2 dimensions (dir,jumpornot)
 stuck = 0
 recently_approached_object_position = []# stores the position of the recently approached object
+direction = 0
+retry_times = 0
+
+
+def reset_state():
+    """Restore module-level mutable globals so episodes in one process do not leak state."""
+    global save_count, dontstop, seed, events, prev_position, explore_steps
+    global try_steps, action_stack, stuck, recently_approached_object_position
+    global direction, retry_times
+    save_count = 0
+    dontstop = 0
+    seed = 0
+    events = {}
+    prev_position = np.array([0, 0, 0])
+    explore_steps = 0
+    try_steps = 0
+    action_stack = []
+    stuck = 0
+    recently_approached_object_position = []
+    direction = 0
+    retry_times = 0
 
 # Create_observation creates a txt file containing ground-truth observations provided by the minedojo interface
 # under the directory SA_observation, note that you will have to create the SA_observation directory under the  
@@ -114,17 +134,25 @@ def create_observation(env,ii):
 # Saves a screenshot under SA_screenshots, the SA_screenshots directory must likewise be created in advance.
 # Screenshot will be named by the string parameter you pass to the function.
 def save_rgb_as_image(env,name):
+    from runtime import runtime
     events  = sleep(env)
     rgb_frame = events["rgb"]
-    file_path = f"../images/{name}.jpg"
+    if runtime.images_dir is None:
+        file_path = f"../images/{name}.jpg"
+    else:
+        file_path = runtime.perception_image_path(name)
     image = Image.fromarray(rgb_frame.transpose(1,2,0))
     image.save(file_path)
+    return file_path
 
 def save_rgb_for_video(events):
     global save_count
+    from runtime import runtime
     save_count += 1
+    if not runtime.save_frames:
+        return
     rgb_frame = events["rgb"]
-    file_path = f"../video/frame_{save_count}.jpg"
+    file_path = runtime.video_frame_path(save_count) if runtime.video_dir is not None else f"../video/frame_{save_count}.jpg"
     image = Image.fromarray(rgb_frame.transpose(1,2,0))
     image.save(file_path)
 
@@ -1282,8 +1310,6 @@ def try_rightward(env,underground,approach = 0):
                     return True
             return False
     
-direction = 0
-retry_times = 0
 # the function name explore_above_ground may be misleading, it is actually a function
 # which can be used both in above-ground and underground scenarios,
 # set parameter underground to 0 if above ground, set it to 1 if underground.
@@ -1322,11 +1348,19 @@ def explore_above_ground(env,object,underground,memory,percipient,task_informati
             #     return True
             print(find_time)
             if find_time>=0:
-                save_rgb_as_image(env,f"{find_time}")
-                file_path = f"../images/{find_time}.jpg"
+                from runtime import runtime
+                file_path = save_rgb_as_image(env,f"{find_time}")
+                if runtime.images_dir is not None:
+                    file_path = runtime.perception_image_path(find_time)
                 
                 memory.reset_current_environment_information()
                 find_result = percipient.perceive(task_information=task_information, find_obj=object, file_path=file_path)
+                if not runtime.save_perception_images and runtime.images_dir is not None:
+                    try:
+                        import os
+                        os.remove(file_path)
+                    except OSError:
+                        pass
                 if find_result == 2:
                     print("Find successfully!")
                     return True
