@@ -1,0 +1,110 @@
+[
+  {
+    "task": "diamond",
+    "quantity": 1,
+    "material": null,
+    "tool": "iron pickaxe",
+    "platform": null,
+    "tips": "Diamond ore is typically around y-level 12. Mine with an iron pickaxe. Inventory name is diamond.",
+    "description": "Mine 1 diamond using an iron pickaxe as the tool."
+  },
+  {
+    "task": "iron pickaxe",
+    "quantity": 1,
+    "material": {"iron ingot": 3, "stick": 2},
+    "tool": null,
+    "platform": "crafting table",
+    "tips": "1 iron pickaxe can be crafted with 3 iron ingot and 2 stick on a crafting table.",
+    "description": "Craft 1 iron pickaxe using 3 iron ingot and 2 stick on a crafting table as the platform."
+  },
+  {
+    "task": "iron ingot",
+    "quantity": 3,
+    "material": {"iron ore": 3, "coal": 3},
+    "tool": null,
+    "platform": "furnace",
+    "tips": "Smelt 3 iron ore with coal in a furnace.",
+    "description": "Craft 3 iron ingot using 3 iron ore and 3 coal on a furnace as the platform."
+  },
+  {
+    "task": "furnace",
+    "quantity": 1,
+    "material": {"cobblestone": 8},
+    "tool": null,
+    "platform": "crafting table",
+    "tips": "1 furnace is crafted from 8 cobblestone.",
+    "description": "Craft 1 furnace using 8 cobblestone on a crafting table as the platform."
+  },
+  {
+    "task": "iron ore",
+    "quantity": 3,
+    "material": null,
+    "tool": "stone pickaxe",
+    "platform": null,
+    "tips": "Mine 3 iron ore with a stone pickaxe.",
+    "description": "Mine 3 iron ore using a stone pickaxe as the tool."
+  },
+  {
+    "task": "stone pickaxe",
+    "quantity": 1,
+    "material": {"cobblestone": 3, "stick": 2},
+    "tool": null,
+    "platform": "crafting table",
+    "tips": "Craft a stone pickaxe first.",
+    "description": "Craft 1 stone pickaxe using 3 cobblestone and 2 stick on a crafting table as the platform."
+  },
+  {
+    "task": "cobblestone",
+    "quantity": 11,
+    "material": null,
+    "tool": "wooden pickaxe",
+    "platform": null,
+    "tips": "Need 3 cobblestone for the stone pickaxe and 8 for the furnace.",
+    "description": "Mine 11 cobblestone using a wooden pickaxe as the tool."
+  },
+  {
+    "task": "wooden pickaxe",
+    "quantity": 1,
+    "material": {"planks": 3, "stick": 2},
+    "tool": null,
+    "platform": "crafting table",
+    "tips": "Craft a wooden pickaxe first.",
+    "description": "Craft 1 wooden pickaxe using 3 planks and 2 stick on a crafting table as the platform."
+  },
+  {
+    "task": "crafting table",
+    "quantity": 1,
+    "material": {"planks": 4},
+    "tool": null,
+    "platform": null,
+    "tips": "1 crafting table can be crafted with 4 planks.",
+    "description": "Craft 1 crafting table using 4 planks."
+  },
+  {
+    "task": "stick",
+    "quantity": 6,
+    "material": {"planks": 4},
+    "tool": null,
+    "platform": null,
+    "tips": "Need stick for wooden, stone, and iron pickaxes.",
+    "description": "Craft 6 stick using 4 planks."
+  },
+  {
+    "task": "planks",
+    "quantity": 11,
+    "material": {"log": 3},
+    "tool": null,
+    "platform": null,
+    "tips": "1 log crafts 4 planks.",
+    "description": "Craft 11 planks using 3 log."
+  },
+  {
+    "task": "wood",
+    "quantity": 3,
+    "material": null,
+    "tool": null,
+    "platform": null,
+    "tips": "Find and mine 3 wood (log).",
+    "description": "Mine 3 wood."
+  }
+]

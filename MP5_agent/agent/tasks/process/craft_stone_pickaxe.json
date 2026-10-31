@@ -1,0 +1,65 @@
+[
+  {
+    "task": "stone pickaxe",
+    "quantity": 1,
+    "material": {"cobblestone": 3, "stick": 2},
+    "tool": null,
+    "platform": "crafting table",
+    "tips": "1 stone pickaxe can be crafted with 3 cobblestone and 2 stick on a crafting table.",
+    "description": "Craft 1 stone pickaxe using 3 cobblestone and 2 stick on a crafting table as the platform."
+  },
+  {
+    "task": "cobblestone",
+    "quantity": 3,
+    "material": null,
+    "tool": "wooden pickaxe",
+    "platform": null,
+    "tips": "Mine stone with a wooden pickaxe. Inventory name is cobblestone.",
+    "description": "Mine 3 cobblestone using a wooden pickaxe as the tool."
+  },
+  {
+    "task": "wooden pickaxe",
+    "quantity": 1,
+    "material": {"planks": 3, "stick": 2},
+    "tool": null,
+    "platform": "crafting table",
+    "tips": "1 wooden pickaxe can be crafted with 3 planks and 2 stick as the material and crafting table as the platform.",
+    "description": "Craft 1 wooden pickaxe using 3 planks and 2 stick on a crafting table as the platform."
+  },
+  {
+    "task": "crafting table",
+    "quantity": 1,
+    "material": {"planks": 4},
+    "tool": null,
+    "platform": null,
+    "tips": "1 crafting table can be crafted with 4 planks.",
+    "description": "Craft 1 crafting table using 4 planks."
+  },
+  {
+    "task": "stick",
+    "quantity": 4,
+    "material": {"planks": 2},
+    "tool": null,
+    "platform": null,
+    "tips": "2 planks craft 4 stick; need stick for both pickaxes.",
+    "description": "Craft 4 stick using 2 planks."
+  },
+  {
+    "task": "planks",
+    "quantity": 9,
+    "material": {"log": 3},
+    "tool": null,
+    "platform": null,
+    "tips": "1 log crafts 4 planks.",
+    "description": "Craft 9 planks using 3 log."
+  },
+  {
+    "task": "wood",
+    "quantity": 3,
+    "material": null,
+    "tool": null,
+    "platform": null,
+    "tips": "Find and mine 3 wood (log).",
+    "description": "Mine 3 wood."
+  }
+]

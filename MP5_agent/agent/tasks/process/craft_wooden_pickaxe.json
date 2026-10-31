@@ -1,0 +1,47 @@
+[
+  {
+    "task": "wooden pickaxe",
+    "quantity": 1,
+    "material": {"planks": 3, "stick": 2},
+    "tool": null,
+    "platform": "crafting table",
+    "tips": "1 wooden pickaxe can be crafted with 3 planks and 2 stick as the material and crafting table as the platform.",
+    "description": "Craft 1 wooden pickaxe using 3 planks and 2 stick on a crafting table as the platform."
+  },
+  {
+    "task": "crafting table",
+    "quantity": 1,
+    "material": {"planks": 4},
+    "tool": null,
+    "platform": null,
+    "tips": "1 crafting table can be crafted with 4 planks.",
+    "description": "Craft 1 crafting table using 4 planks."
+  },
+  {
+    "task": "stick",
+    "quantity": 2,
+    "material": {"planks": 2},
+    "tool": null,
+    "platform": null,
+    "tips": "4 stick are crafted from 2 planks; 2 stick are enough for a wooden pickaxe.",
+    "description": "Craft 2 stick using 2 planks."
+  },
+  {
+    "task": "planks",
+    "quantity": 9,
+    "material": {"log": 3},
+    "tool": null,
+    "platform": null,
+    "tips": "1 log crafts 4 planks. Need 9 planks: 4 for the table, 2 for sticks, 3 for the pickaxe.",
+    "description": "Craft 9 planks using 3 log."
+  },
+  {
+    "task": "wood",
+    "quantity": 3,
+    "material": null,
+    "tool": null,
+    "platform": null,
+    "tips": "Find and mine 3 wood (log). No tool required.",
+    "description": "Mine 3 wood."
+  }
+]
