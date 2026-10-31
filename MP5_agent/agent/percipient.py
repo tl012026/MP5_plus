@@ -1,4 +1,6 @@
+import time
 from utils import *
+from llm_factory import create_chat_openai
 
 class Percipient:
     def __init__(
@@ -10,13 +12,15 @@ class Percipient:
         answer_model="mllm",        # mllm or gpt-vision
         answer_mllm_url=None,       # mllm url
         answer_gpt_name=None,       # gpt-4-vision-preview
-        temperature=0
+        temperature=0,
+        question_model_cfg=None,
+        gpt_vision_base_url=None,
+        event_logger=None,
     ):
-        openai.api_base ="https://api.chatweb.plus/v1"
-        self.perception_llm = ChatOpenAI(
-            model_name=question_model_name,
-            temperature=temperature
-        )
+        if question_model_cfg is None:
+            question_model_cfg = {"model_name": question_model_name, "base_url": None, "temperature": temperature}
+        self.perception_llm = create_chat_openai(question_model_cfg)
+        self.event_logger = event_logger
 
         self.memory = memory
         self.answer_method = answer_method
@@ -32,7 +36,12 @@ class Percipient:
 
         elif self.answer_model == "gpt-vision":
             assert answer_gpt_name is not None, "Please input gpt vison name"
-            self.mllm = ChatOpenAIVision(method=self.answer_method, model_name=answer_gpt_name, openai_key=openai_key)
+            self.mllm = ChatOpenAIVision(
+                method=self.answer_method,
+                model_name=answer_gpt_name,
+                openai_key=openai_key,
+                base_url=gpt_vision_base_url,
+            )
         else:
             raise ValueError("Percipient's answer mllm is incorrect.")
 
@@ -121,7 +130,18 @@ class Percipient:
                 log_info(f"GPT Question: {question_dict['query']['question']}")
 
                 ## Interact with MLLM
+                t0 = time.time()
                 answer = self.mllm.query(question_dict['query']['question'], file_path)
+                if self.event_logger:
+                    self.event_logger.emit(
+                        "perception_call",
+                        question=question_dict['query']['question'],
+                        image_path=file_path,
+                        answer=answer,
+                        backend=self.answer_model,
+                        method=self.answer_method,
+                        latency_s=time.time() - t0,
+                    )
 
                 log_info(f"MLLM Answer: {answer}")
 
@@ -169,7 +189,18 @@ class Percipient:
 
         try:
             ## Interact with MLLM
+            t0 = time.time()
             answer = self.mllm.query("Could you describe this Minecraft image?", file_path)
+            if self.event_logger:
+                self.event_logger.emit(
+                    "perception_call",
+                    question="Could you describe this Minecraft image?",
+                    image_path=file_path,
+                    answer=answer,
+                    backend=self.answer_model,
+                    method=self.answer_method,
+                    latency_s=time.time() - t0,
+                )
 
             log_info(f"MLLM Answer: {answer}")
 

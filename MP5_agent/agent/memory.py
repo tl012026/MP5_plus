@@ -1,4 +1,5 @@
 from utils import *
+from llm_factory import create_chat_openai
 
 class Memory:
     
@@ -10,7 +11,8 @@ class Memory:
         ckpt_id=0,
         use_history_workflow=False,
         retrieval_top_k=2,
-        temperature=0
+        temperature=0,
+        model_cfg=None,
     ):
         ## Long Memory
         self.inventory = {}
@@ -18,12 +20,9 @@ class Memory:
         self.current_environment_information = []
         self.feedback = []
 
-        os.environ["OPENAI_API_KEY"] = openai_key
-        openai.api_base ="https://api.chatweb.plus/v1"
-        self.llm = ChatOpenAI(
-            model_name=model_name,
-            temperature=temperature
-        )
+        if model_cfg is None:
+            model_cfg = {"model_name": model_name, "base_url": None, "temperature": temperature}
+        self.llm = create_chat_openai(model_cfg)
 
         self.retrieval_top_k = retrieval_top_k
         self.ckpt_dir = ckpt_dir
