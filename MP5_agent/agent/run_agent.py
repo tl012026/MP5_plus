@@ -4,152 +4,294 @@ from patroller import Patroller
 from memory import Memory
 from performer import Performer
 from percipient import Percipient
-from minedojo.sim import InventoryItem
-import minedojo
-import random
+from config import load_config, DEFAULT_CONFIG_PATH, resolve_api_key
+from llm_factory import get_openai_key
+from runtime import runtime
+from event_logger import EventLogger
+from env_wrapper import EnvWrapper, EpisodeTimeout, EpisodeDeath
+from structured_actions import reset_state
+from success import classify_task_kind, inventory_has_item, snapshot_obs, failure_category
 import argparse
 import numpy as np
-
-def main():
-    mllm_url = args.mllm_url
-    openai_key = args.openai_key
+import time
+from pathlib import Path
 
 
-    f_mkdir(f"../images"); f_remove("../video"); f_mkdir(f"../video")
-    f_mkdir(f"../logs"); logging.basicConfig(filename=f'../logs/agent.log', filemode='w', level=logging.INFO, format='%(message)s')
-
-    
-    seed = random.randint(1,1000000000000)
-    vradius = 5
-    log_info(seed)
-    biome_string = "forest"
-
-    env = minedojo.make(
-        task_id="harvest", target_names="diamond",
-        image_size=(512, 820), 
-        target_quantities=100, seed=3, 
-        specified_biome = biome_string, 
-        spawn_rate=1, 
-        break_speed_multiplier = 100.0, 
-        spawn_range_low=(-10, -10, -10), spawn_range_high=(10, 10, 10), 
-        start_at_night = False, world_seed = seed, use_voxel = True, 
-        voxel_size=dict(xmin=-vradius, ymin=-vradius, zmin=-vradius, xmax=vradius, ymax=vradius, zmax=vradius), # doesn't really matter
-        use_lidar=True,
-        lidar_rays=[
-                (np.pi * pitch / 180, np.pi * yaw / 180, 10) # ALERT: lidar range is now 10
-                for pitch in np.arange(-60, 60, 5)
-                for yaw in np.arange(-60, 60, 5)
-        ]
+def make_minedojo_env(config, seed):
+    import minedojo
+    e = config["env"]
+    vradius = e["voxel_radius"]
+    kwargs = dict(
+        task_id=e["task_id"],
+        target_names=e["target_names"],
+        image_size=tuple(e["image_size"]),
+        target_quantities=e["target_quantities"],
+        seed=e["env_seed"],
+        spawn_rate=e["spawn_rate"],
+        break_speed_multiplier=e["break_speed_multiplier"],
+        spawn_range_low=tuple(e["spawn_range_low"]),
+        spawn_range_high=tuple(e["spawn_range_high"]),
+        start_at_night=e["start_at_night"],
+        world_seed=seed,
+        use_voxel=e["use_voxel"],
+        voxel_size=dict(xmin=-vradius, ymin=-vradius, zmin=-vradius,
+                        xmax=vradius, ymax=vradius, zmax=vradius),
+        use_lidar=e["use_lidar"],
     )
+    if e.get("specified_biome") is not None:
+        kwargs["specified_biome"] = e["specified_biome"]
+    if e["use_lidar"]:
+        p0, p1, ps = e["lidar_pitch"]
+        y0, y1, ys = e["lidar_yaw"]
+        kwargs["lidar_rays"] = [
+            (np.pi * pitch / 180, np.pi * yaw / 180, e["lidar_range"])
+            for pitch in np.arange(p0, p1, ps)
+            for yaw in np.arange(y0, y1, ys)
+        ]
+    return minedojo.make(**kwargs)
 
 
-    env.reset()
+def apply_start_inventory(env, config):
+    from minedojo.sim import InventoryItem
+    items = config["env"].get("start_inventory") or []
+    if not items:
+        return
+    env.set_inventory([
+        InventoryItem(slot=it["slot"], name=it["name"], variant=it.get("variant"), quantity=it["quantity"])
+        for it in items
+    ])
 
-    env.set_inventory([InventoryItem(slot=9, name="dirt", variant=None, quantity=6), InventoryItem(slot=16, name="coal", variant=None, quantity=3), InventoryItem(slot=17, name="coal", variant=None, quantity=3)])
-    events, _, _, _ = env.step([0,0,0,12,6,0,0,0])
 
+def run_episode(task_file, seed, config, out_dir, env=None):
+    """
+    Run one task file as one episode. The planner-performer-patroller loop is unchanged.
+    env: optional already-created env (tests inject a fake). Otherwise MineDojo is constructed.
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # OUT/<task>/<seed>/ artifacts; events live at OUT/<task>/<seed>.events.jsonl
+    logger = EventLogger(out_dir.parent / f"{out_dir.name}.events.jsonl")
+    runtime.bind(out_dir, config["eval"], event_logger=logger)
+    reset_state()
 
-    underground = False
-    model_name=args.gpt_model_name
+    log_path = runtime.logs_dir / "agent.log"
+    logging.basicConfig(filename=str(log_path), filemode="w", level=logging.INFO, format="%(message)s", force=True)
 
-    memory = Memory(openai_key=openai_key, use_history_workflow=False)
-    patroller = Patroller(openai_key=openai_key, memory=memory, model_name=model_name)
-    planner = Planner(openai_key=openai_key, memory=memory, model_name=model_name)
-    
-    # answer_method = active | caption
-    # answer_model = mllm -> answer_mllm_url | gpt-vision -> gpt-4-vision-preview
-    percipient = Percipient(openai_key=openai_key, memory=memory, question_model_name=model_name,
-                            answer_method=args.answer_method, answer_model=args.answer_model, 
-                            answer_mllm_url=mllm_url, answer_gpt_name="gpt-4-vision-preview")
+    started = time.time()
+    kind = classify_task_kind(task_file)
+    result = {
+        "task_file": str(task_file),
+        "task_kind": kind,
+        "seed": seed,
+        "success": None,
+        "outcome": None,
+        "steps": 0,
+        "elapsed_s": None,
+        "self_reported_steps": None,
+        "obs_snapshot": None,
+        "failure_category": None,
+        "llm_counts": None,
+        "inventory": {},
+    }
+    last_action_find = False
+    planner_parse_failed = False
+    retries_exhausted = False
+    own_env = env is None
+    wrapped = None
 
-    # sync the memory
-    share_memory(memory=memory, events=events)
+    try:
+        openai_key = get_openai_key()
+        if env is None:
+            raw_env = make_minedojo_env(config, seed)
+            raw_env.reset()
+            apply_start_inventory(raw_env, config)
+            events, _, _, _ = raw_env.step(list(config["env"]["warmup_action"]))
+        else:
+            raw_env = env
+            raw_env.reset()
+            events, _, _, _ = raw_env.step(list(config["env"]["warmup_action"]))
 
-    with open(args.task, 'r') as f:
-        task_list = json.load(f)
+        wrapped = EnvWrapper(raw_env, config["eval"]["max_steps"], logger=logger)
+        env = wrapped
+        log_info(seed)
+
+        underground = False
+        memory = Memory(
+            openai_key=openai_key,
+            use_history_workflow=False,
+            ckpt_dir=str(runtime.out_dir),
+            model_cfg=config["models"]["memory"],
+        )
+        patroller = Patroller(
+            openai_key=openai_key, memory=memory,
+            model_cfg=config["models"]["patroller"], event_logger=logger,
+        )
+        planner = Planner(
+            openai_key=openai_key, memory=memory,
+            model_cfg=config["models"]["planner"], event_logger=logger,
+        )
+        perc = config["percipient"]
+        percipient = Percipient(
+            openai_key=openai_key, memory=memory,
+            question_model_cfg=config["models"]["percipient_question"],
+            answer_method=perc["answer_method"],
+            answer_model=perc["answer_model"],
+            answer_mllm_url=perc.get("mllm_url") or None,
+            answer_gpt_name=perc.get("gpt_vision_model"),
+            gpt_vision_base_url=perc.get("gpt_vision_base_url"),
+            event_logger=logger,
+        )
+        share_memory(memory=memory, events=events)
+
+        with open(task_file, "r") as f:
+            task_list = json.load(f)
+
+        all_subgoals_done = True
         for task_id, task_information in enumerate(task_list[::-1]):
-
-            every_task_max_retries = 300
+            every_task_max_retries = int(config["eval"]["max_subgoal_retries"])
             check_result = {}
-
+            logger.emit("subgoal", phase="start", task=task_information.get("task"), index=task_id)
             log_info(f"Task: { task_information['description'] }")
 
             while every_task_max_retries >= 0:
                 memory.reset_current_environment_information()
-
                 log_info(f"My inventory: {memory.inventory}")
 
                 if every_task_max_retries == 0:
                     log_info("************Failed to complete this task. Consider updating your prompt.************\n\n")
+                    retries_exhausted = True
+                    all_subgoals_done = False
                     break
 
-                ## Stage1: Workflow Decision
                 workflow_dict = planner.get_workflow(task_information=task_information, underground=underground, check_result=check_result)
+                if not workflow_dict:
+                    planner_parse_failed = True
 
-                ## Stage2: Interface & Update Inventory
-                performer = Performer(memory=memory, percipient=percipient, checker=patroller)
-                check_result, underground = performer.check_and_execute_workflow(env=env, workflow_dict=workflow_dict, task_information=task_information, underground=underground)
-                # Fail halfway through
+                performer = Performer(memory=memory, percipient=percipient, checker=patroller, event_logger=logger)
+                last_action_find = _workflow_has_find(workflow_dict)
+                check_result, underground = performer.check_and_execute_workflow(
+                    env=env, workflow_dict=workflow_dict, task_information=task_information, underground=underground
+                )
                 if not check_result["success"]:
                     log_info(f"Action Preparation Failure: {check_result}")
                     every_task_max_retries -= 1
                     continue
 
-                # Stage3: Check the final task result
                 check_result = patroller.check_task_success(task_information=task_information)
 
-                ## Stage4: Validation
                 if check_result["success"]:
-                    # Success: Put successful Workflow into Memory
                     memory.add_successful_workflow(task_information["task"], task_information["description"], workflow_dict["workflow"])
+                    logger.emit("subgoal", phase="end", task=task_information.get("task"), retries_used=int(config["eval"]["max_subgoal_retries"]) - every_task_max_retries, success=True)
                     break
                 else:
-                    # Failure: Do not have sufficient materials, Feedback
                     every_task_max_retries -= 1
                     continue
-    
-    memory.reset_all()
-    log_info("############ Successfully Finish All Tasks ############")
+            else:
+                all_subgoals_done = False
 
-if __name__ == "__main__":
+            if retries_exhausted:
+                break
+
+        result["inventory"] = dict(memory.inventory)
+        memory.reset_all()
+        if all_subgoals_done and not retries_exhausted:
+            log_info("############ Successfully Finish All Tasks ############")
+            if kind == "process":
+                final = task_list[0]
+                ok = inventory_has_item(result["inventory"], final)
+                result["success"] = bool(ok)
+                result["outcome"] = "success" if ok else "fail"
+            else:
+                result["success"] = None
+                result["outcome"] = "self_reported"
+                result["self_reported_steps"] = env.steps
+        else:
+            result["success"] = False if kind == "process" else None
+            result["outcome"] = "fail"
+
+        result["obs_snapshot"] = snapshot_obs(getattr(env, "last_obs", None))
+
+    except EpisodeTimeout as exc:
+        result["outcome"] = "timeout"
+        result["success"] = False if kind == "process" else None
+        result["steps"] = exc.steps
+    except EpisodeDeath as exc:
+        result["outcome"] = "death"
+        result["success"] = False if kind == "process" else None
+        result["steps"] = exc.steps
+    except Exception as exc:
+        result["outcome"] = "error"
+        result["success"] = False if kind == "process" else None
+        result["error"] = repr(exc)
+        log_info(f"Episode error: {exc}")
+    finally:
+        result["steps"] = result["steps"] or getattr(env, "steps", 0) if env is not None else 0
+        result["elapsed_s"] = time.time() - started
+        result["llm_counts"] = dict(logger.counts)
+        result["failure_category"] = failure_category(
+            result["outcome"], last_action_find, planner_parse_failed, retries_exhausted
+        )
+        logger.emit(
+            "episode_end",
+            outcome=result["outcome"],
+            success=result["success"],
+            steps=result["steps"],
+            elapsed_s=result["elapsed_s"],
+            llm_counts=result["llm_counts"],
+            failure_category=result["failure_category"],
+        )
+        logger.close()
+        if own_env and env is not None:
+            closer = getattr(getattr(env, "_env", env), "close", None)
+            if callable(closer):
+                try:
+                    closer()
+                except Exception:
+                    pass
+        runtime.reset()
+        reset_state()
+    return result
+
+
+def _workflow_has_find(workflow_dict):
+    if not isinstance(workflow_dict, dict):
+        return False
+    for step in workflow_dict.get("workflow") or []:
+        for action in step.get("actions") or []:
+            if action.get("name") == "find":
+                return True
+    return False
+
+
+def main():
     parser = argparse.ArgumentParser()
-    
-    # 1. mllm_url
-    parser.add_argument(
-        "--mllm_url",
-        type=str,
-        default='',
-    )
-    # 2. openai_key
-    parser.add_argument(
-        "--openai_key",
-        type=str,
-        required=True,
-    )
-    # 3. gpt_model_name
-    parser.add_argument(
-        "--gpt_model_name",
-        type=str,
-        required=True,
-    )
-    # 4. answer_method
-    parser.add_argument(
-        "--answer_method",
-        type=str,
-        default='active',
-    )
-    # 5. answer_model
-    parser.add_argument(
-        "--answer_model",
-        type=str,
-        default='mllm',
-    )
-    # 5. task
-    parser.add_argument(
-        "--task",
-        type=str,
-        required=True,
-    )
+    parser.add_argument("--config", type=str, default=str(DEFAULT_CONFIG_PATH))
+    parser.add_argument("--mllm_url", type=str, default="")
+    parser.add_argument("--openai_key", type=str, default="", help="Ignored; use OPENAI_API_KEY")
+    parser.add_argument("--gpt_model_name", type=str, default="")
+    parser.add_argument("--answer_method", type=str, default="")
+    parser.add_argument("--answer_model", type=str, default="")
+    parser.add_argument("--task", type=str, required=True)
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--out_dir", type=str, default="")
     args = parser.parse_args()
 
+    config = load_config(args.config)
+    if args.mllm_url:
+        config["percipient"]["mllm_url"] = args.mllm_url
+    if args.answer_method:
+        config["percipient"]["answer_method"] = args.answer_method
+    if args.answer_model:
+        config["percipient"]["answer_model"] = args.answer_model
+    if args.gpt_model_name:
+        for role in ("planner", "patroller", "percipient_question"):
+            config["models"][role]["model_name"] = args.gpt_model_name
+
+    seed = args.seed if args.seed is not None else random.randint(1, 1000000000000)
+    out_dir = args.out_dir or str(Path("runs") / Path(args.task).stem / str(seed))
+    resolve_api_key()
+    run_episode(args.task, seed, config, out_dir)
+
+
+if __name__ == "__main__":
     main()
