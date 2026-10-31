@@ -12,9 +12,12 @@ from env_wrapper import EnvWrapper, EpisodeTimeout, EpisodeDeath
 from structured_actions import reset_state
 from success import classify_task_kind, inventory_has_item, snapshot_obs, failure_category
 import argparse
+import os
 import numpy as np
 import time
 from pathlib import Path
+
+AGENT_DIR = Path(__file__).resolve().parent
 
 
 def make_minedojo_env(config, seed):
@@ -67,8 +70,11 @@ def run_episode(task_file, seed, config, out_dir, env=None):
     Run one task file as one episode. The planner-performer-patroller loop is unchanged.
     env: optional already-created env (tests inject a fake). Otherwise MineDojo is constructed.
     """
-    out_dir = Path(out_dir)
+    out_dir = Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+    # load_prompt() and task relative paths assume cwd is MP5_agent/agent/
+    prev_cwd = os.getcwd()
+    os.chdir(AGENT_DIR)
     # OUT/<task>/<seed>/ artifacts; events live at OUT/<task>/<seed>.events.jsonl
     logger = EventLogger(out_dir.parent / f"{out_dir.name}.events.jsonl")
     runtime.bind(out_dir, config["eval"], event_logger=logger)
@@ -250,6 +256,7 @@ def run_episode(task_file, seed, config, out_dir, env=None):
                     pass
         runtime.reset()
         reset_state()
+        os.chdir(prev_cwd)
     return result
 
 
