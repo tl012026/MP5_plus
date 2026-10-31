@@ -1,127 +1,121 @@
-# MP5
-<p align="center"> <img src="Image/logo.png" height=100> </p>
-<div align="center">
+# MP5_plus
 
-## MP5: A Multi-modal Open-ended Embodied System in Minecraft via Active Perception
-[[Paper](https://arxiv.org/abs/2312.07472v2)]
-[[Project Page](https://iranqin.github.io/MP5.github.io/)]
-[[Demo](https://www.youtube.com/watch?v=AZeS3C_S_3M)]
-[[Dataset](https://huggingface.co/datasets/IranQin/MP5_dataset)]
-</div>
+Eval/config fork of [MP5](https://arxiv.org/abs/2312.07472v2) (CVPR 2024, [project](https://iranqin.github.io/MP5.github.io/)). Minecraft agent on [MineDojo](https://github.com/MineDojo/MineDojo). **Decision loop and `prompts/` are unchanged.** This repo adds YAML config, per-episode outputs, batch eval, and Slurm templates.
 
-## News
+Do not edit `MP5_agent/agent/structured_actions copy.py`. Do not install MineDojo/JDK on the login node; use `python3 tools/test_offline.py`.
 
-**We are currently organizing the code for MP5. If you are interested in our work, please star ⭐ our project.**
+## Pipeline
 
-- **(2024/2/28)** MP5 is accepted to CVPR 2024!
-- **(2023/12/12)** MP5 is released on [arXiv](https://arxiv.org/abs/2312.07472v2).
-- **(2024/03/29)** Code is released!
+Not image+text → one answer. A **text subgoal list** drives a Minecraft loop. **RGB is used only in `find`.** Defaults: `configs/code_default.yaml`. Swap a model in that YAML or `llm_factory.py`.
 
+**Inputs.** Instruction = task JSON (`task`, `quantity`, `material`, `tool`, `platform`, `tips`, `description`). Inventory from MineDojo. Screenshot only during `find`. Voxels/LiDAR only for movement (not sent to Planner). Past plans via embedding search.
 
-## The process of finishing the task ''kill a pig with a stone sward during the daytime near the water with grass next to it.''
-<p align="center">
-  <img src="Image/motivation.png">
-</p>
+JSON is run as `task_list[::-1]` (final goal first in the file). Example wooden pickaxe file: pickaxe → table → stick → planks → wood. Run: wood → … → pickaxe.
 
+**Who does what** (`code_default`):
 
-### MP5 Framework
-<p align="center">
-  <img src="Image/pipeline.png">
-</p>
+| Step | Model / mechanism | In → out |
+|---|---|---|
+| Planner | text LLM `gpt-4-0613` | subgoal + inventory + retrieved plans + feedback → JSON actions |
+| Patroller prep | code, no LLM | inventory vs tool/materials → pass/fail |
+| Patroller done? | text LLM `gpt-3.5-turbo-0613` | subgoal + inventory + Percipient notes → success + feedback |
+| Percipient question | text LLM `gpt-4-0613` | subgoal + notes → next question (`status` 0/1/2) |
+| Percipient vision | MineLLM HTTP or `gpt-4-vision-preview` | **image + question** → text |
+| Memory store/search | `OpenAIEmbeddings()` + Chroma | embed `task_description`; top-2 similar workflows |
+| Memory chat LLM | `gpt-3.5-turbo-0613` constructed, **never called** | — |
+| Performer / actions | no LLM | dispatch; `env.step` |
+| Process success | inventory count | file’s first item/qty present |
+| Creative success | self-report | `success=null` |
 
-### Active Perception
-<p align="center">
-  <img src="Image/active_perception.png">
-</p>
+`--gpt_model_name` overrides Planner, Patroller, Percipient-question only.
 
-### Directory Structure:
+**Control flow**
 
 ```
-.
-├── README.md
-├── MP5_agnet
-│   ├── All agents of MP5.
-├── LAMM
-│   ├── Scripts and models for training and testing MineLLM.
-
+subgoal (text) → Planner → workflow
+                     │
+          for each action:
+            prep fail ──────────────► Planner (same subgoal, retry)
+            prep ok → env.step ─────► timeout / death → END
+                 │
+                 find: walk, save RGB, Percipient
+                   status 2 (found)  → next action (move_to / mine), no replan
+                   0 / 3 (not found) → walk, new frame, Percipient again
+                   explore cap       → leave find; rest of workflow still runs
+                 craft/mine          → update inventory
+                     │
+          workflow done → Patroller “done?”
+            no  → Planner (same subgoal, retry; 300 → END fail)
+            yes → embed workflow in Chroma → next subgoal
 ```
 
+Active perception (default): question LLM then VLM on the same frame until 2/0/3. Caption: one “describe this image”, then the question LLM. Planner never sees pixels.
 
-# Setup
-Note: We provide all the code except the human designed interface code, which you can try to implement yourself or use [MineDreamer](https://sites.google.com/view/minedreamer/main) as a low level control module.
-## Install the environment
-Because MineLLM is deployed on the server side, we need two virtual environments to run MineLLM and MP5_agent.
-### MineLLM
-We recommend running on linux using a conda environment, with python 3.10.
-You can install the environment following [here](https://openlamm.github.io/tutorial/installation#training).
+Other: Planner parse fail retries 5 times then errors. `max_steps` → `timeout` (`timeout_in_find` if last action was `find`). `life <= 0` → `death`.
+
+Batch: `tasks × seeds` → `OUT/<task>/<seed>.json` + `.events.jsonl` → `summary.csv`. `--skip-done` skips existing JSON.
+
+## Layout and paths
+
+```
+configs/          code_default.yaml, strict.yaml, seeds_example.txt
+eval/             run_batch.py, summarize.py
+tools/            validate_tasks.py, test_offline.py
+slurm/            CPU / GPU templates (see slurm/README.md)
+MP5_agent/agent/  run_agent.py, modules, prompts/, tasks/{creative,process}/
+```
+
+Not in git: `LAMM/`, `*.sif`, overlay, `$HOME/.mp5_openai.env` (`chmod 600`, export `OPENAI_API_KEY`).
+
+`run_episode` chdirs to `MP5_agent/agent` so prompts resolve. `OUT/<task>/<seed>/` holds `images/`, `video/` (`save_frames` only), `logs/`, `memory/`. Old `../images|video|logs` and shared `./memory/` are gone.
+
+## Config and run
+
+Key only from `OPENAI_API_KEY` (optional `OPENAI_BASE_URL`). `--openai_key` is ignored.
+
+- `code_default.yaml`: original literals (forest, break×100, 6 dirt + 6 coal, gpt-4 planner, gpt-3.5 patroller/memory). `max_steps=12000` is new; `save_frames=false`.
+- `strict.yaml`: empty inventory, `break_speed=1`, random biome.
+
 ```bash
-# activate conda env for MineLLM
-conda activete minellm
+# login node
+python3 tools/validate_tasks.py && python3 tools/test_offline.py
 
-pip install -r requirement.txt
-```
-### MP5_agent
-MineDojo requires Python ≥ 3.9. We have tested on Ubuntu 20.04 and Mac OS X. **Please follow [this guide](https://docs.minedojo.org/sections/getting_started/install.html#prerequisites)** to install the prerequisites first, such as JDK 8 for running Minecraft backend. We highly recommend creating a new [Conda virtual env](https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/environments.html) to isolate dependencies. Alternatively, we have provided a [pre-built Docker image](https://docs.minedojo.org/sections/getting_started/install.html#docker-image) for easier installation.
+# one episode (compute node)
+export OPENAI_API_KEY=...
+cd MP5_agent/agent
+python3 run_agent.py --config ../../../configs/code_default.yaml \
+  --task tasks/process/craft_wooden_pickaxe.json --seed 10001 \
+  --out_dir /scratch/$USER/mp5_runs/smoke/craft_wooden_pickaxe/10001 \
+  --mllm_url http://127.0.0.1:25541/image --answer_method active --answer_model mllm
 
-Firstly, installing the MineDojo stable version is as simple as:
-
-```bash
-# activate conda env for MP5_agent
-conda activate MP5_agent
-
-pip install minedojo
-```
-or you could check [Minedojo](https://github.com/MineDojo/MineDojo/tree/main) for more details.
-
-Then install other requirement:
-```
-pip install -r requirement.txt
+# batch (repo root)
+python3 eval/run_batch.py --config configs/code_default.yaml \
+  --tasks MP5_agent/agent/tasks/process --seeds configs/seeds_example.txt \
+  --out /scratch/$USER/mp5_runs/run1 --workers 1 \
+  --mllm-url http://127.0.0.1:25541/image --skip-done
 ```
 
-## Training
- 
-To train MineLLM from scratch, please execute the following steps:
+Need Python ≥ 3.9, JDK 8, [MineDojo](https://docs.minedojo.org/sections/getting_started/install.html#prerequisites), `MP5_agent/requirements.txt` (legacy openai + langchain). `mllm` needs a live `mllm_url`. Slurm: Singularity + overlay + `xvfb-run -a`; fill image paths; account `csci_ga_2271-2026fa`.
 
-1. Download datasets from [huggingface](https://huggingface.co/datasets/IranQin/MP5_dataset)
-2. git clone the `LAMM` codebase: `cd MP5` and `git clone https://github.com/IranQin/LAMM`
-3. Put the datasets into `LAMM/datasets/2D_Instruct` and `cd LAMM`.
-4. Download the MineCLIP weight `mineclip_image_encoder_vit-B_196tokens.pth` from [here](https://drive.google.com/file/d/1EGZLIefb8OsJ3mFCq9-AcSaG2GZRuech/view?usp=drive_link) and put it into the `model_zoo/mineclip_ckpt` folder.
-5. Train the agent by running: `. src/scripts/train_lamm2d_mc_v1.5_slurm.sh`, need to be changed if you do not use slurm.
+## Tasks and data
 
-## Running the agent
-Note: We provide all the code except the human designed interface code, which you can try to implement yourself or use [MineDreamer](https://sites.google.com/view/minedreamer/main) as a low level control module.
- 
-### MineLLM service
-To start the MineLLM service, please execute the following steps:
+Fields as above. Names follow `update_*_name` in `utils/common_utils.py` (`wood`↔`log`, `diamond ore`→`diamond`).
 
-1. Download checkpoints from [web](https://huggingface.co/IranQin/MineLLM/tree/main)
-2. Put the checkpoints into `LAMM/ckpt` and `cd LAMM`.
-3. Start the MineLLM service by running: `. src/scripts/mllm_api_slurm.sh`, need to be changed if you do not use slurm.
+| Dir | Role | Success |
+|---|---|---|
+| `tasks/creative/` | original scenes `1-1`…`4-4` | `success=null`, log snapshot |
+| `tasks/process/` | wooden/stone/iron pickaxe, iron ore/ingot, diamond | inventory of file’s first item |
 
-### MP5_agent
-To run the MP5_agent, please execute the following steps:
-```
-cd MP5_agent/
-bash scripts/run_agent.sh
-```
+Official MineLLM data (not in this git): [MP5_dataset](https://huggingface.co/datasets/IranQin/MP5_dataset), [LAMM](https://github.com/IranQin/LAMM) → `datasets/2D_Instruct`, MineCLIP in `model_zoo/mineclip_ckpt`, weights [MineLLM](https://huggingface.co/IranQin/MineLLM) → `LAMM/ckpt`.
 
+## Known leftovers
 
-### Citation	
-If you find this repository useful for your work, please consider citing it as follows:
+Patroller except-retry still passes `messages=` into the wrong signature (original). `openai.api_base` is process-wide. GPU sbatch MineLLM flags are placeholders.
+
 ```
 @inproceedings{qin2024mp5,
   title={MP5: A Multi-modal Open-ended Embodied System in Minecraft via Active Perception},
   author={Qin, Yiran and Zhou, Enshen and Liu, Qichang and Yin, Zhenfei and Sheng, Lu and Zhang, Ruimao and Qiao, Yu and Shao, Jing},
-  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
-  pages={16307--16316},
-  year={2024}
-}
-```
-```
-@article{zhou2024minedreamer,
-  title={MineDreamer: Learning to Follow Instructions via Chain-of-Imagination for Simulated-World Control},
-  author={Zhou, Enshen and Qin, Yiran and Yin, Zhenfei and Huang, Yuzhou and Zhang, Ruimao and Sheng, Lu and Qiao, Yu and Shao, Jing},
-  journal={arXiv preprint arXiv:2403.12037},
-  year={2024}
+  booktitle={CVPR}, pages={16307--16316}, year={2024}
 }
 ```
