@@ -149,6 +149,7 @@ configs/          code_default.yaml, strict.yaml, seeds_example.txt
 eval/             run_batch.py (batch runner), summarize.py
 tools/            validate_tasks.py, test_offline.py
 slurm/            CPU / GPU job templates (see slurm/README.md)
+Minedojo environment/  Singularity setup notes and MineDojo smoke tests
 MP5_agent/agent/  run_agent.py, planner.py, patroller.py, percipient.py,
                   performer.py, memory.py, structured_actions.py,
                   llm_factory.py, prompts/, tasks/{creative,process}/
@@ -220,9 +221,10 @@ python3 eval/run_batch.py --config configs/code_default.yaml \
 
 ## Environment
 
-- Agent: Python ≥ 3.9, JDK 8, Xvfb, [MineDojo](https://docs.minedojo.org/sections/getting_started/install.html#prerequisites), `MP5_agent/requirements.txt` (legacy `openai` and `langchain` APIs). On the cluster: the MineDojo Docker image as a Singularity image, plus an overlay for extra packages, run with `xvfb-run -a`.
+- Agent: Python ≥ 3.9, JDK 8, Xvfb, [MineDojo](https://docs.minedojo.org/sections/getting_started/install.html#prerequisites), `MP5_agent/requirements.txt` (legacy `openai` and `langchain` APIs).
+- **Singularity setup:** see [`Minedojo environment/SETUP_MINEDOJO.md`](Minedojo%20environment/SETUP_MINEDOJO.md) (pull `minedojo/minedojo`, MixinGradle workaround, asset download, `validate_minedojo.py`). Scheduler account/partition stay in your local env file, not in the repo.
 - MineLLM server: Python 3.10, PyTorch 1.13.1 (CUDA 11.7), LAMM `requirements.txt` with `transformers==4.31.0`, plus `flask` and `flask_cors`.
-- Slurm account: `<SLURM_ACCOUNT>`. Fill in image and overlay paths in `slurm/*.sbatch`.
+- Slurm templates in `slurm/` use empty or placeholder account/partition; fill them when you submit.
 
 ## Known issues
 
