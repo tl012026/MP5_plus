@@ -1,6 +1,6 @@
 # MineDojo environment setup (Singularity)
 
-Site-agnostic notes for running MineDojo from the official Docker image via Singularity/Apptainer. Fill in your scratch directory and scheduler flags locally; do not commit host-specific names.
+Site-agnostic notes for running MineDojo from the official Docker image via Singularity/Apptainer. 
 
 On a typical CPU node this stack ran MineDojo at ~18.6 steps/s with the MP5 config; the first `reset` took about one minute.
 
