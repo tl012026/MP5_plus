@@ -1,4 +1,6 @@
+import time
 from utils import *
+from llm_factory import create_chat_openai
 
 class Planner:
     def __init__(
@@ -6,18 +8,15 @@ class Planner:
         openai_key,
         memory,
         model_name="gpt-4-0613",
-        temperature=0
+        temperature=0,
+        model_cfg=None,
+        event_logger=None,
     ):
-        os.environ["OPENAI_API_KEY"] = openai_key
-
-        openai.api_base ="https://api.chatweb.plus/v1"
-
-        self.llm = ChatOpenAI(
-            model_name=model_name,
-            temperature=temperature
-        )
-
+        if model_cfg is None:
+            model_cfg = {"model_name": model_name, "base_url": None, "temperature": temperature}
+        self.llm = create_chat_openai(model_cfg)
         self.memory = memory
+        self.event_logger = event_logger
         assert  self.memory is not None, "Please input memory"
     
     def get_workflow(self, task_information, underground, check_result, max_retries=5):
@@ -59,10 +58,32 @@ class Planner:
                 HumanMessage(content=structured_action_query)
             ]
 
-            workflow_dict = self.llm(messages).content
+            t0 = time.time()
+            raw = self.llm(messages)
+            latency = time.time() - t0
+            workflow_dict = raw.content
             log_info(f"Create Workflow Result: {workflow_dict}")
-
-            return fix_and_parse_json(workflow_dict)
+            parse_ok = True
+            try:
+                parsed = fix_and_parse_json(workflow_dict)
+            except Exception:
+                parse_ok = False
+                parsed = None
+            if self.event_logger:
+                self.event_logger.emit(
+                    "planner_call",
+                    subgoal=task_information.get("task") if isinstance(task_information, dict) else None,
+                    inventory_summary=dict(self.memory.inventory) if self.memory.inventory is not None else {},
+                    feedback_summary=(check_result or {}).get("feedback", ""),
+                    raw_output=workflow_dict,
+                    parse_ok=parse_ok,
+                    retries_left=max_retries,
+                    latency_s=latency,
+                    tokens=_token_count(raw),
+                )
+            if not parse_ok:
+                raise ValueError("planner JSON parse failed")
+            return parsed
         except Exception as e:
             log_info(f"Error arises in Plan Workflow part: {e} Trying again!\n\n")
             self.memory.reset_current_environment_information()
@@ -73,3 +94,13 @@ class Planner:
                 check_result, 
                 max_retries=max_retries - 1
             )
+
+
+def _token_count(raw):
+    for attr in ("response_metadata", "llm_output"):
+        meta = getattr(raw, attr, None)
+        if isinstance(meta, dict):
+            usage = meta.get("token_usage") or meta.get("usage")
+            if isinstance(usage, dict):
+                return usage.get("total_tokens")
+    return None

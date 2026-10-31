@@ -7,10 +7,11 @@ from .json_utils import fix_and_parse_json
 
 
 class ChatOpenAIVision:
-    def __init__(self, method, model_name, openai_key):
+    def __init__(self, method, model_name, openai_key, base_url=None):
         self.method = method            # active | caption
         self.model_name = model_name    # gpt-4-vision-preview
         self.openai_key = openai_key
+        self.base_url = (base_url or "https://api.openai.com/v1").rstrip("/")
 
     @staticmethod
     def encode_image(image_path):
@@ -63,7 +64,7 @@ class ChatOpenAIVision:
                 ]
             }
         )
-        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+        response = requests.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
 
         return response.json()['choices'][0]['message']['content']
 

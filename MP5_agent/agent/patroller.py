@@ -1,4 +1,6 @@
+import time
 from utils import *
+from llm_factory import create_chat_openai
 
 class Patroller:
     def __init__(
@@ -6,16 +8,15 @@ class Patroller:
         openai_key,
         memory,
         model_name="gpt-3.5-turbo-0613",
-        temperature=0
+        temperature=0,
+        model_cfg=None,
+        event_logger=None,
     ):
-        os.environ["OPENAI_API_KEY"] = openai_key
-        openai.api_base ="https://api.chatweb.plus/v1"
-
-        self.llm = ChatOpenAI(
-            model_name=model_name,
-            temperature=temperature
-        )
+        if model_cfg is None:
+            model_cfg = {"model_name": model_name, "base_url": None, "temperature": temperature}
+        self.llm = create_chat_openai(model_cfg)
         self.memory = memory
+        self.event_logger = event_logger
 
         assert memory is not None, "Please input memory"
 
@@ -34,7 +35,9 @@ class Patroller:
         ]   
 
         try:
+            t0 = time.time()
             check_info = self.llm(messages).content
+            latency = time.time() - t0
 
             check_dict = fix_and_parse_json(check_info)
             assert check_dict["success"] in [True, False]
@@ -48,6 +51,15 @@ class Patroller:
             else:
                 log_info("************Workflow Failure!************")
 
+            if self.event_logger:
+                self.event_logger.emit(
+                    "patroller",
+                    kind="task_success",
+                    success=check_dict["success"],
+                    reason=check_dict.get("feedback", ""),
+                    suggestion=check_dict.get("suggestion", ""),
+                    latency_s=latency,
+                )
             return check_dict
 
         except Exception as e:

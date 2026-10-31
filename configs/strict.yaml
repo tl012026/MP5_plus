@@ -1,0 +1,54 @@
+# Same as code_default except: empty inventory, vanilla break speed, random biome.
+
+models:
+  planner:
+    model_name: gpt-4-0613
+    base_url: null
+    temperature: 0
+  patroller:
+    model_name: gpt-3.5-turbo-0613
+    base_url: null
+    temperature: 0
+  memory:
+    model_name: gpt-3.5-turbo-0613
+    base_url: null
+    temperature: 0
+  percipient_question:
+    model_name: gpt-4-0613
+    base_url: null
+    temperature: 0
+
+percipient:
+  answer_method: active
+  answer_model: mllm
+  mllm_url: ""
+  gpt_vision_model: gpt-4-vision-preview
+  gpt_vision_base_url: https://api.openai.com/v1
+
+env:
+  task_id: harvest
+  target_names: diamond
+  target_quantities: 100
+  image_size: [512, 820]
+  env_seed: 3
+  specified_biome: null
+  spawn_rate: 1
+  break_speed_multiplier: 1.0
+  spawn_range_low: [-10, -10, -10]
+  spawn_range_high: [10, 10, 10]
+  start_at_night: false
+  world_seed: null
+  use_voxel: true
+  voxel_radius: 5
+  use_lidar: true
+  lidar_pitch: [-60, 60, 5]
+  lidar_yaw: [-60, 60, 5]
+  lidar_range: 10
+  start_inventory: []
+  warmup_action: [0, 0, 0, 12, 6, 0, 0, 0]
+
+eval:
+  max_steps: 12000
+  max_subgoal_retries: 300
+  save_frames: false
+  save_perception_images: true

@@ -1,0 +1,59 @@
+# Matches the literals in run_agent.py / class constructors.
+# run_agent.py still overrides planner, patroller, and percipient_question
+# with --gpt_model_name when that flag is set (original CLI behaviour).
+
+models:
+  planner:
+    model_name: gpt-4-0613
+    base_url: null
+    temperature: 0
+  patroller:
+    model_name: gpt-3.5-turbo-0613
+    base_url: null
+    temperature: 0
+  memory:
+    model_name: gpt-3.5-turbo-0613
+    base_url: null
+    temperature: 0
+  percipient_question:
+    model_name: gpt-4-0613
+    base_url: null
+    temperature: 0
+
+percipient:
+  answer_method: active
+  answer_model: mllm
+  mllm_url: ""
+  gpt_vision_model: gpt-4-vision-preview
+  gpt_vision_base_url: https://api.openai.com/v1
+
+env:
+  task_id: harvest
+  target_names: diamond
+  target_quantities: 100
+  image_size: [512, 820]
+  env_seed: 3
+  specified_biome: forest
+  spawn_rate: 1
+  break_speed_multiplier: 100.0
+  spawn_range_low: [-10, -10, -10]
+  spawn_range_high: [10, 10, 10]
+  start_at_night: false
+  world_seed: null
+  use_voxel: true
+  voxel_radius: 5
+  use_lidar: true
+  lidar_pitch: [-60, 60, 5]
+  lidar_yaw: [-60, 60, 5]
+  lidar_range: 10
+  start_inventory:
+    - {slot: 9, name: dirt, variant: null, quantity: 6}
+    - {slot: 16, name: coal, variant: null, quantity: 3}
+    - {slot: 17, name: coal, variant: null, quantity: 3}
+  warmup_action: [0, 0, 0, 12, 6, 0, 0, 0]
+
+eval:
+  max_steps: 12000
+  max_subgoal_retries: 300
+  save_frames: false
+  save_perception_images: true
