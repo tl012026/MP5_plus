@@ -33,12 +33,12 @@ distances:
   near: 3
   mid: 10
   far: null
-# Provisional name fragments. Exact MineDojo block ids come from probe_obs.
-# tree is wood or leaves. Matching is case-insensitive substring.
+# Case-insensitive substrings of MineDojo block and entity names.
+# log/leaves/wood are trees. tallgrass and grass are grass. flowing_water and water are water.
 aliases:
   tree: [log, leaves, wood]
-  grass: [grass]
-  water: [water]
+  grass: [tallgrass, grass]
+  water: [flowing_water, water]
   sand: [sand]
   pig: [pig]
   cow: [cow]

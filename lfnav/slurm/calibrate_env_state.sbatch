@@ -1,0 +1,20 @@
+#!/bin/bash
+#SBATCH --job-name=lfnav-env-state
+#SBATCH --account=
+#SBATCH --partition=
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16G
+#SBATCH --time=01:00:00
+#SBATCH --requeue
+#SBATCH --output=/scratch/%u/lfnav/logs/%x-%j.out
+#SBATCH --error=/scratch/%u/lfnav/logs/%x-%j.err
+
+# Measure sun_brightness, light_level, is_raining, and biome_id.
+# Copy the printed thresholds into default.yaml and obs_keys.yaml.
+set -euo pipefail
+SCR=${SCR:-/scratch/$USER}
+MP5=${MP5:-$HOME/MP5_plus}
+ENVSH=${ENVSH:-$SCR/mp5_env.sh}
+SIF=${SIF:-$SCR/env/minedojo.sif}
+mkdir -p "$SCR/lfnav/logs" "$SCR/lfnav/calib"
+singularity exec "$SIF" bash -c "source '$ENVSH' && cd '$MP5' && xvfb-run -a python lfnav/gt/calibrate_env_state.py --out '$SCR/lfnav/calib/env_state.json'"

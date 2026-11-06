@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+
 from lfnav.aggregate import argmax_name
 from lfnav.types import MatchResult, SceneState, TaskSpec
+
+log = logging.getLogger("lfnav.matcher")
 
 
 def _prob(table: dict, key) -> float:
@@ -43,6 +47,7 @@ class Matcher:
             if not ok:
                 missing.append(f"near:{name}")
 
+        unknown = set(scene.unknown or [])
         for field, label in (
             ("biome", "biome"),
             ("time", "time"),
@@ -52,11 +57,17 @@ class Matcher:
             required = cond.get(field)
             if not required:
                 continue
+            key = f"{label}:{required}"
+            if field in unknown:
+                log.warning("%s condition %s is unknown, not a silent miss", field, required)
+                satisfied[key] = False
+                missing.append(f"{key}:unknown")
+                continue
             table = getattr(scene, field)
             ok = _prob(table, required) >= self.tau_cond
-            satisfied[f"{label}:{required}"] = ok
+            satisfied[key] = ok
             if not ok:
-                missing.append(f"{label}:{required}")
+                missing.append(key)
 
         raw_found = not missing
         self._found_hist.append(raw_found)

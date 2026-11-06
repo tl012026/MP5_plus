@@ -10,8 +10,10 @@ from pathlib import Path
 from lfnav.aggregate import aggregate_object, column_direction, distance_bin
 from lfnav.config import load_config
 from lfnav.env.fake import FakeMineDojoEnv
+from lfnav.env.minedojo_env import convert_rays
 from lfnav.geom import center_ray, patch_grid, ray_directions
-from lfnav.gt.judge import judge_episode, spl_approx
+from lfnav.gt.judge import aligned_target_distance, judge_episode, spl_approx
+from lfnav.gt.scene_state import scene_state_from_obs
 from lfnav.matcher import Matcher
 from lfnav.sweep_thresholds import sweep
 from lfnav.types import MatchResult, ObjectBelief, PolicyInput, PolicyOutput, SceneState, TaskSpec
@@ -126,6 +128,85 @@ class JudgeTest(unittest.TestCase):
     def test_spl_zero_length(self):
         self.assertEqual(spl_approx(True, 0.0, 0.0), 1.0)
         self.assertEqual(spl_approx(False, 3.0, 3.0), 0.0)
+
+
+class StopDistanceTest(unittest.TestCase):
+    """SR-b distance comes from converted aligned rays, not env.distance_to."""
+
+    def _task(self):
+        return TaskSpec.from_dict(json.loads((SPECS / "1-4.json").read_text()))
+
+    def _cfg(self):
+        cfg = load_config()
+        cfg["image_hw"] = [14, 28]
+        return cfg
+
+    def _obs(self, entity_distance, entity="pig", block_name="air", block_distance=12.0, extra_wide_pig=None):
+        cfg = self._cfg()
+        plan = {
+            "aligned": (0, 1),
+            "wide": (1, 2),
+            "rows_cols": [(0, 0)],
+            "wide_angles_deg": [(0.0, 90.0)],
+        }
+        wide_entity = "pig" if extra_wide_pig is not None else ""
+        wide_dist = extra_wide_pig if extra_wide_pig is not None else 0.0
+        rays = {
+            "block_name": [block_name, "air"],
+            "block_distance": [block_distance, 12.0],
+            "entity_name": [entity, wide_entity],
+            "entity_distance": [entity_distance, wide_dist],
+        }
+        converted = convert_rays(rays, plan, cfg)
+        key = (cfg.get("obs_keys") or {}).get("aligned_rays") or "lfnav_rays"
+        wide_key = (cfg.get("obs_keys") or {}).get("wide_rays") or "lfnav_wide_rays"
+        return {key: converted["aligned"], wide_key: converted["wide"]}, cfg
+
+    def _verdict(self, obs, cfg):
+        task = self._task()
+        scene = scene_state_from_obs(obs, cfg)
+        dist = aligned_target_distance(obs, cfg, task.target)
+        return judge_episode(task, True, 8, scene, dist, 8.0, [0, 64, 0], [0, 64, 2])
+
+    def test_two_blocks_is_sr_b(self):
+        rec = self._verdict(*self._obs(2.0))
+        self.assertAlmostEqual(rec["distance_blocks"], 2.0)
+        self.assertTrue(rec["sr_a"])
+        self.assertTrue(rec["sr_b"])
+        self.assertTrue(rec["success"])
+
+    def test_five_blocks_is_sr_a_only(self):
+        rec = self._verdict(*self._obs(5.0))
+        self.assertAlmostEqual(rec["distance_blocks"], 5.0)
+        self.assertTrue(rec["sr_a"])
+        self.assertFalse(rec["sr_b"])
+        self.assertEqual(rec["outcome"], "fail_too_far")
+
+    def test_out_of_view_fails_both(self):
+        rec = self._verdict(*self._obs(2.0, entity="", extra_wide_pig=1.0))
+        self.assertIsNone(rec["distance_blocks"])
+        self.assertFalse(rec["sr_a"])
+        self.assertFalse(rec["sr_b"])
+        self.assertEqual(rec["outcome"], "false_stop")
+
+    def test_fake_in_view_matches_euclidean(self):
+        cfg = load_config()
+        cfg["image_hw"] = [14, 14]
+        env = FakeMineDojoEnv(cfg, {"entities": [{"name": "pig", "x": 0.0, "z": 2.0}]})
+        obs = env.reset()
+        euclid = env.distance_to("pig")
+        ray = aligned_target_distance(obs, cfg, "pig")
+        self.assertAlmostEqual(euclid, 2.0)
+        self.assertIsNotNone(ray)
+        self.assertAlmostEqual(euclid, ray, delta=0.2)
+
+    def test_fake_behind_agent_is_not_in_view(self):
+        cfg = load_config()
+        cfg["image_hw"] = [14, 14]
+        env = FakeMineDojoEnv(cfg, {"entities": [{"name": "pig", "x": 0.0, "z": -2.0}]})
+        obs = env.reset()
+        self.assertAlmostEqual(env.distance_to("pig"), 2.0)
+        self.assertIsNone(aligned_target_distance(obs, cfg, "pig"))
 
 
 class GeomTest(unittest.TestCase):

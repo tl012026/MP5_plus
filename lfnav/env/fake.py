@@ -8,6 +8,7 @@ from __future__ import annotations
 import math
 
 from lfnav.geom import patch_grid, ray_directions
+from lfnav.gt.scene_state import biome_id_for_name
 
 
 def _assign(obs: dict, path, value) -> None:
@@ -65,6 +66,9 @@ class FakeMineDojoEnv:
         self._stuck_count = 0
         return self.observation()
 
+    def close(self):
+        self.closed = True
+
     def observation(self) -> dict:
         obs: dict = {}
         h, w = self.image_hw
@@ -81,6 +85,16 @@ class FakeMineDojoEnv:
         _assign(obs, self.keys.get("time_name"), self.time_name)
         _assign(obs, self.keys.get("weather_name"), self.weather)
         _assign(obs, self.keys.get("brightness_name"), self.brightness)
+        loc = obs.setdefault("location_stats", {})
+        if isinstance(loc, dict):
+            mapping = self.keys.get("biome_id_to_name") or {}
+            biome_id = biome_id_for_name(self.biome, mapping)
+            if biome_id is not None:
+                loc["biome_id"] = biome_id
+            loc["is_raining"] = str(self.weather).lower() == "rain"
+            loc["sun_brightness"] = 1.0 if str(self.time_name).lower() == "day" else 0.0
+            loc["sky_light_level"] = loc["sun_brightness"]
+            loc["light_level"] = 15.0 if str(self.brightness).lower() == "sufficient" else 3.0
         return obs
 
     def step(self, action):

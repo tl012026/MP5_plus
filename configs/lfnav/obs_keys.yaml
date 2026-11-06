@@ -10,14 +10,38 @@ pitch: [location_stats, pitch]
 voxels: [voxels, block_name]
 aligned_rays: lfnav_rays
 wide_rays: lfnav_wide_rays
-# Names below are used by the fake env and by gt_scene_state when present.
-# Real MineDojo ids for biome / rain / time / light stay null until probe_obs.
+# Parallel arrays inside obs["rays"]. Names match the lidar keys MP5 already reads.
+# A channel is a miss when its name is in miss_names (air, empty, or null).
+ray_fields:
+  block_name: block_name
+  block_distance: block_distance
+  entity_name: entity_name
+  entity_distance: entity_distance
+  yaw: ray_yaw
+  pitch: ray_pitch
+  miss_names: ["", "air", "null", "none"]
+# Direct name keys stay null. The fake env still writes them when a test sets the path.
+# Numeric fields match MP5's location_stats dump (biome_id, is_raining, light_level,
+# sun_brightness, sky_light_level). Time uses sun_brightness, not the clock tick.
 biome_name: null
-biome_id: null
+biome_id: [location_stats, biome_id]
 time_name: null
-time_of_day: null
+time_of_day: [location_stats, sun_brightness]
 weather_name: null
-weather_rain: null
+weather_rain: [location_stats, is_raining]
 brightness_name: null
-light_level: null
-biome_id_to_name: {}
+light_level: [location_stats, light_level]
+sky_light_level: [location_stats, sky_light_level]
+# Minecraft 1.11 candidates. lfnav/gt/calibrate_env_state.py overwrites this
+# with ids read from specified_biome. Unlisted ids decode as unknown, not "other",
+# until the script has been run.
+biome_id_to_name:
+  1: plains
+  2: desert
+  4: forest
+  5: taiga
+  6: other
+  21: jungle
+  27: other
+  29: other
+  35: savanna

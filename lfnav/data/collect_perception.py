@@ -15,6 +15,7 @@ import numpy as np
 
 from lfnav.config import load_config
 from lfnav.env.fake import FakeMineDojoEnv
+from lfnav.eval.run import close_env
 from lfnav.gt.scene_state import scene_state_from_obs
 from lfnav.io import atomic_write_json
 from lfnav.obsutil import lookup
@@ -110,12 +111,16 @@ def main():
     cfg["image_hw"] = list(cfg.get("collect_image_hw", cfg.get("image_hw")))
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    if args.backend == "fake":
-        env = make_fake(cfg, args.seed)
-    else:
-        from lfnav.env.minedojo_env import MineDojoEnv
-        env = MineDojoEnv(cfg, task=None, seed=args.seed)
-    capture(env, cfg, args.frames, out, args.seed)
+    env = None
+    try:
+        if args.backend == "fake":
+            env = make_fake(cfg, args.seed)
+        else:
+            from lfnav.env.minedojo_env import MineDojoEnv
+            env = MineDojoEnv(cfg, task=None, seed=args.seed)
+        capture(env, cfg, args.frames, out, args.seed)
+    finally:
+        close_env(env)
 
 
 if __name__ == "__main__":

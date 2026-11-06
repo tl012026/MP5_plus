@@ -18,7 +18,8 @@ from pathlib import Path
 from lfnav.config import load_config
 from lfnav.control.controller import Controller
 from lfnav.env.fake import FakeMineDojoEnv
-from lfnav.gt.judge import judge_episode
+from lfnav.gt.judge import aligned_target_distance, judge_episode
+from lfnav.gt.scene_state import scene_state_from_obs
 from lfnav.io import atomic_write_json, read_seeds, read_tasks
 from lfnav.matcher import Matcher
 from lfnav.memory import Memory
@@ -139,10 +140,13 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         mem = memory.to_dict(pos, yaw)
         mem["stuck"] = last_stuck
         mem["blocked"] = last_stuck
+        gt_frame = scene_state_from_obs(obs, cfg)
         if match.stop:
             events.append({
                 "decision": len(events),
                 "scene": scene.to_dict(),
+                "perception": scene.to_dict(),
+                "gt": gt_frame.to_dict(),
                 "match": match.to_dict(),
                 "policy": None,
                 "control": None,
@@ -170,15 +174,18 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         events.append({
             "decision": len(events),
             "scene": scene.to_dict(),
+            "perception": scene.to_dict(),
+            "gt": gt_frame.to_dict(),
             "match": match.to_dict(),
             "policy": output.to_dict(),
             "control": control_rows,
             "seconds": {"perceive": t1 - t0, "match": t2 - t1, "policy": t3 - t2},
         })
     stop_pos = position_of(obs, cfg)
-    distance = env.distance_to(task.target) if hasattr(env, "distance_to") else None
+    distance = aligned_target_distance(obs, cfg, task.target)
+    gt_scene = scene_state_from_obs(obs, cfg)
     verdict = judge_episode(
-        task, stopped, env_steps, scene, distance, path, start, stop_pos,
+        task, stopped, env_steps, gt_scene, distance, path, start, stop_pos,
         max_steps=max_steps, radius=radius,
     )
     verdict.update({
@@ -192,7 +199,8 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         "policy_name": cfg.get("policy_name", "c1"),
         "difficulty": cfg.get("difficulty"),
         "stop_mode": (cfg.get("match") or {}).get("stop_mode", "sr_b"),
-        "gt_at_stop": None if scene is None else scene.to_dict(),
+        "gt_at_stop": gt_scene.to_dict(),
+        "perception_at_stop": None if scene is None else scene.to_dict(),
     })
     return verdict, events
 
@@ -217,6 +225,48 @@ def write_summary(out: Path) -> None:
         writer.writerows(rows)
 
 
+def close_env(env) -> None:
+    if env is None:
+        return
+    close = getattr(env, "close", None)
+    if callable(close):
+        close()
+
+
+class EnvReuse:
+    """One environment per episode, unless reuse_env keeps a task and difficulty together.
+
+    With reuse off, make() receives that episode's seed as the world seed.
+    With reuse on, make() runs for the first episode of a (task, difficulty) streak
+    and later episodes only reset(), so the world stays the first seed's world.
+    """
+
+    def __init__(self, cfg: dict):
+        self.cfg = cfg
+        self.reuse = bool(cfg.get("reuse_env", False))
+        self.env = None
+        self.key = None
+
+    def acquire(self, task: TaskSpec, seed: int):
+        key = (task.id, self.cfg.get("difficulty"))
+        if self.reuse and self.env is not None and self.key == key:
+            return self.env
+        self.release()
+        self.env = make_env(self.cfg, task, seed)
+        self.key = key
+        return self.env
+
+    def release(self, keep: bool = False) -> None:
+        if keep and self.reuse and self.env is not None:
+            return
+        close_env(self.env)
+        self.env = None
+        self.key = None
+
+    def close(self) -> None:
+        self.release()
+
+
 def run_batch(cfg: dict, tasks: list[str], seeds: list[int], out: Path, skip_done: bool) -> None:
     out.mkdir(parents=True, exist_ok=True)
     atomic_write_json(out / "run_meta.json", {
@@ -226,22 +276,32 @@ def run_batch(cfg: dict, tasks: list[str], seeds: list[int], out: Path, skip_don
         "tasks": tasks,
         "seeds": seeds,
     })
-    for task_path in tasks:
-        task = TaskSpec.from_dict(json.loads(Path(task_path).read_text()))
-        for seed in seeds:
-            dest = out / task.id / f"{seed}.json"
-            event_path = out / task.id / str(seed) / "events.jsonl"
-            if skip_done and dest.is_file():
-                continue
-            env = make_env(cfg, task, seed)
-            rec, events = run_episode(env, task, cfg, seed=seed)
-            atomic_write_json(dest, rec)
-            event_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = event_path.with_suffix(".jsonl.tmp")
-            with tmp.open("w") as handle:
-                for event in events:
-                    handle.write(json.dumps(event) + "\n")
-            tmp.replace(event_path)
+    session = EnvReuse(cfg)
+    try:
+        for task_path in tasks:
+            task = TaskSpec.from_dict(json.loads(Path(task_path).read_text()))
+            for seed in seeds:
+                dest = out / task.id / f"{seed}.json"
+                event_path = out / task.id / str(seed) / "events.jsonl"
+                if skip_done and dest.is_file():
+                    continue
+                try:
+                    env = session.acquire(task, seed)
+                    rec, events = run_episode(env, task, cfg, seed=seed)
+                    atomic_write_json(dest, rec)
+                    event_path.parent.mkdir(parents=True, exist_ok=True)
+                    tmp = event_path.with_suffix(".jsonl.tmp")
+                    with tmp.open("w") as handle:
+                        for event in events:
+                            handle.write(json.dumps(event) + "\n")
+                    tmp.replace(event_path)
+                except Exception:
+                    session.release()
+                    raise
+                else:
+                    session.release(keep=True)
+    finally:
+        session.close()
     write_summary(out)
 
 

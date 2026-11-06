@@ -11,8 +11,7 @@ import json
 from pathlib import Path
 
 from lfnav.config import load_config
-from lfnav.data.collect_perception import make_fake
-from lfnav.eval.run import run_episode
+from lfnav.eval.run import EnvReuse, run_episode
 from lfnav.io import atomic_write_json
 from lfnav.perception.gt import GTPerception
 from lfnav.policy.expert import Expert, wide_target
@@ -46,24 +45,32 @@ def collect(cfg, tasks, seeds, out: Path, backend: str = "fake") -> dict:
     out.mkdir(parents=True, exist_ok=True)
     saved = {"success": 0, "failure": 0}
     perception = GTPerception(cfg)
-    for task_path in tasks:
-        task = TaskSpec.from_dict(json.loads(Path(task_path).read_text()))
-        for seed in seeds:
-            assert_train_seed(seed)
-            marker = out / task.id / f"{seed}.json"
-            if marker.is_file():
-                continue
-            if backend == "minedojo":
-                from lfnav.env.minedojo_env import MineDojoEnv
-                env = MineDojoEnv(cfg, task, seed)
-            else:
-                env = make_fake(cfg, seed)
-            policy = _ExpertLoop(cfg, task, env)
-            rec, events = run_episode(env, task, cfg, perception=perception, policy=policy, seed=seed)
-            bucket = "success" if rec.get("success") else "failure"
-            saved[bucket] += 1
-            atomic_write_json(out / bucket / task.id / f"{seed}.json", {"record": rec, "events": events})
-            atomic_write_json(marker, {"bucket": bucket})
+    cfg = dict(cfg)
+    cfg["backend"] = backend
+    session = EnvReuse(cfg)
+    try:
+        for task_path in tasks:
+            task = TaskSpec.from_dict(json.loads(Path(task_path).read_text()))
+            for seed in seeds:
+                assert_train_seed(seed)
+                marker = out / task.id / f"{seed}.json"
+                if marker.is_file():
+                    continue
+                try:
+                    env = session.acquire(task, seed)
+                    policy = _ExpertLoop(cfg, task, env)
+                    rec, events = run_episode(env, task, cfg, perception=perception, policy=policy, seed=seed)
+                    bucket = "success" if rec.get("success") else "failure"
+                    saved[bucket] += 1
+                    atomic_write_json(out / bucket / task.id / f"{seed}.json", {"record": rec, "events": events})
+                    atomic_write_json(marker, {"bucket": bucket})
+                except Exception:
+                    session.release()
+                    raise
+                else:
+                    session.release(keep=True)
+    finally:
+        session.close()
     return saved
 
 
