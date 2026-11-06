@@ -18,7 +18,7 @@ Do not submit from a login node until the image, overlay, and project account ar
 | `MINELLM_SCRIPT` | `LAMM/src/mllm_api_mc_v1.5.py` (flags in the GPU script are placeholders; match the file on the compute node) |
 | `MINELLM_PORT` / `MINELLM_CKPT` | Local MineLLM bind port and weights |
 
-Both scripts use `--account=csci_ga_2271-2026fa`, `--requeue`, `--skip-done`, `singularity exec` + overlay, and `xvfb-run -a`.
+Account and partition are blank in the scripts. Fill them in locally before submitting. Both scripts use `--requeue`, `--skip-done`, `singularity exec` + overlay, and `xvfb-run -a`.
 
 ## Example
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=mp5-cpu
-#SBATCH --account=csci_ga_2271-2026fa
-#SBATCH --partition=n2c48m24
+#SBATCH --account=
+#SBATCH --partition=
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=24G
 #SBATCH --time=12:00:00
