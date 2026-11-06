@@ -242,3 +242,5 @@ python3 eval/run_batch.py --config configs/code_default.yaml \
   booktitle={CVPR}, pages={16307--16316}, year={2024}
 }
 ```
+
+The LLM-free conditional navigator is documented in [lfnav/README.md](lfnav/README.md).

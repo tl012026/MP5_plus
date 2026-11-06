@@ -1,0 +1,46 @@
+# Label vocabulary for Track A. Extra names are allowed.
+objects:
+  - tree
+  - grass
+  - water
+  - pig
+  - cow
+  - sheep
+  - chicken
+  - sand
+biomes:
+  - forest
+  - plains
+  - desert
+  - savanna
+  - taiga
+  - jungle
+  - other
+time:
+  - day
+  - night
+weather:
+  - clear
+  - rain
+brightness:
+  - sufficient
+  - insufficient
+directions:
+  - left
+  - center
+  - right
+distances:
+  near: 3
+  mid: 10
+  far: null
+# Provisional name fragments. Exact MineDojo block ids come from probe_obs.
+# tree is wood or leaves. Matching is case-insensitive substring.
+aliases:
+  tree: [log, leaves, wood]
+  grass: [grass]
+  water: [water]
+  sand: [sand]
+  pig: [pig]
+  cow: [cow]
+  sheep: [sheep]
+  chicken: [chicken]

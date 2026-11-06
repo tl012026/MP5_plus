@@ -1,0 +1,5 @@
+# Pilot perception collection. Confirm the label pictures before raising frames to 30000-50000.
+frames: 1000
+shard_size: 50
+yaw_step: 30
+backend: fake

@@ -2,6 +2,11 @@ __pycache__/
 *.pyc
 # local conda / images; never commit
 env/
+# lfnav/env is source. The rule above also matches that directory.
+!lfnav/env/
+!lfnav/env/**
+lfnav/env/**/__pycache__/
+lfnav/env/**/*.pyc
 # per-run outputs
 runs/
 MP5_agent/images/

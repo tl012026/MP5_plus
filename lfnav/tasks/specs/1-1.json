@@ -1,0 +1,24 @@
+{
+  "id": "1-1",
+  "source": "MP5_agent/agent/tasks/creative/1-1.json",
+  "description": "Find a tree",
+  "target": "tree",
+  "conditions": {
+    "near": [],
+    "biome": null,
+    "time": null,
+    "weather": null,
+    "brightness": null
+  },
+  "episode": {
+    "specified_biome": "forest",
+    "start_time": "day",
+    "initial_weather": "clear",
+    "spawn": [
+      {
+        "name": "tree",
+        "kind": "block"
+      }
+    ]
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "id": "2-3",
+  "source": "MP5_agent/agent/tasks/creative/2-3.json",
+  "description": "Find a cow in the desert",
+  "target": "cow",
+  "conditions": {
+    "near": [],
+    "biome": "desert",
+    "time": null,
+    "weather": null,
+    "brightness": null
+  },
+  "episode": {
+    "specified_biome": "desert",
+    "start_time": "day",
+    "initial_weather": "clear",
+    "spawn": [
+      {
+        "name": "cow",
+        "kind": "mob"
+      }
+    ]
+  }
+}
