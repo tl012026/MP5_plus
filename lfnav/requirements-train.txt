@@ -1,0 +1,6 @@
+# Training environment. Do not install these into the MineDojo image.
+torch>=2.1
+numpy>=1.24
+pyyaml>=6
+# Optional, only if a local MineCLIP checkout is configured:
+# mineclip

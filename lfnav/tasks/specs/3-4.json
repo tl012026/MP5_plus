@@ -1,0 +1,24 @@
+{
+  "id": "3-4",
+  "source": "MP5_agent/agent/tasks/creative/3-4.json",
+  "description": "Find a pig during the night time, the weather is rainyday",
+  "target": "pig",
+  "conditions": {
+    "near": [],
+    "biome": null,
+    "time": "night",
+    "weather": "rain",
+    "brightness": null
+  },
+  "episode": {
+    "specified_biome": "plains",
+    "start_time": "night",
+    "initial_weather": "rain",
+    "spawn": [
+      {
+        "name": "pig",
+        "kind": "mob"
+      }
+    ]
+  }
+}

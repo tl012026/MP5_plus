@@ -1,0 +1,30 @@
+{
+  "id": "4-2",
+  "source": "MP5_agent/agent/tasks/creative/4-2.json",
+  "description": "Find a grass near the pig in the plains during the daytime",
+  "target": "grass",
+  "conditions": {
+    "near": [
+      "pig"
+    ],
+    "biome": "plains",
+    "time": "day",
+    "weather": null,
+    "brightness": null
+  },
+  "episode": {
+    "specified_biome": "plains",
+    "start_time": "day",
+    "initial_weather": "clear",
+    "spawn": [
+      {
+        "name": "grass",
+        "kind": "block"
+      },
+      {
+        "name": "pig",
+        "kind": "mob"
+      }
+    ]
+  }
+}

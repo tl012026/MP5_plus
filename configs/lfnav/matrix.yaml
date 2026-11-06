@@ -1,0 +1,25 @@
+# Experiment matrix. These configs are not launched by this repository's tests.
+perception:
+  - gt
+  - dinov2_vits14
+  - dinov2_vitb14
+  - mineclip
+  - minellm
+policies:
+  - c0
+  - c1
+  - c2
+stop_modes:
+  - sr_b
+  - sr_a
+difficulties:
+  - easy
+  - medium
+  - hard
+primary:
+  - {perception: minellm, policy: c0, name: B0}
+  - {perception: dinov2_vits14, policy: c0, name: dinov2_c0}
+  - {perception: dinov2_vits14, policy: c1, name: dinov2_c1}
+  - {perception: dinov2_vits14, policy: c2, name: dinov2_c2}
+  - {perception: gt, policy: c1, name: gt_c1}
+  - {perception: gt, policy: c2, name: gt_c2}

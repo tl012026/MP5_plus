@@ -1,0 +1,26 @@
+# Named actions shared by the controller and the fake env.
+# vectors are a local contract (confirmed: false). probe_obs.py prints the real
+# MineDojo action_space so these indices can be replaced without code changes.
+confirmed: false
+names:
+  - forward
+  - turn_left_15
+  - turn_right_15
+  - turn_left_45
+  - turn_right_45
+  - look_reset
+vectors:
+  noop: [0, 0, 0, 12, 12, 0, 0, 0]
+  forward: [1, 0, 0, 12, 12, 0, 0, 0]
+  jump_forward: [1, 0, 1, 12, 12, 0, 0, 0]
+  turn_left_15: [0, 0, 0, 12, 11, 0, 0, 0]
+  turn_right_15: [0, 0, 0, 12, 13, 0, 0, 0]
+  turn_left_45: [0, 0, 0, 12, 9, 0, 0, 0]
+  turn_right_45: [0, 0, 0, 12, 15, 0, 0, 0]
+  look_reset: [0, 0, 0, 12, 12, 0, 0, 0]
+degrees:
+  turn_left_15: -15
+  turn_right_15: 15
+  turn_left_45: -45
+  turn_right_45: 45
+stuck_threshold: 2

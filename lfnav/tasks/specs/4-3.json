@@ -1,0 +1,30 @@
+{
+  "id": "4-3",
+  "source": "MP5_agent/agent/tasks/creative/4-3.json",
+  "description": "Find a cow near the water in the desert during the daytime, the weather is sunnyday",
+  "target": "cow",
+  "conditions": {
+    "near": [
+      "water"
+    ],
+    "biome": "desert",
+    "time": "day",
+    "weather": "clear",
+    "brightness": null
+  },
+  "episode": {
+    "specified_biome": "desert",
+    "start_time": "day",
+    "initial_weather": "clear",
+    "spawn": [
+      {
+        "name": "cow",
+        "kind": "mob"
+      },
+      {
+        "name": "water",
+        "kind": "block"
+      }
+    ]
+  }
+}

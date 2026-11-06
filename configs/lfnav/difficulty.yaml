@@ -1,0 +1,16 @@
+# Episode difficulty. Task spec files do not change.
+easy:
+  spawn_distance_min: 4
+  spawn_distance_max: 8
+  distractors: 0
+  leave_biome: false
+medium:
+  spawn_distance_min: 8
+  spawn_distance_max: 16
+  distractors: 2
+  leave_biome: false
+hard:
+  spawn_distance_min: 16
+  spawn_distance_max: 32
+  distractors: 4
+  leave_biome: true

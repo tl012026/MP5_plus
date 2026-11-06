@@ -1,0 +1,53 @@
+# Runtime defaults for lfnav. Scratch paths stay out of git.
+netid: ${USER}
+paths:
+  root: /scratch/${USER}/lfnav
+  data: /scratch/${USER}/lfnav/data
+  features: /scratch/${USER}/lfnav/features
+  checkpoints: /scratch/${USER}/lfnav/checkpoints
+  runs: /scratch/${USER}/lfnav/runs
+  logs: /scratch/${USER}/lfnav/logs
+
+labels_file: lfnav/labels.yaml
+difficulty_file: configs/lfnav/difficulty.yaml
+obs_keys_file: configs/lfnav/obs_keys.yaml
+actions_file: configs/lfnav/actions.yaml
+
+image_hw: [224, 364]
+patch: 14
+# Unconfirmed until lfnav/gt/calibrate_camera.py is run on a real client.
+fov_deg: 70
+fov_axis: vertical
+aligned_ray_range: 16
+wide_ray_range: 32
+wide_lidar: true
+
+match:
+  tau_obj: 0.5
+  tau_cond: 0.5
+  tau_near: 0.5
+  stop_mode: sr_b
+  smooth_n: 1
+
+judge:
+  radius: 3.0
+  max_steps: 3000
+  gt_tau: 0.5
+
+distance_bins:
+  near: 3.0
+  mid: 10.0
+
+policy:
+  chunk: 4
+  recent_k: 8
+  memory_size: 15
+  dagger: false
+
+perception:
+  encoder: dinov2_vits14
+  mineclip_dir: /scratch/${USER}/models/mineclip
+
+difficulty: easy
+backend: fake
+seed: 0

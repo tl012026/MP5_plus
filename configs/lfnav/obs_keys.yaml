@@ -1,0 +1,23 @@
+# Observation key paths. null means the real MineDojo name is not confirmed.
+# Run lfnav/gt/probe_obs.py inside the MineDojo container and fill the nulls.
+# The fake environment writes whatever paths are set here, so tests and the
+# real client share one mapping.
+confirmed: false
+rgb: rgb
+position: [location_stats, pos]
+yaw: [location_stats, yaw]
+pitch: [location_stats, pitch]
+voxels: [voxels, block_name]
+aligned_rays: lfnav_rays
+wide_rays: lfnav_wide_rays
+# Names below are used by the fake env and by gt_scene_state when present.
+# Real MineDojo ids for biome / rain / time / light stay null until probe_obs.
+biome_name: null
+biome_id: null
+time_name: null
+time_of_day: null
+weather_name: null
+weather_rain: null
+brightness_name: null
+light_level: null
+biome_id_to_name: {}

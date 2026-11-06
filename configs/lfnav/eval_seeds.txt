@@ -1,0 +1,4 @@
+# Evaluation seeds. The last digit is 9 so they stay out of the training split.
+9
+19
+29
