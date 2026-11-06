@@ -38,6 +38,12 @@ distance_bins:
   near: 3.0
   mid: 10.0
 
+# sun_brightness >= time_day_min is day. light_level >= brightness_min_light is sufficient.
+# Leave null until lfnav/gt/calibrate_env_state.py has been run; the judge then
+# marks time/brightness unknown instead of failing the condition silently.
+time_day_min: null
+brightness_min_light: null
+
 policy:
   chunk: 4
   recent_k: 8
@@ -51,3 +57,42 @@ perception:
 difficulty: easy
 backend: fake
 seed: 0
+# Off: every episode calls make() with world_seed equal to that episode's seed, then close().
+# On: consecutive episodes of the same task and difficulty keep one process and call reset().
+# The world seed is then only the first episode's seed. Later seeds do not rebuild the world.
+reuse_env: false
+
+# Simulator settings passed to minedojo.make. Perception still uses image_hw above.
+# harvest + diamond x100 matches the original MP5 env: the target is not reached
+# during navigation, and the meta-task accepts scene arguments.
+# Lidar ray angles are omitted until lfnav/env/inspect_minedojo.py confirms the names.
+minedojo:
+  task_id: harvest
+  target_names: diamond
+  target_quantities: 100
+  image_size: [512, 820]
+  seed: 3
+  specified_biome: forest
+  spawn_rate: 1
+  break_speed_multiplier: 100.0
+  spawn_range_low: [-10, -10, -10]
+  spawn_range_high: [10, 10, 10]
+  start_at_night: false
+  use_voxel: true
+  voxel_radius: 5
+  use_lidar: true
+  # Random animals stay off. Mobs named by the task, plus difficulty distractors, are explicit.
+  allow_mob_spawn: false
+  distractor_mobs: [sheep, chicken, cow, pig]
+  # make() names are unconfirmed. Change this table after inspect_minedojo.py; do not hardcode them.
+  param_names:
+    biome: specified_biome
+    time: start_at_night
+    weather: initial_weather
+    mobs: initial_mobs
+    mob_range_low: initial_mob_spawn_distance_min
+    mob_range_high: initial_mob_spawn_distance_max
+    allow_mob_spawn: allow_mob_spawn
+  time_values:
+    day: false
+    night: true

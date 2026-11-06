@@ -4,7 +4,37 @@ from __future__ import annotations
 
 import math
 
+import logging
+
+from lfnav.gt.scene_state import resolve_label
+from lfnav.obsutil import lookup
 from lfnav.types import SceneState, TaskSpec
+
+log = logging.getLogger("lfnav.gt.judge")
+
+
+def aligned_target_distance(obs: dict, cfg: dict, target: str) -> float | None:
+    """Nearest aligned-ray hit on the target. None if the target is not in the camera frame.
+
+    SR-b uses this instead of env.distance_to, which the real MineDojo env does not implement.
+    Wide lidar is ignored: the target has to be in view.
+    """
+    keys = cfg.get("obs_keys") or {}
+    labels = cfg.get("labels") or {}
+    objects = list(labels.get("objects") or [])
+    aliases = labels.get("aliases") or {}
+    rays = lookup(obs, keys.get("aligned_rays"), []) or []
+    best = None
+    for ray in rays:
+        if resolve_label(ray.get("label"), aliases, objects) != target:
+            continue
+        try:
+            dist = float(ray["distance"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if best is None or dist < best:
+            best = dist
+    return best
 
 
 def _holds(scene: SceneState, task: TaskSpec, tau: float = 0.5) -> tuple[bool, list[str]]:
@@ -15,9 +45,14 @@ def _holds(scene: SceneState, task: TaskSpec, tau: float = 0.5) -> tuple[bool, l
     for name in list(cond.get("near") or []):
         if scene.object(name).present < tau:
             missing.append(f"near:{name}")
+    unknown = set(scene.unknown or [])
     for field in ("biome", "time", "weather", "brightness"):
         required = cond.get(field)
         if not required:
+            continue
+        if field in unknown:
+            log.warning("%s condition %s is unknown, not a silent miss", field, required)
+            missing.append(f"{field}:{required}:unknown")
             continue
         if float(getattr(scene, field).get(required, 0.0)) < tau:
             missing.append(f"{field}:{required}")

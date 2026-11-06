@@ -62,6 +62,7 @@ class SceneState:
     time: dict = field(default_factory=dict)
     weather: dict = field(default_factory=dict)
     brightness: dict = field(default_factory=dict)
+    unknown: list = field(default_factory=list)
 
     def object(self, name: str) -> ObjectBelief:
         raw = self.objects.get(name)
@@ -81,6 +82,7 @@ class SceneState:
             "time": dict(self.time),
             "weather": dict(self.weather),
             "brightness": dict(self.brightness),
+            "unknown": list(self.unknown),
         }
 
     @classmethod
@@ -92,6 +94,7 @@ class SceneState:
             time=dict(data.get("time") or {}),
             weather=dict(data.get("weather") or {}),
             brightness=dict(data.get("brightness") or {}),
+            unknown=list(data.get("unknown") or []),
         )
 
 

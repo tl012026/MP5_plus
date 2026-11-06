@@ -20,6 +20,12 @@ When the sentence names a biome, that biome is `specified_biome`. When it does n
 
 Difficulty (spawn distance, distractors, whether the agent must leave the starting biome) lives in `configs/lfnav/difficulty.yaml` and does not change these files.
 
+## Real MineDojo scene
+
+`episode_kwargs` copies the episode onto `minedojo.make`. The argument names are `minedojo.param_names` in `configs/lfnav/default.yaml`, because the meta-task constructor has not been confirmed yet.
+
+Tree, grass, and water are blocks. They are not placed and they are not passed as mobs. The selected biome is expected to generate them. Only `kind: mob` entries are spawned, at a distance taken from the difficulty table. Distractors from that table are extra mobs. Random mob spawning is turned off so those lists are the whole animal population.
+
 ## Open questions
 
 - 2-2 says "Find a grass near the pig". The target is grass and the condition is a pig in view. It is not "find a pig near grass".

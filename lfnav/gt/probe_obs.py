@@ -50,16 +50,18 @@ def main():
     parser.add_argument("--make-json", default=None, help="optional MineDojo make() kwargs. Defaults to the small harvest_milk check used by validate_minedojo.py")
     args = parser.parse_args()
     env = build_env(args.make_json)
-    obs = env.reset()
-    summary = {
-        "keys": sorted(obs.keys()) if isinstance(obs, dict) else [],
-        "observation": summarize(obs),
-        "action_space": summarize(getattr(env, "action_space", None)),
-        "note": "Fill configs/lfnav/obs_keys.yaml from these keys. Leave a key null if it is absent.",
-    }
-    atomic_write_json(args.out, summary)
-    print(json.dumps({"keys": summary["keys"], "out": args.out}, indent=2))
-    env.close()
+    try:
+        obs = env.reset()
+        summary = {
+            "keys": sorted(obs.keys()) if isinstance(obs, dict) else [],
+            "observation": summarize(obs),
+            "action_space": summarize(getattr(env, "action_space", None)),
+            "note": "Fill configs/lfnav/obs_keys.yaml from these keys. Leave a key null if it is absent.",
+        }
+        atomic_write_json(args.out, summary)
+        print(json.dumps({"keys": summary["keys"], "out": args.out}, indent=2))
+    finally:
+        env.close()
 
 
 if __name__ == "__main__":

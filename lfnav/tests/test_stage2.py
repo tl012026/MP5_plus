@@ -9,12 +9,14 @@ from pathlib import Path
 
 from lfnav.config import load_config
 from lfnav.control.controller import Controller
+from unittest.mock import patch
+
 from lfnav.env.fake import FakeMineDojoEnv
 from lfnav.eval.run import run_batch, run_episode
 from lfnav.memory import Memory
 from lfnav.policy.c0 import RandomWalk
 from lfnav.policy.c3 import DiffusionPolicy
-from lfnav.types import PolicyInput, TaskSpec
+from lfnav.types import ObjectBelief, PolicyInput, SceneState, TaskSpec
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -77,6 +79,30 @@ class EpisodeTest(unittest.TestCase):
         self.assertTrue(rec["success"])
         self.assertTrue(events[-1]["match"]["stop"])
 
+    def test_false_stop_when_perception_invents_the_target(self):
+        cfg = small_cfg()
+        task = TaskSpec.from_dict(json.loads((ROOT / "lfnav/tasks/specs/1-4.json").read_text()))
+
+        class AlwaysFound:
+            def reset(self):
+                return None
+
+            def perceive(self, _obs):
+                return SceneState(objects={
+                    "pig": ObjectBelief(1.0, {"left": 0.0, "center": 1.0, "right": 0.0}, {"near": 1.0, "mid": 0.0, "far": 0.0}),
+                })
+
+            def features(self, _obs):
+                return None
+
+        env = FakeMineDojoEnv(cfg, {})
+        rec, events = run_episode(env, task, cfg, perception=AlwaysFound(), seed=0)
+        self.assertTrue(rec["false_stop"])
+        self.assertFalse(rec["success"])
+        self.assertEqual(rec["outcome"], "false_stop")
+        self.assertGreater(events[-1]["perception"]["objects"]["pig"]["present"], 0.5)
+        self.assertEqual(events[-1]["gt"]["objects"]["pig"]["present"], 0.0)
+
     def test_c0_runs(self):
         cfg = small_cfg()
         cfg["policy_name"] = "c0"
@@ -108,6 +134,47 @@ class EpisodeTest(unittest.TestCase):
             self.assertEqual(kept["marker"], "keep")
             self.assertTrue((out / "summary.csv").is_file())
             self.assertTrue((out / "1-4" / "0" / "events.jsonl").is_file())
+
+    def test_close_matches_episode_count_including_errors(self):
+        cfg = small_cfg()
+        cfg["judge"]["max_steps"] = 4
+        calls = []
+        original = FakeMineDojoEnv.close
+
+        def track(self):
+            calls.append(self)
+            return original(self)
+
+        def boom(env, task, cfg, perception=None, policy=None, seed=0):
+            if seed == 2:
+                raise RuntimeError("boom")
+            return run_episode(env, task, cfg, perception=perception, policy=policy, seed=seed)
+
+        tasks = [str(ROOT / "lfnav/tasks/specs/1-4.json"), str(ROOT / "lfnav/tasks/specs/1-1.json")]
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(FakeMineDojoEnv, "close", track):
+                with patch("lfnav.eval.run.run_episode", boom):
+                    with self.assertRaises(RuntimeError):
+                        run_batch(cfg, tasks, [0, 2], Path(tmp), skip_done=False)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(len({id(env) for env in calls}), 2)
+
+    def test_reuse_closes_once_per_task(self):
+        cfg = small_cfg()
+        cfg["reuse_env"] = True
+        cfg["judge"]["max_steps"] = 4
+        calls = []
+        original = FakeMineDojoEnv.close
+
+        def track(self):
+            calls.append(self)
+            return original(self)
+
+        tasks = [str(ROOT / "lfnav/tasks/specs/1-4.json"), str(ROOT / "lfnav/tasks/specs/1-1.json")]
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(FakeMineDojoEnv, "close", track):
+                run_batch(cfg, tasks, [0, 1], Path(tmp), skip_done=False)
+        self.assertEqual(len(calls), 2)
 
 
 if __name__ == "__main__":
