@@ -139,6 +139,31 @@ class RayConvertTest(unittest.TestCase):
         self.assertEqual(first["distance"], 2.0)
         self.assertEqual(converted["wide"][0]["label"], "grass")
 
+    def test_obs_json_air_null_and_grass_block(self):
+        """Miss tokens and spaced names from the harvest_milk obs.json dump."""
+        plan = {
+            "aligned": (0, 2),
+            "wide": (2, 3),
+            "rows_cols": [(0, 0), (0, 1)],
+            "wide_angles_deg": [(0.0, 0.0)],
+        }
+        rays = {
+            "block_name": np.array(["air", "air", "grass block"], dtype="<U11"),
+            "block_distance": np.array([307.9894104003906, 305.6734619140625, 2.0], dtype=np.float32),
+            "entity_name": np.array(["null", "null", "null"], dtype="<U5"),
+            "entity_distance": np.array([307.9894104003906, 305.6734619140625, 307.9894104003906], dtype=np.float32),
+            "ray_yaw": np.array([-3.1415998935699463, -2.8798000812530518, 0.0], dtype=np.float32),
+            "ray_pitch": np.array([-0.17, -0.17, 0.0], dtype=np.float32),
+        }
+        converted = convert_rays(rays, plan, self._cfg())
+        miss, second = converted["aligned"]
+        self.assertIsNone(miss["label"])
+        self.assertIsNone(miss["distance"])
+        self.assertIsNone(second["label"])
+        grass = converted["wide"][0]
+        self.assertEqual(grass["label"], "grass")
+        self.assertAlmostEqual(grass["distance"], 2.0)
+
     def test_flowing_water_and_index_span(self):
         cfg = self._cfg()
         cfg["image_hw"] = [14, 28]

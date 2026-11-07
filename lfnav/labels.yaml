@@ -34,11 +34,13 @@ distances:
   mid: 10
   far: null
 # Case-insensitive substrings of MineDojo block and entity names.
-# log/leaves/wood are trees. tallgrass and grass are grass. flowing_water and water are water.
+# Probe voxels used "grass block" and "dirt". Rays used "air" / "null" for misses.
+# log/leaves/wood are trees. grass block/tallgrass/grass are grass.
+# flowing water and water are water. dirt is not in the vocabulary.
 aliases:
   tree: [log, leaves, wood]
-  grass: [tallgrass, grass]
-  water: [flowing_water, water]
+  grass: [grass block, tallgrass, tall grass, grass]
+  water: [flowing water, flowing_water, water]
   sand: [sand]
   pig: [pig]
   cow: [cow]
