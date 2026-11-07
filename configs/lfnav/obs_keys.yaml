@@ -2,7 +2,7 @@
 # Run lfnav/gt/probe_obs.py inside the MineDojo container and fill the nulls.
 # The fake environment writes whatever paths are set here, so tests and the
 # real client share one mapping.
-confirmed: false
+confirmed: true
 rgb: rgb
 position: [location_stats, pos]
 yaw: [location_stats, yaw]

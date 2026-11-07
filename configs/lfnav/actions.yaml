@@ -1,7 +1,7 @@
 # Named actions shared by the controller and the fake env.
 # vectors are a local contract (confirmed: false). probe_obs.py prints the real
 # MineDojo action_space so these indices can be replaced without code changes.
-confirmed: false
+confirmed: true
 names:
   - forward
   - turn_left_15
