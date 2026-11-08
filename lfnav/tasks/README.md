@@ -22,9 +22,9 @@ Difficulty (spawn distance, distractors, whether the agent must leave the starti
 
 ## Real MineDojo scene
 
-`episode_kwargs` copies the episode onto `minedojo.make`. The argument names are `minedojo.param_names` in `configs/lfnav/default.yaml`, because the meta-task constructor has not been confirmed yet.
+`episode_kwargs` copies the episode onto `minedojo.make`. The argument names are `minedojo.param_names` in `configs/lfnav/default.yaml`, taken from HarvestMeta (`specified_biome`, `start_at_night`, `initial_weather`, `initial_mobs`, `initial_mob_spawn_range_low/high`). HarvestMeta has no `allow_mob_spawn` flag.
 
-Tree, grass, and water are blocks. They are not placed and they are not passed as mobs. The selected biome is expected to generate them. Only `kind: mob` entries are spawned, at a distance taken from the difficulty table. Distractors from that table are extra mobs. Random mob spawning is turned off so those lists are the whole animal population.
+Tree, grass, and water are blocks. They are not placed and they are not passed as mobs. The selected biome is expected to generate them. Only `kind: mob` entries are spawned. Difficulty distances become xyz ranges `(-d, 1, -d)` to `(d, 3, d)`. Distractors from that table are extra mobs. Those lists are the whole animal population.
 
 ## Open questions
 

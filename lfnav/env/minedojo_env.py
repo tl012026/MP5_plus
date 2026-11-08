@@ -214,11 +214,11 @@ def episode_kwargs(task, cfg: dict, seed: int) -> dict:
     mobs = required + _distractor_names(required, cfg, table, seed)
     _put(out, names, "mobs", mobs)
     if "spawn_distance_min" in table:
-        _put(out, names, "mob_range_low", table["spawn_distance_min"])
+        low = int(table["spawn_distance_min"])
+        _put(out, names, "mob_range_low", (-low, 1, -low))
     if "spawn_distance_max" in table:
-        _put(out, names, "mob_range_high", table["spawn_distance_max"])
-    if names.get("allow_mob_spawn"):
-        out[names["allow_mob_spawn"]] = bool(env_cfg.get("allow_mob_spawn", False))
+        high = int(table["spawn_distance_max"])
+        _put(out, names, "mob_range_high", (high, 3, high))
     return out
 
 
@@ -234,8 +234,6 @@ def _default_scene_kwargs(cfg: dict) -> dict:
         values = env_cfg.get("time_values") or {}
         if clock in values:
             out[time_key] = values[clock]
-    if names.get("allow_mob_spawn"):
-        out[names["allow_mob_spawn"]] = bool(env_cfg.get("allow_mob_spawn", False))
     return out
 
 

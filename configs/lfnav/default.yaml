@@ -41,8 +41,8 @@ distance_bins:
 # sun_brightness >= time_day_min is day. light_level >= brightness_min_light is sufficient.
 # Leave null until lfnav/gt/calibrate_env_state.py has been run; the judge then
 # marks time/brightness unknown instead of failing the condition silently.
-time_day_min: null
-brightness_min_light: null
+time_day_min: 0.42          # calibrate_env_state 2026-11-08: midpoint of night vs day sun_brightness
+brightness_min_light: 13    # calibrate_env_state 2026-11-08: midpoint of night vs day light_level
 
 policy:
   chunk: 4
@@ -81,18 +81,16 @@ minedojo:
   use_voxel: true
   voxel_radius: 5
   use_lidar: true
-  # Random animals stay off. Mobs named by the task, plus difficulty distractors, are explicit.
-  allow_mob_spawn: false
+  # HarvestMeta has no allow_mob_spawn. Only initial_mobs are spawned.
   distractor_mobs: [sheep, chicken, cow, pig]
-  # make() names are unconfirmed. Change this table after inspect_minedojo.py; do not hardcode them.
+  # Names from HarvestMeta via inspect_minedojo.py (MetaTaskName2Class["harvest"]).
   param_names:
     biome: specified_biome
     time: start_at_night
     weather: initial_weather
     mobs: initial_mobs
-    mob_range_low: initial_mob_spawn_distance_min
-    mob_range_high: initial_mob_spawn_distance_max
-    allow_mob_spawn: allow_mob_spawn
+    mob_range_low: initial_mob_spawn_range_low
+    mob_range_high: initial_mob_spawn_range_high
   time_values:
     day: false
     night: true

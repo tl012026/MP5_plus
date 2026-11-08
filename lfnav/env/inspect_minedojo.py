@@ -17,6 +17,9 @@ import inspect
 def find_task_class(task_id: str):
     """Return the class MineDojo registers for task_id. Imports minedojo."""
     tasks = importlib.import_module("minedojo.tasks")
+    registry = getattr(tasks, "MetaTaskName2Class", None)
+    if registry and task_id.lower() in registry:
+        return registry[task_id.lower()]
     for name in ("_get_task_cls", "get_task_cls"):
         finder = getattr(tasks, name, None)
         if callable(finder):
