@@ -18,6 +18,8 @@ vectors:
   turn_left_45: [0, 0, 0, 12, 9, 0, 0, 0]
   turn_right_45: [0, 0, 0, 12, 15, 0, 0, 0]
   look_reset: [0, 0, 0, 12, 12, 0, 0, 0]
+  look_down_15: [0, 0, 0, 13, 12, 0, 0, 0]
+  look_up_15: [0, 0, 0, 11, 12, 0, 0, 0]
 degrees:
   turn_left_15: -15
   turn_right_15: 15
