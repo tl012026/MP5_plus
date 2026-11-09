@@ -2,23 +2,25 @@
 #SBATCH --job-name=lfnav-fov
 #SBATCH --account=
 #SBATCH --partition=
-#SBATCH --cpus-per-task=2
-#SBATCH --mem=8G
-#SBATCH --time=00:30:00
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16G
+#SBATCH --time=02:00:00
 #SBATCH --requeue
 #SBATCH --output=/scratch/%u/lfnav/logs/%x-%j.out
 #SBATCH --error=/scratch/%u/lfnav/logs/%x-%j.err
 
-# Fit fov from a pixel you measured. Example:
-#   PIXEL=80 SIZE=364 ANGLE=15 AXIS=horizontal sbatch lfnav/slurm/calibrate_camera.sbatch
+# Turn in place, fit K, then check pig-ray overlays.
+# Create /scratch/$USER/lfnav/logs on the login node before sbatch: Slurm
+# opens --output before this script runs.
 set -euo pipefail
 SCR=${SCR:-/scratch/$USER}
 MP5=${MP5:-$HOME/MP5_plus}
 ENVSH=${ENVSH:-$SCR/mp5_env.sh}
 SIF=${SIF:-$SCR/env/minedojo.sif}
-PIXEL=${PIXEL:?set PIXEL}
-SIZE=${SIZE:?set SIZE}
-ANGLE=${ANGLE:?set ANGLE}
-AXIS=${AXIS:-horizontal}
-mkdir -p "$SCR/lfnav/logs" "$SCR/lfnav/calib"
-singularity exec "$SIF" bash -c "source '$ENVSH' && cd '$MP5' && python lfnav/gt/calibrate_camera.py --pixel $PIXEL --size $SIZE --angle-deg $ANGLE --axis $AXIS --out '$SCR/lfnav/calib/fov.json'"
+ROT=${ROT:-$SCR/lfnav/calib/rot}
+INTR=${INTR:-$SCR/lfnav/calib/intrinsics.json}
+ALIGN=${ALIGN:-$SCR/lfnav/calib/align}
+mkdir -p "$SCR/lfnav/logs" "$SCR/lfnav/calib" "$ROT" "$ALIGN"
+singularity exec "$SIF" bash -c "source '$ENVSH' && cd '$MP5' && xvfb-run -a python lfnav/gt/capture_rotations.py --out '$ROT'"
+singularity exec "$SIF" bash -c "source '$ENVSH' && cd '$MP5' && python lfnav/gt/fit_intrinsics.py --in '$ROT' --out '$INTR'"
+singularity exec "$SIF" bash -c "source '$ENVSH' && cd '$MP5' && xvfb-run -a python lfnav/gt/verify_alignment.py --intrinsics '$INTR' --out '$ALIGN'"

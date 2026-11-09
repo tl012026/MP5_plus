@@ -2,12 +2,15 @@
 
 Account and partition are left blank in the scripts. Fill them in locally before submitting. Every script sets `--requeue`. Logs go to `/scratch/$USER/lfnav/logs/`. MineDojo jobs use `$SCR/env/minedojo.sif` and source `$SCR/mp5_env.sh` with absolute paths, because the container user is `user`.
 
+Create `/scratch/$USER/lfnav/logs` on the login node before the first `sbatch`. Slurm opens `--output` before the job script can `mkdir`.
+
 Do not submit these from the login node until the checkpoint below is done.
 
 1. `sbatch lfnav/slurm/probe_obs.sbatch`
    Read `/scratch/$USER/lfnav/probe/obs.json`. Fill `configs/lfnav/obs_keys.yaml`. Set `actions.confirmed` only after the vectors match `action_space`.
-2. Measure one block and `PIXEL=.. SIZE=.. ANGLE=.. AXIS=horizontal sbatch lfnav/slurm/calibrate_camera.sbatch`.
-   Copy `fov_deg` and `fov_axis` into `configs/lfnav/default.yaml`.
+2. `sbatch lfnav/slurm/calibrate_camera.sbatch` turns in place, fits a pinhole K, then overlays pig rays.
+   Read `/scratch/$USER/lfnav/calib/intrinsics.json`. If `suggest.mode` is `fov`, copy `fov_deg` and `fov_axis` into `configs/lfnav/default.yaml`. If it is `intrinsics`, copy the `fx,fy,cx,cy,width,height` block instead.
+   The old single-pixel script is `PIXEL=.. SIZE=.. ANGLE=.. AXIS=horizontal sbatch lfnav/slurm/calibrate_camera_manual.sbatch`.
    Then `sbatch lfnav/slurm/calibrate_env_state.sbatch`. Copy `time_day_min` and
    `brightness_min_light` into `default.yaml` and `biome_id_to_name` into `obs_keys.yaml`.
    Until those are filled, time and brightness conditions are unknown, not silent misses.

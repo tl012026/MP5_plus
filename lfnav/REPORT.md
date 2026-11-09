@@ -20,12 +20,12 @@ The controller executes the named actions, jumps a one-block solid, refuses wate
 
 Status: scripts are ready. They have not been run inside MineDojo.
 
-`probe_obs.py` writes the real observation keys. `calibrate_camera.py` turns a measured pixel and angle into a field of view (`fov.py` is tested). `collect_perception.py` writes resumable shards; the pilot size is 1000 frames in `configs/lfnav/collect_pilot.yaml`. `vis_labels.py` paints patch hits. Slurm files: `lfnav/slurm/probe_obs.sbatch`, `calibrate_camera.sbatch`, `collect_perception.sbatch`. `python3 -m unittest lfnav.tests.test_stage3` passes on the login node.
+`probe_obs.py` writes the real observation keys. `capture_rotations.py` plus `fit_intrinsics.py` fit a pinhole K from a yaw/pitch sweep (`camera.py` is tested). The one-pixel `calibrate_camera.py` remains as a fallback. `collect_perception.py` writes resumable shards; the pilot size is 1000 frames in `configs/lfnav/collect_pilot.yaml`. `vis_labels.py` paints patch hits. Slurm files: `lfnav/slurm/probe_obs.sbatch`, `calibrate_camera.sbatch`, `collect_perception.sbatch`. `python3 -m unittest lfnav.tests.test_stage3` passes on the login node.
 
 Checkpoint for a real client, in order:
 
 1. `sbatch lfnav/slurm/probe_obs.sbatch` then copy keys into `configs/lfnav/obs_keys.yaml` and set `actions.confirmed` only after the action vectors match.
-2. Measure one block's pixel and `PIXEL=... SIZE=... ANGLE=... AXIS=horizontal sbatch lfnav/slurm/calibrate_camera.sbatch`. Put `fov_deg` and `fov_axis` into `configs/lfnav/default.yaml`.
+2. `sbatch lfnav/slurm/calibrate_camera.sbatch`. Put suggested `fov_deg`/`fov_axis` or the `intrinsics` block into `configs/lfnav/default.yaml`. The one-pixel job is `calibrate_camera_manual.sbatch`.
 3. Run a fake or short MineDojo collection and open the PPM from `vis_labels.py`. The patch tint should sit on the object.
 4. Only then raise `FRAMES` from 1000 toward 30000–50000.
 
@@ -78,7 +78,7 @@ Sentences that omit the biome use forest for a tree and plains otherwise. That i
 
 1. `sbatch lfnav/slurm/probe_obs.sbatch`
 2. Fill `configs/lfnav/obs_keys.yaml` from `/scratch/$USER/lfnav/probe/obs.json`. Confirm action vectors before setting `actions.confirmed: true`.
-3. `PIXEL=... SIZE=... ANGLE=... AXIS=horizontal sbatch lfnav/slurm/calibrate_camera.sbatch` and copy the fit into `configs/lfnav/default.yaml`.
+3. `sbatch lfnav/slurm/calibrate_camera.sbatch` and copy the suggested fov or intrinsics into `configs/lfnav/default.yaml`. Fallback: `calibrate_camera_manual.sbatch`.
 4. `FRAMES=1000 sbatch lfnav/slurm/collect_perception.sbatch`, then `python lfnav/data/vis_labels.py --shard <shard> --out /tmp/frame.ppm`.
 5. After the tint matches the object, raise `FRAMES` and run extract, train, demos, C2, and eval as in `lfnav/slurm/README.md`.
 6. `MINELLM_START='<server command>' sbatch lfnav/slurm/minellm_baseline.sbatch` when the server command is known.

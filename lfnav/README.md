@@ -30,6 +30,8 @@ C3 is `lfnav/policy/c3.py`. `act` raises `NotImplementedError`. The controller a
 
 `near X` means X and the target are both inside the same camera frame. That is an approximation of the original sentence. SR-b distance is the nearest aligned-ray hit on the target at stop, so the target has to be in the camera frame. The fake env still has Euclidean `distance_to` for tests. SPL uses straight-line path length because Minecraft does not ship a geodesic: `SR-b * d / max(L, d)`.
 
+Aligned rays need a camera model. `lfnav/gt/capture_rotations.py` turns in place (no walk, no sprint, skip water). `fit_intrinsics.py` fits `K` from the pure-rotation homography `x2 ~ K R K^{-1} x1`. HUD (hotbar, crosshair, hand) is masked; RANSAC drops movers. Copy the printed `fov_deg`/`fov_axis`, or a full `intrinsics` block, into `configs/lfnav/default.yaml`. `verify_alignment.py` treats median IoU above 0.5 as good enough. The one-pixel script `calibrate_camera.py` is still there.
+
 ## Run order
 
 Login-node tests need no MineDojo and no GPU:
@@ -52,7 +54,7 @@ The original MP5 loop is not executed. `lfnav.eval.run.make_policy` rejects `mp5
 
 ## Limits
 
-- Camera field of view is unconfirmed until `calibrate_camera.py` has been run. Time, brightness, and biome ids are filled by `lfnav/gt/calibrate_env_state.py`. Until `time_day_min` and `brightness_min_light` are set, those conditions are unknown rather than failed. See `lfnav/REPORT.md`.
-- Action vectors in `configs/lfnav/actions.yaml` are a local contract (`confirmed: false`).
+- Camera field of view is unconfirmed until `sbatch lfnav/slurm/calibrate_camera.sbatch` has been run. Time, brightness, and biome ids are filled by `lfnav/gt/calibrate_env_state.py`. Until `time_day_min` and `brightness_min_light` are set, those conditions are unknown rather than failed. See `lfnav/REPORT.md`.
+- Action vectors in `configs/lfnav/actions.yaml` are confirmed against the harvest_milk probe.
 - Tree labels match name fragments `log`, `leaves`, and `wood` until the probe shows the real block ids.
 - A learned head without a checkpoint reports a token statistic, not a trained probability.
