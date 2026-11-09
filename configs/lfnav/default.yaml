@@ -18,6 +18,26 @@ patch: 14
 # Unconfirmed until lfnav/gt/calibrate_camera.py is run on a real client.
 fov_deg: 70
 fov_axis: vertical
+# Optional full pinhole. When set, aligned rays unproject patch centres with fx,fy,cx,cy.
+# width/height are the capture size; they are scaled onto image_hw when aspects match.
+# intrinsics:
+#   fx: 365.6
+#   fy: 365.6
+#   cx: 410.0
+#   cy: 256.0
+#   width: 820
+#   height: 512
+camera_calib:
+  bottom_frac: 0.18
+  crosshair_frac: 0.03
+  hand_width_frac: 0.22
+  hand_height_frac: 0.28
+  grad_min: 8
+  ransac_px: 4.0
+  pig_rgb_low: [180, 80, 80]
+  pig_rgb_high: [255, 200, 180]
+  pig_frac: 0.08
+  iou_good: 0.5
 aligned_ray_range: 16
 wide_ray_range: 32
 wide_lidar: true
