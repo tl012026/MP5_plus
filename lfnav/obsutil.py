@@ -17,6 +17,30 @@ def scalar(x):
     return x
 
 
+def is_empty(x) -> bool:
+    """True if x is missing or has size 0. Does not truth-test numpy arrays."""
+    if x is None:
+        return True
+    size = getattr(x, "size", None)
+    if size is not None:
+        try:
+            return int(size) == 0
+        except (TypeError, ValueError):
+            return False
+    if isinstance(x, (list, tuple)):
+        return len(x) == 0
+    return False
+
+
+def voxels_of(obs: dict, cfg: dict):
+    """Aligned voxel crop from obs_keys.voxels, or None if missing/empty."""
+    keys = cfg.get("obs_keys") or {}
+    voxels = lookup(obs, keys.get("voxels"))
+    if is_empty(voxels):
+        return None
+    return voxels
+
+
 def lookup(obs: dict, path, default=None):
     if path is None or obs is None:
         return default

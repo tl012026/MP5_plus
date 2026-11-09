@@ -16,7 +16,7 @@ from unittest.mock import patch
 from lfnav.env.fake import FakeMineDojoEnv
 from lfnav.eval.run import run_batch, run_episode
 from lfnav.memory import Memory
-from lfnav.obsutil import yaw_of
+from lfnav.obsutil import is_empty, voxels_of, yaw_of
 from lfnav.policy.c0 import RandomWalk
 from lfnav.policy.c3 import DiffusionPolicy
 from lfnav.types import ObjectBelief, PolicyInput, SceneState, TaskSpec
@@ -94,9 +94,17 @@ class ControllerTest(unittest.TestCase):
         self.assertEqual(_front_delta(180), (0, -1))
         self.assertEqual(_front_delta(270), (-1, 0))
         env = FakeMineDojoEnv(cfg, {})
-        voxels = env.reset()["voxels"]["block_name"]
+        obs = env.reset()
+        voxels = voxels_of(obs, cfg)
+        self.assertFalse(is_empty(voxels))
         self.assertEqual(tuple(np.asarray(voxels).shape), (11, 11, 11))
         self.assertEqual(choose_forward(voxels, 0.0, cfg), "forward")
+        self.assertTrue(is_empty(None))
+        self.assertTrue(is_empty(np.array([])))
+        filled = np.full((11, 11, 11), "air", dtype=object)
+        self.assertFalse(is_empty(filled))
+        self.assertIsNone(voxels_of({}, cfg))
+        self.assertIsNone(voxels_of({"voxels": {"block_name": np.array([])}}, cfg))
 
 
 class EpisodeTest(unittest.TestCase):

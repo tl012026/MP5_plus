@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from lfnav.obsutil import lookup, position_of, scalar, yaw_of
+from lfnav.obsutil import is_empty, position_of, scalar, voxels_of, yaw_of
 
 DEFAULT_PASSABLE = (
     "air",
@@ -71,7 +71,7 @@ def choose_forward(voxels, yaw: float, cfg: dict | None = None) -> str:
     """Pick forward / jump_forward / turn when the cell ahead is blocked or a hazard."""
     cfg = cfg or {}
     actions = cfg.get("actions") or {}
-    if voxels is None or np.size(voxels) == 0:
+    if voxels is None or is_empty(voxels):
         return "forward"
     arr = np.asarray(voxels)
     if arr.ndim != 3:
@@ -178,7 +178,9 @@ class Controller:
 
     def _forward_name(self) -> str:
         obs = self.env.observation()
-        voxels = lookup(obs, self.keys.get("voxels"))
+        voxels = voxels_of(obs, self.cfg)
+        if voxels is None:
+            return "forward"
         yaw = yaw_of(obs, self.cfg)
         return choose_forward(voxels, yaw, self.cfg)
 
