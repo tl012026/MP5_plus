@@ -122,6 +122,10 @@ minedojo:
   # HarvestMeta reset-hook /summon does not spawn. lfnav summons after reset.
   spawn_via_reset_hook: false
   settle_ticks: 5
+  clear_entities: true
+  spawn_drop_height: 8
+  settle_after_spawn: 20
+  spawn_verify_retry: false
   verify_ticks: 10
   spawn_retries: 3
   distractor_mobs: [sheep, chicken, cow, pig]

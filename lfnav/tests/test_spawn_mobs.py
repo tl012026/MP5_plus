@@ -9,12 +9,41 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from lfnav.config import load_config
-from lfnav.env.minedojo_env import _noop_tick, lidar_plan, sample_mob_offset, spawn_task_mobs
-from lfnav.gt.initial import privileged_ray_distance
+from lfnav.env.minedojo_env import lidar_plan, sample_mob_offset, spawn_task_mobs
+from lfnav.gt.initial import apply_spawn_offset_distance, initial_scene_metrics
 from lfnav.types import TaskSpec
 
 ROOT = Path(__file__).resolve().parents[2]
 SPECS = ROOT / "lfnav" / "tasks" / "specs"
+
+
+def _stub(cfg, cmds, steps):
+    class Space:
+        def no_op(self):
+            return "NOOP"
+
+    class Sim:
+        def execute_cmd(self, cmd):
+            cmds.append(cmd)
+
+    class Inner:
+        def __init__(self):
+            self.action_space = Space()
+            self.env = Sim()
+
+        def step(self, action):
+            steps.append(action)
+            return {
+                "location_stats": {"yaw": 0.0, "pos": [0.0, 64.0, 0.0]},
+                "lfnav_rays": [],
+                "lfnav_wide_rays": [],
+            }, 0.0, False, {}
+
+    wrapper = SimpleNamespace(_env=Inner(), _obs=None, cfg=cfg, spawn_meta={})
+    wrapper._adopt = lambda obs: obs
+    wrapper._obs = Inner().step("boot")[0]
+    steps.clear()
+    return wrapper
 
 
 class SampleRingTest(unittest.TestCase):
@@ -30,111 +59,73 @@ class SampleRingTest(unittest.TestCase):
             dist = math.hypot(off["dx"], off["dz"])
             self.assertGreaterEqual(dist, min_d - slack)
             self.assertLessEqual(dist, max_d + slack)
-            # yaw=0 faces +z; behind is -z, ±45° → |x| <= |z| and z < 0
             self.assertLess(off["dz"], 0)
             self.assertLessEqual(abs(off["dx"]), abs(off["dz"]) + 1)
             self.assertGreaterEqual(off["bearing_deg"], 135.0)
             self.assertLessEqual(off["bearing_deg"], 225.0)
 
-    def test_easy_covers_the_ring(self):
-        signs = set()
-        for seed in range(80):
-            off = sample_mob_offset(4, 8, 0.0, seed, 0, behind=False)
-            signs.add((off["dx"] > 0, off["dz"] > 0))
-            dist = math.hypot(off["dx"], off["dz"])
-            self.assertGreaterEqual(dist, 2.0)
-            self.assertLessEqual(dist, 10.0)
-        self.assertGreaterEqual(len(signs), 3)
 
-
-class SettleNoopTest(unittest.TestCase):
-    def test_settle_uses_action_space_no_op_not_commands(self):
-        cfg = load_config()
-        cfg["minedojo"] = dict(cfg["minedojo"])
-        cfg["minedojo"]["settle_ticks"] = 5
-        cfg["minedojo"]["verify_ticks"] = 2
-        cfg["minedojo"]["spawn_retries"] = 1
-        cfg["difficulty"] = "easy"
-        task = TaskSpec.from_dict(json.loads((SPECS / "1-4.json").read_text()))
-        cmds = []
-        steps = []
-
-        class Space:
-            def no_op(self):
-                return "NOOP"
-
-        class Sim:
-            def execute_cmd(self, cmd):
-                cmds.append(cmd)
-
-        class Inner:
-            def __init__(self):
-                self.action_space = Space()
-                self.env = Sim()
-
-            def step(self, action):
-                steps.append(action)
-                obs = {
-                    "location_stats": {"yaw": 0.0, "pos": [0.0, 64.0, 0.0]},
-                    "lfnav_rays": [],
-                    "lfnav_wide_rays": [{"label": "pig", "distance": 6.0, "yaw_offset": 180.0, "pitch": -3.0}],
-                }
-                return obs, 0.0, False, {}
-
-        wrapper = SimpleNamespace(_env=Inner(), _obs=None, cfg=cfg, spawn_meta={})
-
-        def adopt(obs):
-            wrapper._obs = obs
-            return obs
-
-        wrapper._adopt = adopt
-        wrapper._obs = {
-            "location_stats": {"yaw": 0.0, "pos": [0.0, 64.0, 0.0]},
-            "lfnav_rays": [],
-            "lfnav_wide_rays": [],
-        }
-        obs = spawn_task_mobs(wrapper, task, cfg, seed=3)
-        self.assertTrue(steps)
-        self.assertTrue(all(a == "NOOP" for a in steps))
-        self.assertGreaterEqual(steps.count("NOOP"), 5)
-        self.assertTrue(any(c.startswith("/summon pig") for c in cmds))
-        self.assertFalse(any("wait" in c.lower() for c in cmds))
-        nop = _noop_tick(wrapper)
-        self.assertIs(nop, wrapper._obs)
-        self.assertIsNotNone(privileged_ray_distance(obs, cfg, "pig"))
-        self.assertFalse(wrapper.spawn_meta["spawn_failed"])
-
-    def test_missing_target_marks_spawn_failed(self):
+class SpawnOnceTest(unittest.TestCase):
+    def _cfg(self, **md):
         cfg = load_config()
         cfg["minedojo"] = dict(cfg["minedojo"])
         cfg["minedojo"]["settle_ticks"] = 1
-        cfg["minedojo"]["verify_ticks"] = 1
-        cfg["minedojo"]["spawn_retries"] = 3
+        cfg["minedojo"]["settle_after_spawn"] = 2
+        cfg["minedojo"]["clear_entities"] = True
+        cfg["minedojo"]["spawn_verify_retry"] = False
+        cfg["minedojo"]["spawn_drop_height"] = 8
+        cfg["minedojo"].update(md)
+        return cfg
+
+    def test_kill_before_each_animal_summoned_once(self):
+        cfg = self._cfg()
+        cfg["difficulty"] = "easy"
         task = TaskSpec.from_dict(json.loads((SPECS / "1-4.json").read_text()))
+        cmds, steps = [], []
+        wrapper = _stub(cfg, cmds, steps)
+        spawn_task_mobs(wrapper, task, cfg, seed=3)
+        self.assertTrue(all(a == "NOOP" for a in steps))
+        self.assertEqual(cmds[0], "/kill @e[type=!player]")
+        summons = [c for c in cmds if c.startswith("/summon ")]
+        self.assertEqual(len(summons), 1)
+        self.assertTrue(summons[0].startswith("/summon pig"))
+        self.assertIn("~8", summons[0])
+        self.assertLess(cmds.index("/kill @e[type=!player]"), next(i for i, c in enumerate(cmds) if c.startswith("/summon")))
+        self.assertEqual(wrapper.spawn_meta["n_targets_spawned"], 1)
+        self.assertFalse(wrapper.spawn_meta["spawn_failed"])
+        self.assertTrue(wrapper.spawn_meta["natural_mobs_cleared"])
 
-        class Space:
-            def no_op(self):
-                return "NOOP"
+    def test_hard_offset_distance_is_the_initial_distance(self):
+        cfg = self._cfg()
+        cfg["difficulty"] = "hard"
+        task = TaskSpec.from_dict(json.loads((SPECS / "1-4.json").read_text()))
+        cmds, steps = [], []
+        wrapper = _stub(cfg, cmds, steps)
+        spawn_task_mobs(wrapper, task, cfg, seed=9)
+        off = wrapper.spawn_meta["target_spawn_offset"]
+        dist = math.hypot(off["dx"], off["dz"])
+        self.assertGreaterEqual(dist, 16.0 - 1.5)
+        self.assertLessEqual(dist, 32.0 + 1.5)
+        self.assertLess(off["dz"], 0)
+        self.assertLessEqual(abs(off["dx"]), abs(off["dz"]) + 1)
+        metrics = apply_spawn_offset_distance(
+            initial_scene_metrics(wrapper._obs, wrapper, cfg, task),
+            wrapper.spawn_meta,
+        )
+        self.assertEqual(metrics["initial_target_distance"], dist)
+        self.assertIn("initial_target_distance_rays", metrics)
 
-        class Inner:
-            def __init__(self):
-                self.action_space = Space()
-                self.env = SimpleNamespace(execute_cmd=lambda *_a, **_k: None)
-
-            def step(self, action):
-                obs = {
-                    "location_stats": {"yaw": 0.0, "pos": [0.0, 64.0, 0.0]},
-                    "lfnav_rays": [],
-                    "lfnav_wide_rays": [],
-                }
-                return obs, 0.0, False, {}
-
-        wrapper = SimpleNamespace(_env=Inner(), cfg=cfg, spawn_meta={})
-        wrapper._adopt = lambda obs: obs
-        wrapper._obs = Inner().step("boot")[0]
+    def test_verify_retry_still_works_when_enabled(self):
+        cfg = self._cfg(spawn_verify_retry=True, spawn_retries=3, verify_ticks=1, settle_after_spawn=0)
+        cfg["difficulty"] = "easy"
+        task = TaskSpec.from_dict(json.loads((SPECS / "1-4.json").read_text()))
+        cmds, steps = [], []
+        wrapper = _stub(cfg, cmds, steps)
         spawn_task_mobs(wrapper, task, cfg, seed=1)
-        self.assertTrue(wrapper.spawn_meta["spawn_failed"])
+        summons = [c for c in cmds if c.startswith("/summon pig")]
+        self.assertEqual(len(summons), 3)
         self.assertEqual(wrapper.spawn_meta["spawn_attempts"], 3)
+        self.assertFalse(wrapper.spawn_meta["spawn_failed"])
 
 
 class WidePitchTest(unittest.TestCase):

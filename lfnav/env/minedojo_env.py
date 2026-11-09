@@ -381,21 +381,46 @@ def _noop_tick(env) -> dict:
     return adopt(obs) if callable(adopt) else obs
 
 
-def _execute_summon(env, name: str, dx: int, dy: int, dz: int) -> None:
+def _sim(env):
     inner = env._env
-    sim = getattr(inner, "env", inner)
-    sim.execute_cmd(f"/summon {name} ~{dx} ~{dy} ~{dz}")
+    return getattr(inner, "env", inner)
+
+
+def _execute_cmd(env, cmd: str) -> None:
+    _sim(env).execute_cmd(cmd)
+
+
+def _execute_summon(env, name: str, dx: int, dy: int, dz: int) -> None:
+    _execute_cmd(env, f"/summon {name} ~{dx} ~{dy} ~{dz}")
+
+
+def _verify_and_retry_target(env, obs, cfg, target, names, seed, min_d, max_d, yaw, hard, retries, verify, summon_one, meta):
+    """Old ray-check retry. Kept behind minedojo.spawn_verify_retry (default false)."""
+    from lfnav.gt.initial import privileged_ray_distance
+
+    attempts = 1
+    failed = privileged_ray_distance(obs, cfg, target) is None
+    target_index = next(i for i, name in enumerate(names) if name == target)
+    while failed and attempts < max(retries, 1):
+        attempts += 1
+        obs = summon_one(target, target_index + 1000 * (attempts - 1), behind=hard, y=3)
+        for _ in range(max(verify, 0)):
+            obs = _noop_tick(env)
+        failed = privileged_ray_distance(obs, cfg, target) is None
+    meta["spawn_attempts"] = attempts
+    return obs
 
 
 def spawn_task_mobs(env, task, cfg: dict, seed: int) -> dict:
     """Summon task mobs after reset. Invalid chat commands do not advance the tick."""
-    from lfnav.gt.initial import privileged_ray_distance
     from lfnav.obsutil import yaw_of
 
     env_cfg = cfg.get("minedojo") or {}
     settle = int(env_cfg.get("settle_ticks", 5))
     verify = int(env_cfg.get("verify_ticks", 10))
     retries = int(env_cfg.get("spawn_retries", 3))
+    drop_y = int(env_cfg.get("spawn_drop_height", 8))
+    settle_after = int(env_cfg.get("settle_after_spawn", 20))
     table = _difficulty(cfg)
     episode = _episode_of(task)
     required = _mob_names(episode)
@@ -406,46 +431,58 @@ def spawn_task_mobs(env, task, cfg: dict, seed: int) -> dict:
         "spawn_failed": False,
         "spawn_attempts": 0,
         "spawn_offsets": [],
+        "target_spawn_offset": None,
+        "n_targets_spawned": 0,
+        "natural_mobs_cleared": False,
     }
+    env.spawn_meta = meta
     if not names:
-        env.spawn_meta = meta
         return obs
-    for _ in range(max(settle, 0)):
-        obs = _noop_tick(env)
-    yaw = yaw_of(obs, cfg)
-    min_d = float(table.get("spawn_distance_min", 4))
-    max_d = float(table.get("spawn_distance_max", 8))
-    hard = str(cfg.get("difficulty") or "") == "hard"
-    target = getattr(task, "target", None) or (task.get("target") if isinstance(task, dict) else None)
+    try:
+        for _ in range(max(settle, 0)):
+            obs = _noop_tick(env)
+        if env_cfg.get("clear_entities", True):
+            _execute_cmd(env, "/kill @e[type=!player]")
+            meta["natural_mobs_cleared"] = True
+            for _ in range(2):
+                obs = _noop_tick(env)
+        yaw = yaw_of(obs, cfg)
+        min_d = float(table.get("spawn_distance_min", 4))
+        max_d = float(table.get("spawn_distance_max", 8))
+        hard = str(cfg.get("difficulty") or "") == "hard"
+        target = getattr(task, "target", None) or (task.get("target") if isinstance(task, dict) else None)
 
-    def summon_one(name, index, behind, y):
-        offset = sample_mob_offset(min_d, max_d, yaw, seed, index, behind=behind, y=y)
-        offset = dict(offset)
-        offset["name"] = name
-        _execute_summon(env, name, offset["dx"], offset["dy"], offset["dz"])
-        tick = _noop_tick(env)
-        meta["spawn_offsets"].append(offset)
-        return tick
+        def summon_one(name, index, behind, y):
+            offset = sample_mob_offset(min_d, max_d, yaw, seed, index, behind=behind, y=y)
+            offset = dict(offset)
+            offset["name"] = name
+            _execute_summon(env, name, offset["dx"], offset["dy"], offset["dz"])
+            tick = _noop_tick(env)
+            meta["spawn_offsets"].append(offset)
+            if name == target:
+                meta["n_targets_spawned"] = int(meta["n_targets_spawned"]) + 1
+                if meta["target_spawn_offset"] is None:
+                    meta["target_spawn_offset"] = {"dx": offset["dx"], "dz": offset["dz"]}
+            return tick
 
-    for i, name in enumerate(names):
-        obs = summon_one(name, i, behind=(hard and name == target), y=1)
-    for _ in range(max(verify, 0)):
-        obs = _noop_tick(env)
-    attempts = 1
-    failed = False
-    if target and any(name == target for name in names):
-        failed = privileged_ray_distance(obs, cfg, target) is None
-        target_index = next(i for i, name in enumerate(names) if name == target)
-        while failed and attempts < max(retries, 1):
-            attempts += 1
-            obs = summon_one(target, target_index + 1000 * (attempts - 1), behind=hard, y=3)
+        for i, name in enumerate(names):
+            obs = summon_one(name, i, behind=(hard and name == target), y=drop_y)
+        if env_cfg.get("spawn_verify_retry", False) and target and any(n == target for n in names):
             for _ in range(max(verify, 0)):
                 obs = _noop_tick(env)
-            failed = privileged_ray_distance(obs, cfg, target) is None
-    meta["spawn_failed"] = bool(failed)
-    meta["spawn_attempts"] = attempts
-    env.spawn_meta = meta
-    return obs
+            obs = _verify_and_retry_target(
+                env, obs, cfg, target, names, seed, min_d, max_d, yaw, hard, retries, verify, summon_one, meta,
+            )
+        else:
+            for _ in range(max(settle_after, 0)):
+                obs = _noop_tick(env)
+            meta["spawn_attempts"] = 1 if meta["n_targets_spawned"] else 0
+        env.spawn_meta = meta
+        return obs
+    except Exception:
+        meta["spawn_failed"] = True
+        env.spawn_meta = meta
+        return obs
 
 
 def python_location_stats(loc: dict) -> dict:

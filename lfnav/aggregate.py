@@ -208,6 +208,8 @@ def summarize_baseline(root: Path) -> dict:
             "initial_target_distance": _distance_stats(counted),
             "difficulty_unmet": _rate(counted, "difficulty_unmet"),
             "spawn_failed": _rate(chunk, "spawn_failed"),
+            "target_never_seen": _rate(chunk, "target_never_seen"),
+            "natural_mobs_cleared": _rate(chunk, "natural_mobs_cleared"),
         })
     paired = []
     by_cell = {}

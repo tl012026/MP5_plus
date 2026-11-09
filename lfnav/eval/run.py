@@ -20,8 +20,10 @@ from lfnav.control.controller import Controller
 from lfnav.env.fake import FakeMineDojoEnv
 from lfnav.env.minedojo_env import mob_ring_box
 from lfnav.gt.initial import (
+    apply_spawn_offset_distance,
     distance_meets_min,
     initial_scene_metrics,
+    privileged_ray_distance,
     spawn_has_blocks,
     world_seed_attempt,
 )
@@ -147,7 +149,10 @@ def open_episode(session, task: TaskSpec, cfg: dict, seed: int):
             session.release()
         env = session.acquire(task, used)
         obs = env.reset(seed=used, task=task)
-        metrics = initial_scene_metrics(obs, env, cfg, task)
+        metrics = apply_spawn_offset_distance(
+            initial_scene_metrics(obs, env, cfg, task),
+            getattr(env, "spawn_meta", None),
+        )
         if not reroll or distance_meets_min(metrics, min_d):
             reroll_count = attempt
             unmet = False
@@ -163,11 +168,15 @@ def open_episode(session, task: TaskSpec, cfg: dict, seed: int):
         "difficulty_unmet": unmet,
         "initial_target_visible": metrics.get("initial_target_visible"),
         "initial_target_distance": metrics.get("initial_target_distance"),
+        "initial_target_distance_rays": metrics.get("initial_target_distance_rays"),
         "initial_distance_beyond_range": metrics.get("initial_distance_beyond_range"),
         "_numeric_initial_distance": metrics.get("initial_target_distance_numeric"),
         "spawn_failed": bool(spawn_meta.get("spawn_failed", False)),
         "spawn_attempts": spawn_meta.get("spawn_attempts", 0),
         "spawn_offsets": spawn_meta.get("spawn_offsets") or [],
+        "target_spawn_offset": spawn_meta.get("target_spawn_offset"),
+        "n_targets_spawned": spawn_meta.get("n_targets_spawned", 0),
+        "natural_mobs_cleared": bool(spawn_meta.get("natural_mobs_cleared", False)),
     }
     return env, obs, public
 
@@ -197,16 +206,21 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         rec.capture(obs, tag="start", keyframe=True)
     meta = dict(episode_meta or {})
     if "initial_target_distance" not in meta:
-        metrics = initial_scene_metrics(obs, env, cfg, task)
+        metrics = apply_spawn_offset_distance(
+            initial_scene_metrics(obs, env, cfg, task),
+            getattr(env, "spawn_meta", None),
+        )
         meta.update({
             "world_seed": seed,
             "reroll_count": 0,
             "difficulty_unmet": False,
             "initial_target_visible": metrics.get("initial_target_visible"),
             "initial_target_distance": metrics.get("initial_target_distance"),
+            "initial_target_distance_rays": metrics.get("initial_target_distance_rays"),
             "initial_distance_beyond_range": metrics.get("initial_distance_beyond_range"),
             "_numeric_initial_distance": metrics.get("initial_target_distance_numeric"),
         })
+    seen_gt = privileged_ray_distance(obs, cfg, task.target) is not None
     obs = _hide_wide(obs, cfg)
     start = position_of(obs, cfg)
     prev = start
@@ -254,6 +268,8 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
             if rec is not None:
                 rec.set_info(match.to_dict(), action=action)
             result = controller.execute(action)
+            if privileged_ray_distance(result.obs, cfg, task.target) is not None:
+                seen_gt = True
             result.obs = _hide_wide(result.obs, cfg)
             env_steps += result.env_steps
             new_pos = position_of(result.obs, cfg)
@@ -278,6 +294,9 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         })
     if rec is not None:
         rec.capture(obs, tag="end", keyframe=True)
+    live = env.observation() if hasattr(env, "observation") else obs
+    if privileged_ray_distance(live, cfg, task.target) is not None:
+        seen_gt = True
     stop_pos = position_of(obs, cfg)
     distance = aligned_target_distance(obs, cfg, task.target)
     gt_scene = scene_state_from_obs(obs, cfg)
@@ -313,6 +332,11 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         "spawn_failed": bool(meta.get("spawn_failed", False)),
         "spawn_attempts": meta.get("spawn_attempts", 0),
         "spawn_offsets": meta.get("spawn_offsets") or [],
+        "target_spawn_offset": meta.get("target_spawn_offset"),
+        "n_targets_spawned": meta.get("n_targets_spawned", 0),
+        "natural_mobs_cleared": bool(meta.get("natural_mobs_cleared", False)),
+        "target_never_seen": not seen_gt,
+        "initial_target_distance_rays": meta.get("initial_target_distance_rays"),
     })
     return verdict, events
 
@@ -324,7 +348,8 @@ def write_summary(out: Path) -> None:
         "task_name", "seed", "task_kind", "outcome", "success", "steps", "elapsed_s",
         "failure_category", "self_reported_steps", "sr_a", "sr_b", "false_stop", "timeout", "spl",
         "difficulty", "world_seed", "reroll_count", "difficulty_unmet",
-        "initial_target_visible", "initial_target_distance", "spawn_failed",
+        "initial_target_visible", "initial_target_distance", "initial_target_distance_rays",
+        "spawn_failed", "target_never_seen", "natural_mobs_cleared", "n_targets_spawned",
     ]
     for path in sorted(out.glob("*/*.json")):
         if path.name == "run_meta.json":

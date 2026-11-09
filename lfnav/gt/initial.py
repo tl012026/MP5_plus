@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from lfnav.gt.judge import aligned_target_distance
 from lfnav.gt.scene_state import resolve_label
 from lfnav.obsutil import lookup
@@ -66,9 +68,25 @@ def initial_scene_metrics(obs: dict, env, cfg: dict, task: TaskSpec) -> dict:
     return {
         "initial_target_visible": bool(visible),
         "initial_target_distance": stored,
+        "initial_target_distance_rays": (float(ray_d) if ray_d is not None else f"> {reach:g}"),
         "initial_target_distance_numeric": numeric,
         "initial_distance_beyond_range": beyond,
     }
+
+
+def apply_spawn_offset_distance(metrics: dict, spawn_meta: dict | None) -> dict:
+    """Prefer hypot(dx, dz) from /summon for SPL; keep the ray distance as a reference."""
+    metrics = dict(metrics)
+    if "initial_target_distance_rays" not in metrics:
+        metrics["initial_target_distance_rays"] = metrics.get("initial_target_distance")
+    off = (spawn_meta or {}).get("target_spawn_offset") or {}
+    if off.get("dx") is None or off.get("dz") is None:
+        return metrics
+    dist = math.hypot(float(off["dx"]), float(off["dz"]))
+    metrics["initial_target_distance"] = dist
+    metrics["initial_target_distance_numeric"] = dist
+    metrics["initial_distance_beyond_range"] = False
+    return metrics
 
 
 def distance_meets_min(metrics: dict, min_distance: float) -> bool:
