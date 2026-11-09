@@ -116,6 +116,11 @@ class YawSignTest(unittest.TestCase):
         self.assertAlmostEqual(x2[1], h / 2, delta=1.5)
 
 
+def _angle_deg(a, b) -> float:
+    d = float(np.clip(np.dot(np.asarray(a, np.float64), np.asarray(b, np.float64)), -1.0, 1.0))
+    return math.degrees(math.acos(d))
+
+
 class RayKVsFovTest(unittest.TestCase):
     def test_centered_square_pixels_match_vertical_fov(self):
         h, w, patch = 224, 364, 14
@@ -125,11 +130,14 @@ class RayKVsFovTest(unittest.TestCase):
         cx, cy = w / 2.0, h / 2.0
         from_k = ray_directions_from_K(n_h, n_w, fx, fy, cx, cy, w, h)
         from_fov = ray_directions(n_h, n_w, 70, "vertical")
+        angs = []
         for i in range(n_h):
             for j in range(n_w):
-                a = np.array(from_k[i][j])
-                b = np.array(from_fov[i][j])
-                self.assertGreater(float(np.dot(a, b)), 0.97)
+                ang = _angle_deg(from_k[i][j], from_fov[i][j])
+                angs.append(ang)
+                self.assertLess(ang, 0.5)
+                self.assertGreater(float(np.dot(from_k[i][j], from_fov[i][j])), 0.99996)
+        print(f"max K vs 70° fov ray angle error: {max(angs):.6f} deg")
 
     def test_aligned_lidar_rays_same_length(self):
         cfg = {"image_hw": [224, 364], "patch": 14, "fov_deg": 70, "fov_axis": "vertical", "aligned_ray_range": 16}
@@ -143,7 +151,38 @@ class RayKVsFovTest(unittest.TestCase):
         self.assertEqual(len(a), (224 // 14) * (364 // 14))
         for ra, rb in zip(a, b):
             self.assertAlmostEqual(ra[2], rb[2])
-            self.assertLess(abs(ra[0] - rb[0]) + abs(ra[1] - rb[1]), 0.12)
+            self.assertLess(abs(ra[0] - rb[0]) + abs(ra[1] - rb[1]), math.radians(0.5) * 2)
+
+    def test_scale_axes_independently_512x820_to_224x364(self):
+        H, W = 512, 820
+        h, w, patch = 224, 364, 14
+        fy = (H / 2.0) / math.tan(math.radians(70) / 2.0)
+        fx, cx, cy = fy * 1.04, W / 2.0 + 12.0, H / 2.0 - 8.0
+        intr = {"fx": fx, "fy": fy, "cx": cx, "cy": cy, "width": W, "height": H}
+        scaled = scale_intrinsics(intr, h, w)
+        self.assertAlmostEqual(scaled["fx"], fx * (w / W))
+        self.assertAlmostEqual(scaled["cx"], cx * (w / W))
+        self.assertAlmostEqual(scaled["fy"], fy * (h / H))
+        self.assertAlmostEqual(scaled["cy"], cy * (h / H))
+        self.assertNotAlmostEqual(w / W, h / H, places=3)
+        n_h, n_w = h // patch, w // patch
+        small = ray_directions_from_K(
+            n_h, n_w, scaled["fx"], scaled["fy"], scaled["cx"], scaled["cy"], w, h
+        )
+        angs = []
+        for i in range(n_h):
+            for j in range(n_w):
+                u_s = (j + 0.5) * w / n_w
+                v_s = (i + 0.5) * h / n_h
+                u_b = u_s * (W / w)
+                v_b = v_s * (H / h)
+                xb, yb = (u_b - cx) / fx, (v_b - cy) / fy
+                nb = math.sqrt(xb * xb + yb * yb + 1.0)
+                big = (xb / nb, yb / nb, 1.0 / nb)
+                ang = _angle_deg(small[i][j], big)
+                angs.append(ang)
+                self.assertLess(ang, 0.5)
+        print(f"max 512x820 vs 224x364 ray angle error: {max(angs):.6f} deg")
 
     def test_aspect_mismatch_raises(self):
         intr = {"fx": 100, "fy": 100, "cx": 50, "cy": 50, "width": 100, "height": 100}

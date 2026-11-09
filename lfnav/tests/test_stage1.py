@@ -296,7 +296,7 @@ class SweepAndEnvTest(unittest.TestCase):
         self.assertIn("tree", cfg["labels"]["objects"])
         self.assertEqual(cfg["difficulty"], "easy")
         self.assertIn("easy", cfg["difficulty_table"])
-        self.assertFalse(cfg["obs_keys"]["confirmed"])
+        self.assertTrue(cfg["obs_keys"]["confirmed"])
 
 
 if __name__ == "__main__":

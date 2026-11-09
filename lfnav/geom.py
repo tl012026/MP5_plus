@@ -21,22 +21,21 @@ def ray_directions(n_h: int, n_w: int, fov_deg: float, fov_axis: str = "vertical
         raise ValueError(f"fov_axis must be vertical or horizontal, got {fov_axis}")
     fov = math.radians(float(fov_deg))
     aspect = n_w / n_h
+    # Same pinhole as centered fx=fy: NDC ±0.5 maps to tan(fov/2), not a linear angle.
     if fov_axis == "vertical":
-        fov_v = fov
-        fov_h = 2.0 * math.atan(math.tan(fov_v / 2.0) * aspect)
+        tan_half_v = math.tan(fov / 2.0)
+        tan_half_h = tan_half_v * aspect
     else:
-        fov_h = fov
-        fov_v = 2.0 * math.atan(math.tan(fov_h / 2.0) / aspect)
+        tan_half_h = math.tan(fov / 2.0)
+        tan_half_v = tan_half_h / aspect
     rows = []
     for i in range(n_h):
         v = (i + 0.5) / n_h - 0.5
-        pitch = v * fov_v
+        y = v * 2.0 * tan_half_v
         row = []
         for j in range(n_w):
             u = (j + 0.5) / n_w - 0.5
-            yaw = u * fov_h
-            x = math.tan(yaw)
-            y = math.tan(pitch)
+            x = u * 2.0 * tan_half_h
             z = 1.0
             norm = math.sqrt(x * x + y * y + z * z)
             row.append((x / norm, y / norm, z / norm))
@@ -51,7 +50,8 @@ def center_ray(n_h: int, n_w: int, fov_deg: float, fov_axis: str, row: int, col:
 def scale_intrinsics(intr: dict, height: int, width: int, aspect_tol: float = 0.03) -> dict:
     """Map a K captured at (intr height, width) onto the runtime image.
 
-    Scale fx,fy,cx,cy by w/W and h/H when the aspect ratios match. Raise if they do not.
+    Scale the x-axis (fx, cx) by width/W and the y-axis (fy, cy) by height/H
+    separately. Aspect must still match within aspect_tol or this raises.
     """
     ih, iw = int(intr["height"]), int(intr["width"])
     if ih < 1 or iw < 1:
