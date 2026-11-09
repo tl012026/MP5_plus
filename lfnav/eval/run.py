@@ -267,9 +267,12 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         t3 = time.perf_counter()
         control_rows = []
         for action in output.action_chunk:
+            remain = max_steps - env_steps
+            if remain <= 0:
+                break
             if rec is not None:
                 rec.set_info(match.to_dict(), action=action)
-            result = controller.execute(action)
+            result = controller.execute(action, budget=remain)
             if privileged_ray_distance(result.obs, cfg, task.target) is not None:
                 seen_gt = True
             result.obs = _hide_wide(result.obs, cfg)

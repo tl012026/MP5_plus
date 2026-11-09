@@ -397,11 +397,19 @@ def _kwargs(cfg: dict, seed: int, task=None) -> dict:
     return kwargs
 
 
-def sample_mob_offset(min_d, max_d, yaw_deg, seed: int, index: int, behind: bool = False, y: int = 1):
+def spawn_rng_seed(seed, task_id, index: int) -> int:
+    """Stable RNG seed from (world seed, task id, summon index). Independent of PYTHONHASHSEED."""
+    import hashlib
+
+    payload = f"{int(seed)}\0{task_id}\0{int(index)}".encode()
+    return int.from_bytes(hashlib.sha256(payload).digest()[:8], "big")
+
+
+def sample_mob_offset(min_d, max_d, yaw_deg, seed: int, index: int, behind: bool = False, y: int = 1, task_id: str = ""):
     """World offset for /summon. yaw=0 faces +z; forward is (-sin yaw, cos yaw)."""
     import random
 
-    rng = random.Random(int(seed) * 7919 + int(index))
+    rng = random.Random(spawn_rng_seed(seed, task_id, index))
     radius = rng.uniform(float(min_d), float(max_d))
     if behind:
         phi = rng.uniform(180.0 - 45.0, 180.0 + 45.0)
@@ -538,9 +546,10 @@ def spawn_task_mobs(env, task, cfg: dict, seed: int) -> dict:
         max_d = float(table.get("spawn_distance_max", 8))
         hard = str(cfg.get("difficulty") or "") == "hard"
         target = getattr(task, "target", None) or (task.get("target") if isinstance(task, dict) else None)
+        task_id = getattr(task, "id", None) or (task.get("id") if isinstance(task, dict) else "") or ""
 
         def summon_one(name, index, behind, y):
-            offset = sample_mob_offset(min_d, max_d, yaw, seed, index, behind=behind, y=y)
+            offset = sample_mob_offset(min_d, max_d, yaw, seed, index, behind=behind, y=y, task_id=task_id)
             offset = dict(offset)
             offset["name"] = name
             _execute_summon(env, name, offset["dx"], offset["dy"], offset["dz"])

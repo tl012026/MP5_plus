@@ -46,6 +46,7 @@ ESCAPE_SEQUENCES = (
     ("backward",) * 4 + ("turn_right_45", "turn_right_45"),
     ("turn_right_45",) * 4 + ("jump_forward",) * 8,
 )
+FORWARD_STUCK_ACTIONS = ("forward", "jump_forward")
 
 
 def _front_delta(yaw: float) -> tuple[int, int]:
@@ -161,30 +162,35 @@ class Controller:
         self.displacement_stuck = bool(self.actions.get("displacement_stuck", True))
         self.stuck_window = int(self.actions.get("stuck_window", 60))
         self.stuck_displacement = float(self.actions.get("stuck_displacement", 1.0))
+        self.stuck_forward_frac = float(self.actions.get("stuck_forward_frac", 0.5))
         self._unstuck_toggle = False
         self._last_pos = None
         self._still = 0
         self._pos_hist: list[tuple[float, float]] = []
+        self._act_hist: list[str] = []
         self.n_stuck = 0
         self.n_escape = 0
         self.stuck_steps_total = 0
         self._escaping = False
 
-    def execute(self, action_name: str) -> ControlResult:
+    def execute(self, action_name: str, budget: int | None = None) -> ControlResult:
+        if budget is not None and budget <= 0:
+            obs = self.env.observation() if hasattr(self.env, "observation") else {}
+            return ControlResult(0, False, False, obs)
         if self.displacement_stuck and not self._escaping and self._window_stuck():
-            return self._run_escape()
-        steps = 0
-        jumped = False
-        stuck = False
+            return self._run_escape(budget=budget)
         name = action_name
         if name == "forward":
             name = self._forward_name()
         obs, info = self._one(name)
-        steps += 1
+        steps = 1
         jumped = bool(info.get("jumped"))
+        left = None if budget is None else budget - 1
         if self.displacement_stuck:
+            if left is not None and left <= 0:
+                return ControlResult(steps, False, jumped, obs)
             if not self._escaping and self._window_stuck():
-                extra = self._run_escape()
+                extra = self._run_escape(budget=left)
                 return ControlResult(
                     steps + extra.env_steps,
                     True,
@@ -194,12 +200,14 @@ class Controller:
                 )
             return ControlResult(steps, False, jumped, obs)
         if info.get("blocked") or info.get("stuck") or self._still >= self.stuck_threshold:
-            stuck = True
+            if left is not None and left <= 0:
+                return ControlResult(steps, True, jumped, obs)
             obs, _info = self._one(self._unstuck())
             steps += 1
-        return ControlResult(steps, stuck, jumped, obs)
+            return ControlResult(steps, True, jumped, obs)
+        return ControlResult(steps, False, jumped, obs)
 
-    def execute_waypoints(self, waypoints) -> ControlResult:
+    def execute_waypoints(self, waypoints, budget: int | None = None) -> ControlResult:
         obs = self.env.observation() if hasattr(self.env, "observation") else {}
         steps = 0
         jumped = False
@@ -210,13 +218,19 @@ class Controller:
             turn = "turn_left_15" if dyaw < 0 else "turn_right_15"
             n_turns = int(round(abs(float(dyaw)) / 15.0))
             for _ in range(n_turns):
-                result = self.execute(turn)
+                left = None if budget is None else budget - steps
+                if left is not None and left <= 0:
+                    return ControlResult(steps, stuck, jumped, obs, escape_k=escape_k)
+                result = self.execute(turn, budget=left)
                 obs = result.obs
                 steps += result.env_steps
                 stuck = stuck or result.stuck
                 escape_k = result.escape_k if result.escape_k is not None else escape_k
             for _ in range(int(round(float(blocks)))):
-                result = self.execute("forward")
+                left = None if budget is None else budget - steps
+                if left is not None and left <= 0:
+                    return ControlResult(steps, stuck, jumped, obs, escape_k=escape_k)
+                result = self.execute("forward", budget=left)
                 obs = result.obs
                 steps += result.env_steps
                 jumped = jumped or result.jumped
@@ -236,8 +250,10 @@ class Controller:
             self._still = 0
         if after is not None:
             self._pos_hist.append((float(after[0]), float(after[-1])))
+            self._act_hist.append(str(name))
             if len(self._pos_hist) > self.stuck_window:
                 self._pos_hist = self._pos_hist[-self.stuck_window:]
+                self._act_hist = self._act_hist[-self.stuck_window:]
         info = dict(info or {})
         info["stuck"] = info.get("stuck") or self._still >= self.stuck_threshold or self._window_stuck()
         return obs, info
@@ -245,13 +261,16 @@ class Controller:
     def _window_stuck(self) -> bool:
         if not self.displacement_stuck:
             return False
-        if len(self._pos_hist) < self.stuck_window:
+        if len(self._pos_hist) < self.stuck_window or len(self._act_hist) < self.stuck_window:
             return False
         x0, z0 = self._pos_hist[0]
         x1, z1 = self._pos_hist[-1]
-        return math.hypot(x1 - x0, z1 - z0) < self.stuck_displacement
+        if math.hypot(x1 - x0, z1 - z0) >= self.stuck_displacement:
+            return False
+        n_fwd = sum(1 for name in self._act_hist[-self.stuck_window:] if name in FORWARD_STUCK_ACTIONS)
+        return n_fwd >= self.stuck_forward_frac * self.stuck_window
 
-    def _run_escape(self) -> ControlResult:
+    def _run_escape(self, budget: int | None = None) -> ControlResult:
         self._escaping = True
         self.n_stuck += 1
         origin = self._pos_hist[-1] if self._pos_hist else None
@@ -264,6 +283,8 @@ class Controller:
                 self.n_escape += 1
                 used = k
                 for name in seq:
+                    if budget is not None and steps >= budget:
+                        return ControlResult(steps, True, jumped, obs, escape_k=used)
                     obs, info = self._one(name)
                     steps += 1
                     self.stuck_steps_total += 1

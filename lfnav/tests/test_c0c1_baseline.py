@@ -10,7 +10,7 @@ from lfnav.env.fake import FakeMineDojoEnv
 from lfnav.eval.run import run_episode
 from lfnav.memory import Memory
 from lfnav.policy.c1 import RuleBased, sector8_counts
-from lfnav.types import PolicyInput, TaskSpec
+from lfnav.types import PolicyInput, PolicyOutput, TaskSpec
 
 
 def _cfg(**extra):
@@ -75,13 +75,21 @@ class StuckDisplacementTest(unittest.TestCase):
         env = FakeMineDojoEnv(cfg, {"tall": [(0, 1), (1, 0), (0, -1), (-1, 0)]})
         ctrl = Controller(env, cfg)
         for _ in range(59):
-            ctrl.execute("forward")
+            ctrl.execute("jump_forward")
             self.assertEqual(ctrl.n_stuck, 0)
-        result = ctrl.execute("forward")
+        result = ctrl.execute("jump_forward")
         self.assertGreaterEqual(ctrl.n_stuck, 1)
         self.assertGreater(ctrl.stuck_steps_total, 0)
         self.assertTrue(result.stuck)
         self.assertIsNotNone(result.escape_k)
+
+    def test_pure_turns_are_not_stuck(self):
+        cfg = _cfg()
+        env = FakeMineDojoEnv(cfg, {})
+        ctrl = Controller(env, cfg)
+        for _ in range(70):
+            ctrl.execute("turn_right_15")
+        self.assertEqual(ctrl.n_stuck, 0)
 
 
 class VisitSkipTest(unittest.TestCase):
@@ -118,6 +126,39 @@ class RecoverOvershootTest(unittest.TestCase):
         chunk = policy.act(found_again).action_chunk
         self.assertTrue(chunk)
         self.assertNotEqual(chunk, ["turn_right_15"])
+
+
+class MaxStepsCutTest(unittest.TestCase):
+    def test_long_chunk_stops_at_max_steps(self):
+        cfg = _cfg()
+        cfg["judge"]["max_steps"] = 5
+        cfg["frames"] = dict(cfg.get("frames") or {}, enabled=False)
+
+        class LongChunk:
+            def reset(self):
+                return None
+
+            def act(self, _pin):
+                return PolicyOutput(["forward"] * 20)
+
+        task = TaskSpec("1-1", "t", "tree", "tree")
+        env = FakeMineDojoEnv(cfg, {"blocks": {(0, 20): "log"}, "biome": "forest"})
+        rec, _events = run_episode(env, task, cfg, policy=LongChunk(), seed=0)
+        self.assertEqual(rec["steps"], 5)
+        self.assertLessEqual(rec["self_reported_steps"], 5)
+
+    def test_escape_respects_budget(self):
+        cfg = _cfg()
+        cfg["actions"] = dict(cfg.get("actions") or {})
+        cfg["actions"]["stuck_window"] = 4
+        env = FakeMineDojoEnv(cfg, {"tall": [(0, 1), (1, 0), (0, -1), (-1, 0)]})
+        ctrl = Controller(env, cfg)
+        for _ in range(3):
+            ctrl.execute("jump_forward")
+            self.assertEqual(ctrl.n_stuck, 0)
+        result = ctrl.execute("jump_forward", budget=3)
+        self.assertLessEqual(result.env_steps, 3)
+        self.assertTrue(result.stuck)
 
 
 class WaterDepthTest(unittest.TestCase):

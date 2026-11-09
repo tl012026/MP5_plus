@@ -30,6 +30,7 @@ stuck_threshold: 2
 displacement_stuck: true
 stuck_window: 60
 stuck_displacement: 1.0
+stuck_forward_frac: 0.5
 shallow_water_ok: true
 # Raw MineDojo voxel names (spaces become underscores). grass/dirt/sand/stone are solid.
 passable_blocks:

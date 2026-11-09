@@ -12,6 +12,7 @@ from lfnav.config import load_config
 from lfnav.env.minedojo_env import (
     lidar_plan,
     sample_mob_offset,
+    spawn_rng_seed,
     spawn_task_mobs,
     task_mentions_grass,
     vegetation_fill_commands,
@@ -69,6 +70,15 @@ class SampleRingTest(unittest.TestCase):
             self.assertLessEqual(abs(off["dx"]), abs(off["dz"]) + 1)
             self.assertGreaterEqual(off["bearing_deg"], 135.0)
             self.assertLessEqual(off["bearing_deg"], 225.0)
+
+    def test_task_id_changes_layout(self):
+        kwargs = dict(min_d=4.0, max_d=8.0, yaw_deg=0.0, seed=9, index=0)
+        a = sample_mob_offset(**kwargs, task_id="1-4")
+        b = sample_mob_offset(**kwargs, task_id="1-4")
+        c = sample_mob_offset(**kwargs, task_id="2-4")
+        self.assertEqual((a["dx"], a["dz"]), (b["dx"], b["dz"]))
+        self.assertNotEqual((a["dx"], a["dz"]), (c["dx"], c["dz"]))
+        self.assertNotEqual(spawn_rng_seed(9, "1-4", 0), spawn_rng_seed(9, "2-4", 0))
 
 
 class SpawnOnceTest(unittest.TestCase):
