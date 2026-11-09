@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 
 from lfnav.config import load_config
-from lfnav.obsutil import lookup
+from lfnav.obsutil import lookup, scalar as numpy_scalar
 
 
 NOOP = [0, 0, 0, 12, 12, 0, 0, 0]
@@ -46,14 +46,10 @@ def delta_minus_15k(delta_deg: float) -> float:
 def scalar(value, default=None):
     if value is None:
         return default
-    if hasattr(value, "item"):
-        try:
-            return value.item()
-        except Exception:
-            pass
-    if isinstance(value, (list, tuple)) and value:
+    out = numpy_scalar(value)
+    if out is value and isinstance(value, (list, tuple)) and value:
         return scalar(value[0], default)
-    return value
+    return default if out is None else out
 
 
 def pose_of(obs: dict, cfg: dict) -> dict:

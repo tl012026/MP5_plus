@@ -15,12 +15,14 @@ from unittest.mock import patch
 
 from lfnav.config import load_config
 from lfnav.data.collect_perception import capture, frames_done, make_fake
+from lfnav.env.fake import FakeMineDojoEnv
 from lfnav.env.inspect_minedojo import find_task_class
-from lfnav.env.minedojo_env import _kwargs, convert_rays, episode_kwargs, lidar_plan
+from lfnav.env.minedojo_env import _kwargs, convert_rays, episode_kwargs, lidar_plan, python_location_stats
 from lfnav.gt.calibrate_env_state import mapping_from_measurements, suggested_threshold
 from lfnav.gt.judge import judge_episode
 from lfnav.gt.scene_state import scene_state_from_obs
 from lfnav.matcher import Matcher
+from lfnav.obsutil import pitch_of, scalar, yaw_of
 from lfnav.types import ObjectBelief, TaskSpec
 
 SPECS = Path(__file__).resolve().parents[2] / "lfnav" / "tasks" / "specs"
@@ -315,6 +317,47 @@ class EnvStateTest(unittest.TestCase):
         ])
         self.assertEqual(mapping, {"4": "forest", "1": "plains"})
         self.assertEqual(suggested_threshold([0.0, 0.1], [0.8, 1.0]), 0.45)
+
+    def test_numpy_location_stats_match_real_minedojo(self):
+        cfg = self._cfg()
+        env = FakeMineDojoEnv(cfg, {"entities": [{"name": "pig", "x": 0.0, "z": 2.0}], "biome": "plains"})
+        obs = env.reset()
+        loc = obs["location_stats"]
+        self.assertEqual(loc["biome_id"].shape, (1,))
+        self.assertTrue(np.issubdtype(loc["biome_id"].dtype, np.integer))
+        self.assertEqual(loc["is_raining"].shape, (1,))
+        self.assertEqual(loc["is_raining"].dtype, bool)
+        self.assertEqual(loc["sun_brightness"].shape, (1,))
+        self.assertTrue(np.issubdtype(loc["sun_brightness"].dtype, np.floating))
+        self.assertEqual(tuple(loc["pos"].shape), (3,))
+        self.assertEqual(int(scalar(loc["biome_id"])), 1)
+        scene = scene_state_from_obs(obs, cfg)
+        self.assertEqual(scene.biome.get("plains"), 1.0)
+        self.assertNotIn("biome", scene.unknown)
+        adopted = python_location_stats(loc)
+        self.assertEqual(adopted["biome_id"], 1)
+        self.assertIsInstance(adopted["biome_id"], int)
+        self.assertEqual(adopted["is_raining"], False)
+        self.assertIsInstance(adopted["pos"], list)
+        self.assertEqual(len(adopted["pos"]), 3)
+        self.assertAlmostEqual(yaw_of(obs, cfg), 0.0)
+        self.assertAlmostEqual(pitch_of(obs, cfg), 0.0)
+        task = TaskSpec.from_dict(json.loads((SPECS / "1-4.json").read_text()))
+        match = Matcher(cfg).match(task, scene)
+        self.assertIn(match.status, ("found", "not_found"))
+        rec = judge_episode(task, True, 4, scene, 2.0, 4.0, [0, 64, 0], [0, 64, 2])
+        json.dumps(scene.to_dict())
+        json.dumps(match.to_dict())
+        json.dumps(rec)
+
+
+class ScalarTest(unittest.TestCase):
+    def test_size_one_array_and_python_passthrough(self):
+        self.assertEqual(scalar(np.array([4], dtype=np.int64)), 4)
+        self.assertIs(scalar(np.array([True])), True)
+        self.assertAlmostEqual(float(scalar(np.array([0.5], dtype=np.float32))), 0.5)
+        self.assertEqual(scalar(7), 7)
+        self.assertIsNone(scalar(None))
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ import math
 
 from lfnav.geom import patch_grid, rays_from_cfg
 from lfnav.gt.fov import ray_angles_deg
+from lfnav.obsutil import scalar
 
 
 def to_minedojo_lidar(direction, reach: float) -> tuple[float, float, float]:
@@ -308,6 +309,22 @@ def _kwargs(cfg: dict, seed: int, task=None) -> dict:
     return kwargs
 
 
+def python_location_stats(loc: dict) -> dict:
+    """MineDojo location_stats: size-1 arrays become Python scalars; pos is 3 floats.
+
+    Real dumps (probe 2026-11-08) store biome_id as integer (1,), is_raining as
+    bool (1,), other scalars as float (1,), and pos as length 3. rgb/voxels/rays
+    are not touched here.
+    """
+    out = {}
+    for key, val in loc.items():
+        if key == "pos":
+            out[key] = None if val is None else [float(v) for v in val]
+            continue
+        out[key] = scalar(val)
+    return out
+
+
 class MineDojoEnv:
     def __init__(self, cfg: dict, task=None, seed: int = 0):
         import minedojo
@@ -318,11 +335,16 @@ class MineDojoEnv:
         self._obs = None
 
     def _adopt(self, obs):
-        if isinstance(obs, dict) and self.ray_plan is not None and isinstance(obs.get("rays"), dict):
-            converted = convert_rays(obs["rays"], self.ray_plan, self.cfg)
-            keys = self.cfg.get("obs_keys") or {}
-            obs[keys.get("aligned_rays") or "lfnav_rays"] = converted["aligned"]
-            obs[keys.get("wide_rays") or "lfnav_wide_rays"] = converted["wide"]
+        if isinstance(obs, dict):
+            obs = dict(obs)
+            loc = obs.get("location_stats")
+            if isinstance(loc, dict):
+                obs["location_stats"] = python_location_stats(loc)
+            if self.ray_plan is not None and isinstance(obs.get("rays"), dict):
+                converted = convert_rays(obs["rays"], self.ray_plan, self.cfg)
+                keys = self.cfg.get("obs_keys") or {}
+                obs[keys.get("aligned_rays") or "lfnav_rays"] = converted["aligned"]
+                obs[keys.get("wide_rays") or "lfnav_wide_rays"] = converted["wide"]
         self._obs = obs
         return obs
 

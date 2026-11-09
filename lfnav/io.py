@@ -7,11 +7,29 @@ import os
 from pathlib import Path
 
 
+def json_default(obj):
+    """Turn numpy scalars/arrays into JSON types. Used by result JSON and event logs."""
+    item = getattr(obj, "item", None)
+    size = getattr(obj, "size", None)
+    if callable(item) and size == 1:
+        try:
+            return item()
+        except Exception:
+            pass
+    tolist = getattr(obj, "tolist", None)
+    if callable(tolist):
+        try:
+            return tolist()
+        except Exception:
+            pass
+    return str(obj)
+
+
 def atomic_write_json(path, obj) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(obj, indent=2, default=str))
+    tmp.write_text(json.dumps(obj, indent=2, default=json_default))
     os.replace(tmp, path)
 
 

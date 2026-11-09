@@ -14,6 +14,7 @@ from unittest.mock import patch
 from lfnav.env.fake import FakeMineDojoEnv
 from lfnav.eval.run import run_batch, run_episode
 from lfnav.memory import Memory
+from lfnav.obsutil import yaw_of
 from lfnav.policy.c0 import RandomWalk
 from lfnav.policy.c3 import DiffusionPolicy
 from lfnav.types import ObjectBelief, PolicyInput, SceneState, TaskSpec
@@ -59,7 +60,7 @@ class ControllerTest(unittest.TestCase):
         water = FakeMineDojoEnv(cfg, {"water": [(0, 1)]})
         avoided = Controller(water, cfg).execute("forward")
         self.assertLess(abs(avoided.obs["location_stats"]["pos"][2]), 0.2)
-        self.assertNotEqual(avoided.obs["location_stats"]["yaw"] % 360.0, 0.0)
+        self.assertNotEqual(yaw_of(avoided.obs, cfg) % 360.0, 0.0)
 
     def test_waypoints(self):
         cfg = small_cfg()
@@ -78,6 +79,8 @@ class EpisodeTest(unittest.TestCase):
         self.assertTrue(rec["sr_b"], rec)
         self.assertTrue(rec["success"])
         self.assertTrue(events[-1]["match"]["stop"])
+        json.dumps(rec)
+        json.dumps(events)
 
     def test_false_stop_when_perception_invents_the_target(self):
         cfg = small_cfg()

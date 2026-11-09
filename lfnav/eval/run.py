@@ -20,7 +20,7 @@ from lfnav.control.controller import Controller
 from lfnav.env.fake import FakeMineDojoEnv
 from lfnav.gt.judge import aligned_target_distance, judge_episode
 from lfnav.gt.scene_state import scene_state_from_obs
-from lfnav.io import atomic_write_json, read_seeds, read_tasks
+from lfnav.io import atomic_write_json, json_default, read_seeds, read_tasks
 from lfnav.matcher import Matcher
 from lfnav.memory import Memory
 from lfnav.obsutil import position_of, yaw_of
@@ -293,7 +293,7 @@ def run_batch(cfg: dict, tasks: list[str], seeds: list[int], out: Path, skip_don
                     tmp = event_path.with_suffix(".jsonl.tmp")
                     with tmp.open("w") as handle:
                         for event in events:
-                            handle.write(json.dumps(event) + "\n")
+                            handle.write(json.dumps(event, default=json_default) + "\n")
                     tmp.replace(event_path)
                 except Exception:
                     session.release()

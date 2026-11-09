@@ -18,7 +18,7 @@ from lfnav.env.fake import FakeMineDojoEnv
 from lfnav.eval.run import close_env
 from lfnav.gt.scene_state import scene_state_from_obs
 from lfnav.io import atomic_write_json
-from lfnav.obsutil import lookup
+from lfnav.obsutil import lookup, pitch_of, position_of, yaw_of
 
 
 def _shard_count(path: Path) -> int:
@@ -66,12 +66,12 @@ def capture(env, cfg, n_frames: int, out: Path, seed: int, yaw_step: int = 30) -
     while produced < n_frames:
         for _ in range(max(int(360 / yaw_step), 1)):
             scene = scene_state_from_obs(obs, cfg)
-            pos = lookup(obs, (cfg.get("obs_keys") or {}).get("position"), [0, 0, 0])
+            pos = position_of(obs, cfg) or [0.0, 0.0, 0.0]
             rows.append({
                 "rgb": _rgb(obs, cfg),
                 "scene": scene.to_dict(),
-                "yaw": float(lookup(obs, (cfg.get("obs_keys") or {}).get("yaw"), 0.0) or 0.0),
-                "pitch": float(lookup(obs, (cfg.get("obs_keys") or {}).get("pitch"), 0.0) or 0.0),
+                "yaw": yaw_of(obs, cfg),
+                "pitch": pitch_of(obs, cfg),
                 "x": float(pos[0]),
                 "z": float(pos[-1]),
                 "seed": seed,

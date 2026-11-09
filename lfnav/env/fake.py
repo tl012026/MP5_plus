@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
+
 from lfnav.geom import patch_grid, ray_directions
 from lfnav.gt.scene_state import biome_id_for_name
 
@@ -61,6 +63,8 @@ class FakeMineDojoEnv:
         self._stuck_count = 0
         self.n_h, self.n_w = patch_grid(self.image_hw[0], self.image_hw[1], self.patch)
         self._cam_rays = ray_directions(self.n_h, self.n_w, self.fov_deg, self.fov_axis)
+        # Match the 2026-11-08 MineDojo probe: size-(1,) arrays except pos length 3.
+        self.numpy_location_stats = bool(cfg.get("numpy_location_stats", True))
 
     def reset(self, **_kwargs):
         self._stuck_count = 0
@@ -95,7 +99,23 @@ class FakeMineDojoEnv:
             loc["sun_brightness"] = 1.0 if str(self.time_name).lower() == "day" else 0.0
             loc["sky_light_level"] = loc["sun_brightness"]
             loc["light_level"] = 15.0 if str(self.brightness).lower() == "sufficient" else 3.0
+            if self.numpy_location_stats:
+                obs["location_stats"] = self._numpy_location_stats(loc)
         return obs
+
+    def _numpy_location_stats(self, loc: dict) -> dict:
+        """Same dtypes as real MineDojo location_stats: int biome_id, bool rain, else float."""
+        packed = {}
+        for key, val in loc.items():
+            if key == "pos":
+                packed[key] = np.asarray(val, dtype=np.float32)
+            elif key == "biome_id":
+                packed[key] = np.asarray([int(val)], dtype=np.int64)
+            elif key in ("is_raining", "can_see_sky"):
+                packed[key] = np.asarray([bool(val)], dtype=bool)
+            else:
+                packed[key] = np.asarray([float(val)], dtype=np.float32)
+        return packed
 
     def step(self, action):
         name = self._action_name(action)

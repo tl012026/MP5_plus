@@ -16,7 +16,7 @@ import json
 from lfnav.config import load_config
 from lfnav.gt.scene_state import CANDIDATE_BIOME_IDS
 from lfnav.io import atomic_write_json
-from lfnav.obsutil import lookup
+from lfnav.obsutil import lookup, scalar
 
 
 STAT_FIELDS = ("sun_brightness", "light_level", "sky_light_level", "is_raining", "biome_id")
@@ -26,12 +26,12 @@ def location_stats(obs: dict, cfg: dict) -> dict:
     keys = cfg.get("obs_keys") or {}
     loc = obs.get("location_stats") if isinstance(obs, dict) else None
     raw = dict(loc) if isinstance(loc, dict) else {}
-    out = {name: raw.get(name) for name in STAT_FIELDS}
-    out["sun_brightness"] = lookup(obs, keys.get("time_of_day"), out.get("sun_brightness"))
-    out["light_level"] = lookup(obs, keys.get("light_level"), out.get("light_level"))
-    out["sky_light_level"] = lookup(obs, keys.get("sky_light_level"), out.get("sky_light_level"))
-    out["is_raining"] = lookup(obs, keys.get("weather_rain"), out.get("is_raining"))
-    out["biome_id"] = lookup(obs, keys.get("biome_id"), out.get("biome_id"))
+    out = {name: scalar(raw.get(name)) for name in STAT_FIELDS}
+    out["sun_brightness"] = scalar(lookup(obs, keys.get("time_of_day"), out.get("sun_brightness")))
+    out["light_level"] = scalar(lookup(obs, keys.get("light_level"), out.get("light_level")))
+    out["sky_light_level"] = scalar(lookup(obs, keys.get("sky_light_level"), out.get("sky_light_level")))
+    out["is_raining"] = scalar(lookup(obs, keys.get("weather_rain"), out.get("is_raining")))
+    out["biome_id"] = scalar(lookup(obs, keys.get("biome_id"), out.get("biome_id")))
     return out
 
 

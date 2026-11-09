@@ -13,7 +13,7 @@ import logging
 from lfnav.aggregate import aggregate_object, distance_bin
 from lfnav.geom import patch_grid
 from lfnav.gt.camera import patch_ignore
-from lfnav.obsutil import lookup
+from lfnav.obsutil import lookup, scalar
 from lfnav.types import SceneState
 
 log = logging.getLogger("lfnav.gt.scene_state")
@@ -95,10 +95,10 @@ def _mark_unknown(unknown: list[str], field: str, message: str) -> None:
 
 def decode_biome(obs: dict, cfg: dict, unknown: list[str]) -> str | None:
     keys = cfg.get("obs_keys") or {}
-    named = lookup(obs, keys.get("biome_name"))
+    named = scalar(lookup(obs, keys.get("biome_name")))
     if named is not None:
         return str(named).lower()
-    biome_id = lookup(obs, keys.get("biome_id"))
+    biome_id = scalar(lookup(obs, keys.get("biome_id")))
     if biome_id is None:
         if keys.get("biome_id") is not None or keys.get("biome_name") is not None:
             _mark_unknown(unknown, "biome", "biome id is missing from the observation; biome is unknown")
@@ -116,10 +116,10 @@ def decode_biome(obs: dict, cfg: dict, unknown: list[str]) -> str | None:
 
 def decode_time(obs: dict, cfg: dict, unknown: list[str]) -> str | None:
     keys = cfg.get("obs_keys") or {}
-    named = lookup(obs, keys.get("time_name"))
+    named = scalar(lookup(obs, keys.get("time_name")))
     if named is not None:
         return str(named).lower()
-    raw = lookup(obs, keys.get("time_of_day"))
+    raw = scalar(lookup(obs, keys.get("time_of_day")))
     thresh = cfg.get("time_day_min")
     if thresh is None:
         thresh = cfg.get("time_day_below")
@@ -138,10 +138,10 @@ def decode_time(obs: dict, cfg: dict, unknown: list[str]) -> str | None:
 
 def decode_weather(obs: dict, cfg: dict, unknown: list[str]) -> str | None:
     keys = cfg.get("obs_keys") or {}
-    named = lookup(obs, keys.get("weather_name"))
+    named = scalar(lookup(obs, keys.get("weather_name")))
     if named is not None:
         return str(named).lower()
-    raw = lookup(obs, keys.get("weather_rain"))
+    raw = scalar(lookup(obs, keys.get("weather_rain")))
     if raw is None:
         if keys.get("weather_rain") is not None:
             _mark_unknown(unknown, "weather", "is_raining is missing from the observation; weather is unknown")
@@ -151,10 +151,10 @@ def decode_weather(obs: dict, cfg: dict, unknown: list[str]) -> str | None:
 
 def decode_brightness(obs: dict, cfg: dict, unknown: list[str]) -> str | None:
     keys = cfg.get("obs_keys") or {}
-    named = lookup(obs, keys.get("brightness_name"))
+    named = scalar(lookup(obs, keys.get("brightness_name")))
     if named is not None:
         return str(named).lower()
-    raw = lookup(obs, keys.get("light_level"))
+    raw = scalar(lookup(obs, keys.get("light_level")))
     thresh = cfg.get("brightness_min_light")
     if raw is None:
         if keys.get("light_level") is not None:
