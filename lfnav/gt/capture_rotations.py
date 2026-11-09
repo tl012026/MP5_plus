@@ -130,8 +130,6 @@ def capture_kwargs(cfg: dict, seed: int, biome: str, image_size) -> dict:
     env_cfg["start_at_night"] = False
     env_cfg["image_size"] = [int(image_size[0]), int(image_size[1])]
     env_cfg.pop("spawn_rate", None)
-    env_cfg.pop("target_names", None)
-    env_cfg.pop("target_quantities", None)
     copy["minedojo"] = env_cfg
     kwargs = _kwargs(copy, seed)
     kwargs["image_size"] = (int(image_size[0]), int(image_size[1]))
