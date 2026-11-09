@@ -83,7 +83,7 @@ Real episodes follow `lfnav/slurm/README.md`. Data, features, checkpoints and ru
 
 ## Baseline: C0 / C1 × GT perception
 
-Purpose: get an upper bound (C1 + GT) and a lower bound (C0 + GT, close to MP5's blind exploration) before any learned module exists. Both arms use perfect perception, so any difference comes from the navigation policy alone.
+Purpose: get an upper bound (C1 + GT) and a lower bound (C0 + GT, close to MP5's blind exploration) before any learned module exists. Both arms use perfect perception, so any difference comes from the navigation policy alone. Smoke-run problems and the fixes that followed are in [`C0C1_BASELINE.md`](C0C1_BASELINE.md).
 
 | | |
 | --- | --- |
@@ -208,6 +208,7 @@ The only baseline file committed to the repo is `summary.json`, under `results/b
 - Things to watch:
   - conditions that may never trigger (night, rain, near water);
   - small mobs leaving the frame at close range.
+- Remaining limits and a partial score table after the fixes: [`C0C1_BASELINE.md`](C0C1_BASELINE.md).
 
 ## Matrix
 
