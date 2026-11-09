@@ -79,6 +79,20 @@ perception:
 difficulty: easy
 backend: fake
 seed: 0
+# Wide lidar is privileged (expert / initial difficulty). Evaluation policies
+# do not read it unless this flag is on.
+policy_sees_wide_lidar: false
+gradle:
+  master: /scratch/${USER}/.gradle
+  worker_copies: false
+frames:
+  enabled: true
+  every: 20
+  format: jpg
+  quality: 80
+  scale: 0.5
+  max_per_episode: 400
+  annotate: true
 # Off: every episode calls make() with world_seed equal to that episode's seed, then close().
 # On: consecutive episodes of the same task and difficulty keep one process and call reset().
 # The world seed is then only the first episode's seed. Later seeds do not rebuild the world.

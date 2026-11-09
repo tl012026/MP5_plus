@@ -21,4 +21,6 @@ SEEDS=${SEEDS:-$MP5/configs/lfnav/eval_seeds.txt}
 POLICY=${POLICY:-c1}
 PERCEPTION=${PERCEPTION:-gt}
 mkdir -p "$SCR/lfnav/logs" "$OUT"
-singularity exec "$SIF" bash -c "source '$ENVSH' && cd '$MP5' && xvfb-run -a python -m lfnav.eval.run --config '$MP5/configs/lfnav/default.yaml' --tasks '$TASKS' --seeds '$SEEDS' --out '$OUT' --skip-done --policy '$POLICY' --perception '$PERCEPTION' --backend minedojo"
+# shellcheck disable=SC1091
+source "$MP5/lfnav/env/gradle_home.sh"
+lfnav_sif_exec "$SIF" bash -c "export GRADLE_USER_HOME='$GRADLE_USER_HOME' && source '$ENVSH' && cd '$MP5' && xvfb-run -a python -m lfnav.eval.run --config '$MP5/configs/lfnav/default.yaml' --tasks '$TASKS' --seeds '$SEEDS' --out '$OUT' --skip-done --policy '$POLICY' --perception '$PERCEPTION' --backend minedojo"

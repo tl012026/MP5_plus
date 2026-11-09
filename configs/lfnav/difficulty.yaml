@@ -1,16 +1,28 @@
 # Episode difficulty. Task spec files do not change.
+#
+# specified_biome worlds are treated as a single biome (confirm with
+# lfnav/env/check_biome_world.py). leave_biome is therefore false: "leave the
+# start biome" cannot be staged. Block-target hardness is min_initial_distance
+# plus world-seed rerolls. Optional default-world seeds live in
+# configs/lfnav/hard_cross_biome_seeds.txt (lfnav/env/search_biome_seeds.py).
 easy:
   spawn_distance_min: 4
   spawn_distance_max: 8
+  min_initial_distance: 0
+  max_reroll: 5
   distractors: 0
   leave_biome: false
 medium:
   spawn_distance_min: 8
   spawn_distance_max: 16
+  min_initial_distance: 8
+  max_reroll: 5
   distractors: 2
   leave_biome: false
 hard:
   spawn_distance_min: 16
   spawn_distance_max: 32
+  min_initial_distance: 16
+  max_reroll: 5
   distractors: 4
-  leave_biome: true
+  leave_biome: false

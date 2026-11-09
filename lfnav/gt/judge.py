@@ -68,13 +68,33 @@ def straight_distance(start, stop) -> float:
     return math.sqrt(acc)
 
 
-def spl_approx(sr_b: bool, straight: float, path_length: float) -> float:
-    """SR-b * d / max(L, d). If both lengths are 0, a success scores 1."""
+def shortest_path_approx(initial_target_distance, radius: float) -> float | None:
+    """l = max(initial_target_distance - radius, 0). None if the start was beyond lidar range.
+
+    This ignores terrain detours.
+    """
+    if initial_target_distance is None:
+        return None
+    if isinstance(initial_target_distance, str):
+        text = initial_target_distance.strip()
+        if text.startswith(">"):
+            return None
+        try:
+            initial_target_distance = float(text)
+        except ValueError:
+            return None
+    return max(float(initial_target_distance) - float(radius), 0.0)
+
+
+def spl_approx(sr_b: bool, shortest: float | None, path_length: float):
+    """success * l / max(actual path, l). None when the shortest-path approx is unknown."""
+    if shortest is None:
+        return None
     if not sr_b:
         return 0.0
-    if straight <= 0.0 and path_length <= 0.0:
+    if shortest <= 0.0 and path_length <= 0.0:
         return 1.0
-    return straight / max(path_length, straight)
+    return shortest / max(path_length, shortest)
 
 
 def judge_stop(
@@ -116,7 +136,9 @@ def judge_episode(
     stop,
     max_steps: int = 3000,
     radius: float = 3.0,
+    initial_target_distance=None,
 ) -> dict:
+    shortest = shortest_path_approx(initial_target_distance, radius)
     if not stopped:
         timeout = steps >= max_steps
         return {
@@ -129,7 +151,7 @@ def judge_episode(
             "distance_blocks": distance_blocks,
             "path_length": path_length,
             "straight": straight_distance(start, stop),
-            "spl": 0.0,
+            "spl": spl_approx(False, shortest, path_length),
             "outcome": "timeout" if timeout else "incomplete",
             "success": False,
             "steps": steps,
@@ -140,7 +162,7 @@ def judge_episode(
     straight = straight_distance(start, stop)
     verdict["path_length"] = path_length
     verdict["straight"] = straight
-    verdict["spl"] = spl_approx(verdict["sr_b"], straight, path_length)
+    verdict["spl"] = spl_approx(verdict["sr_b"], shortest, path_length)
     verdict["steps"] = steps
     verdict["start"] = list(start) if start is not None else None
     verdict["stop"] = list(stop) if stop is not None else None

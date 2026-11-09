@@ -17,7 +17,7 @@ from lfnav.config import load_config
 from lfnav.data.collect_perception import capture, frames_done, make_fake
 from lfnav.env.fake import FakeMineDojoEnv
 from lfnav.env.inspect_minedojo import find_task_class
-from lfnav.env.minedojo_env import _kwargs, convert_rays, episode_kwargs, lidar_plan, python_location_stats
+from lfnav.env.minedojo_env import _kwargs, convert_rays, episode_kwargs, lidar_plan, mob_ring_box, python_location_stats
 from lfnav.gt.calibrate_env_state import mapping_from_measurements, suggested_threshold
 from lfnav.gt.judge import judge_episode
 from lfnav.gt.scene_state import scene_state_from_obs
@@ -224,10 +224,9 @@ class EpisodeKwargsTest(unittest.TestCase):
             for block in blocks:
                 self.assertNotIn(block, kw[names["mobs"]], task.id)
             self.assertNotIn("allow_mob_spawn", kw, task.id)
-            low = int(easy["spawn_distance_min"])
-            high = int(easy["spawn_distance_max"])
-            self.assertEqual(kw[names["mob_range_low"]], (-low, 1, -low), task.id)
-            self.assertEqual(kw[names["mob_range_high"]], (high, 3, high), task.id)
+            low, high = mob_ring_box(easy["spawn_distance_min"], easy["spawn_distance_max"], 0, behind=False)
+            self.assertEqual(kw[names["mob_range_low"]], low, task.id)
+            self.assertEqual(kw[names["mob_range_high"]], high, task.id)
             self.assertEqual(names["mob_range_low"], "initial_mob_spawn_range_low")
 
     def test_make_kwargs_use_the_task_scene(self):
@@ -252,8 +251,10 @@ class EpisodeKwargsTest(unittest.TestCase):
         self.assertEqual(mobs[0], "pig")
         self.assertEqual(len(mobs), 1 + cfg["difficulty_table"]["medium"]["distractors"])
         self.assertTrue(set(mobs[1:]).isdisjoint({"pig"}))
-        low = int(cfg["difficulty_table"]["medium"]["spawn_distance_min"])
-        self.assertEqual(kw[names["mob_range_low"]], (-low, 1, -low))
+        table = cfg["difficulty_table"]["medium"]
+        low, high = mob_ring_box(table["spawn_distance_min"], table["spawn_distance_max"], 1, behind=False)
+        self.assertEqual(kw[names["mob_range_low"]], low)
+        self.assertEqual(kw[names["mob_range_high"]], high)
 
 
 class EnvStateTest(unittest.TestCase):

@@ -20,4 +20,6 @@ FRAMES=${FRAMES:-1000}
 BACKEND=${BACKEND:-minedojo}
 OUT=${OUT:-$SCR/lfnav/data/perception_pilot}
 mkdir -p "$SCR/lfnav/logs" "$OUT"
-singularity exec "$SIF" bash -c "source '$ENVSH' && cd '$MP5' && xvfb-run -a python lfnav/data/collect_perception.py --config '$MP5/configs/lfnav/default.yaml' --out '$OUT' --frames $FRAMES --backend $BACKEND"
+# shellcheck disable=SC1091
+source "$MP5/lfnav/env/gradle_home.sh"
+lfnav_sif_exec "$SIF" bash -c "export GRADLE_USER_HOME='$GRADLE_USER_HOME' && source '$ENVSH' && cd '$MP5' && xvfb-run -a python lfnav/data/collect_perception.py --config '$MP5/configs/lfnav/default.yaml' --out '$OUT' --frames $FRAMES --backend $BACKEND"

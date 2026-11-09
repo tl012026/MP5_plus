@@ -1,0 +1,6 @@
+# Baseline evaluation seeds. Last digit is 9 so they stay out of training.
+9
+19
+29
+39
+49

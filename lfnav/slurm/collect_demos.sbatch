@@ -19,4 +19,6 @@ OUT=${OUT:-$SCR/lfnav/data/demos}
 TASKS=${TASKS:-$MP5/lfnav/tasks/specs}
 SEEDS=${SEEDS:-$MP5/configs/lfnav/train_seeds.txt}
 mkdir -p "$SCR/lfnav/logs" "$OUT"
-singularity exec "$SIF" bash -c "source '$ENVSH' && cd '$MP5' && xvfb-run -a python lfnav/data/collect_demos.py --tasks '$TASKS' --seeds '$SEEDS' --out '$OUT' --backend minedojo"
+# shellcheck disable=SC1091
+source "$MP5/lfnav/env/gradle_home.sh"
+lfnav_sif_exec "$SIF" bash -c "export GRADLE_USER_HOME='$GRADLE_USER_HOME' && source '$ENVSH' && cd '$MP5' && xvfb-run -a python lfnav/data/collect_demos.py --tasks '$TASKS' --seeds '$SEEDS' --out '$OUT' --backend minedojo"

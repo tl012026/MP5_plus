@@ -18,6 +18,13 @@ from pathlib import Path
 from lfnav.config import load_config
 from lfnav.control.controller import Controller
 from lfnav.env.fake import FakeMineDojoEnv
+from lfnav.env.minedojo_env import mob_ring_box
+from lfnav.gt.initial import (
+    distance_meets_min,
+    initial_scene_metrics,
+    spawn_has_blocks,
+    world_seed_attempt,
+)
 from lfnav.gt.judge import aligned_target_distance, judge_episode
 from lfnav.gt.scene_state import scene_state_from_obs
 from lfnav.io import atomic_write_json, json_default, read_seeds, read_tasks
@@ -85,14 +92,17 @@ def layout_for(task: TaskSpec, cfg: dict, seed: int) -> dict:
     table = (cfg.get("difficulty_table") or {}).get(cfg.get("difficulty", "easy"), {})
     lo = float(table.get("spawn_distance_min", 4))
     hi = float(table.get("spawn_distance_max", 8))
+    behind = str(cfg.get("difficulty") or "") == "hard"
+    low, high = mob_ring_box(lo, hi, seed, behind=behind)
+    cx = 0.5 * (low[0] + high[0])
+    cz = 0.5 * (low[2] + high[2])
     entities = []
     blocks = {}
     for item in task.episode.get("spawn") or []:
-        dist = rng.uniform(lo, hi)
         if item.get("kind") == "mob":
-            entities.append({"name": item["name"], "x": 0.0, "z": dist})
+            entities.append({"name": item["name"], "x": cx, "z": cz})
         else:
-            blocks[(0, int(round(dist)))] = item["name"]
+            blocks[(int(round(cx)), int(round(cz)))] = item["name"]
     for i in range(int(table.get("distractors", 0))):
         entities.append({"name": "sheep", "x": rng.uniform(-6, 6), "z": rng.uniform(2, hi)})
     return {
@@ -107,7 +117,62 @@ def layout_for(task: TaskSpec, cfg: dict, seed: int) -> dict:
     }
 
 
-def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, seed: int = 0) -> tuple[dict, list]:
+def _hide_wide(obs: dict, cfg: dict) -> dict:
+    if cfg.get("policy_sees_wide_lidar", False):
+        return obs
+    keys = cfg.get("obs_keys") or {}
+    wide_key = keys.get("wide_rays")
+    if isinstance(obs, dict) and wide_key:
+        obs = dict(obs)
+        obs[wide_key] = []
+    return obs
+
+
+def open_episode(session, task: TaskSpec, cfg: dict, seed: int):
+    """Make/reset until min_initial_distance holds, then return obs before the first decision."""
+    table = (cfg.get("difficulty_table") or {}).get(cfg.get("difficulty", "easy"), {}) or {}
+    min_d = float(table.get("min_initial_distance") or 0)
+    max_reroll = int(table.get("max_reroll") or 0)
+    reroll = spawn_has_blocks(task) and min_d > 0
+    attempts = max_reroll + 1 if reroll else 1
+    env = None
+    obs = None
+    metrics = {}
+    used = int(seed)
+    unmet = False
+    reroll_count = 0
+    for attempt in range(attempts):
+        used = world_seed_attempt(seed, attempt)
+        if reroll:
+            session.release()
+        env = session.acquire(task, used)
+        obs = env.reset(seed=used, task=task)
+        metrics = initial_scene_metrics(obs, env, cfg, task)
+        if not reroll or distance_meets_min(metrics, min_d):
+            reroll_count = attempt
+            unmet = False
+            break
+        reroll_count = attempt + 1
+    else:
+        unmet = bool(reroll)
+        reroll_count = max_reroll
+    public = {
+        "world_seed": used,
+        "reroll_count": reroll_count,
+        "difficulty_unmet": unmet,
+        "initial_target_visible": metrics.get("initial_target_visible"),
+        "initial_target_distance": metrics.get("initial_target_distance"),
+        "initial_distance_beyond_range": metrics.get("initial_distance_beyond_range"),
+        "_numeric_initial_distance": metrics.get("initial_target_distance_numeric"),
+    }
+    return env, obs, public
+
+
+def _recorder(env):
+    return getattr(env, "frames", None)
+
+
+def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, seed: int = 0, obs=None, episode_meta=None) -> tuple[dict, list]:
     perception = perception or make_perception(cfg)
     policy = policy or make_policy(cfg)
     if hasattr(perception, "reset"):
@@ -120,7 +185,25 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
     judge_cfg = cfg.get("judge") or {}
     max_steps = int(judge_cfg.get("max_steps", 3000))
     radius = float(judge_cfg.get("radius", 3))
-    obs = env.reset(seed=seed, task=task)
+    wall0 = time.perf_counter()
+    if obs is None:
+        obs = env.reset(seed=seed, task=task)
+    rec = _recorder(env)
+    if rec is not None:
+        rec.capture(obs, tag="start", keyframe=True)
+    meta = dict(episode_meta or {})
+    if "initial_target_distance" not in meta:
+        metrics = initial_scene_metrics(obs, env, cfg, task)
+        meta.update({
+            "world_seed": seed,
+            "reroll_count": 0,
+            "difficulty_unmet": False,
+            "initial_target_visible": metrics.get("initial_target_visible"),
+            "initial_target_distance": metrics.get("initial_target_distance"),
+            "initial_distance_beyond_range": metrics.get("initial_distance_beyond_range"),
+            "_numeric_initial_distance": metrics.get("initial_target_distance_numeric"),
+        })
+    obs = _hide_wide(obs, cfg)
     start = position_of(obs, cfg)
     prev = start
     path = 0.0
@@ -141,7 +224,12 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         mem["stuck"] = last_stuck
         mem["blocked"] = last_stuck
         gt_frame = scene_state_from_obs(obs, cfg)
+        if rec is not None:
+            rec.set_info(match.to_dict())
         if match.stop:
+            if rec is not None:
+                rec.set_info(match.to_dict(), action="stop")
+                rec.capture(obs, tag="stop", keyframe=True)
             events.append({
                 "decision": len(events),
                 "scene": scene.to_dict(),
@@ -159,7 +247,10 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         t3 = time.perf_counter()
         control_rows = []
         for action in output.action_chunk:
+            if rec is not None:
+                rec.set_info(match.to_dict(), action=action)
             result = controller.execute(action)
+            result.obs = _hide_wide(result.obs, cfg)
             env_steps += result.env_steps
             new_pos = position_of(result.obs, cfg)
             if prev is not None and new_pos is not None:
@@ -181,18 +272,26 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
             "control": control_rows,
             "seconds": {"perceive": t1 - t0, "match": t2 - t1, "policy": t3 - t2},
         })
+    if rec is not None:
+        rec.capture(obs, tag="end", keyframe=True)
     stop_pos = position_of(obs, cfg)
     distance = aligned_target_distance(obs, cfg, task.target)
     gt_scene = scene_state_from_obs(obs, cfg)
     verdict = judge_episode(
         task, stopped, env_steps, gt_scene, distance, path, start, stop_pos,
         max_steps=max_steps, radius=radius,
+        initial_target_distance=meta.get("initial_target_distance"),
     )
     verdict.update({
         "task_name": task.id,
         "task_kind": "lfnav",
         "seed": seed,
         "elapsed_s": sum(sum(ev["seconds"].values()) for ev in events),
+        "frames_s": 0.0 if rec is None else rec.elapsed_s,
+        "frames_overhead": (
+            0.0 if rec is None or (time.perf_counter() - wall0) <= 0
+            else rec.elapsed_s / max(time.perf_counter() - wall0, 1e-9)
+        ),
         "failure_category": None if verdict.get("success") else verdict.get("outcome"),
         "self_reported_steps": env_steps,
         "perception_backend": cfg.get("perception_backend", "gt"),
@@ -201,6 +300,12 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         "stop_mode": (cfg.get("match") or {}).get("stop_mode", "sr_b"),
         "gt_at_stop": gt_scene.to_dict(),
         "perception_at_stop": None if scene is None else scene.to_dict(),
+        "world_seed": meta.get("world_seed", seed),
+        "reroll_count": meta.get("reroll_count", 0),
+        "difficulty_unmet": bool(meta.get("difficulty_unmet", False)),
+        "initial_target_visible": meta.get("initial_target_visible"),
+        "initial_target_distance": meta.get("initial_target_distance"),
+        "initial_distance_beyond_range": bool(meta.get("initial_distance_beyond_range", False)),
     })
     return verdict, events
 
@@ -211,6 +316,8 @@ def write_summary(out: Path) -> None:
     fields = [
         "task_name", "seed", "task_kind", "outcome", "success", "steps", "elapsed_s",
         "failure_category", "self_reported_steps", "sr_a", "sr_b", "false_stop", "timeout", "spl",
+        "difficulty", "world_seed", "reroll_count", "difficulty_unmet",
+        "initial_target_visible", "initial_target_distance",
     ]
     for path in sorted(out.glob("*/*.json")):
         if path.name == "run_meta.json":
@@ -285,9 +392,14 @@ def run_batch(cfg: dict, tasks: list[str], seeds: list[int], out: Path, skip_don
                 event_path = out / task.id / str(seed) / "events.jsonl"
                 if skip_done and dest.is_file():
                     continue
+                env = None
                 try:
-                    env = session.acquire(task, seed)
-                    rec, events = run_episode(env, task, cfg, seed=seed)
+                    env, obs, meta = open_episode(session, task, cfg, seed)
+                    frames_dir = out / task.id / str(seed) / "frames"
+                    env_rec = _recorder(env)
+                    if env_rec is not None:
+                        env_rec.begin_episode(frames_dir, task.id, seed)
+                    rec, events = run_episode(env, task, cfg, seed=seed, obs=obs, episode_meta=meta)
                     atomic_write_json(dest, rec)
                     event_path.parent.mkdir(parents=True, exist_ok=True)
                     tmp = event_path.with_suffix(".jsonl.tmp")
@@ -296,6 +408,12 @@ def run_batch(cfg: dict, tasks: list[str], seeds: list[int], out: Path, skip_don
                             handle.write(json.dumps(event, default=json_default) + "\n")
                     tmp.replace(event_path)
                 except Exception:
+                    try:
+                        env_rec = _recorder(env) if env is not None else None
+                        if env_rec is not None:
+                            env_rec.capture(getattr(env, "observation", lambda: {})(), tag="end", keyframe=True)
+                    except Exception:
+                        pass
                     session.release()
                     raise
                 else:
@@ -315,6 +433,9 @@ def main():
     parser.add_argument("--perception", default=None)
     parser.add_argument("--policy", default=None)
     parser.add_argument("--backend", default=None)
+    parser.add_argument("--difficulty", default=None)
+    parser.add_argument("--frames-every", type=int, default=None)
+    parser.add_argument("--no-frames", action="store_true")
     args = parser.parse_args()
     cfg = load_config(args.config)
     if args.perception:
@@ -323,6 +444,14 @@ def main():
         cfg["policy_name"] = args.policy
     if args.backend:
         cfg["backend"] = args.backend
+    if args.difficulty:
+        cfg["difficulty"] = args.difficulty
+    cfg["frames"] = dict(cfg.get("frames") or {})
+    if args.no_frames:
+        cfg["frames"]["enabled"] = False
+    if args.frames_every is not None:
+        cfg["frames"]["enabled"] = True
+        cfg["frames"]["every"] = int(args.frames_every)
     run_batch(cfg, read_tasks(args.tasks), read_seeds(args.seeds), Path(args.out), args.skip_done)
 
 

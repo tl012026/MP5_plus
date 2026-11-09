@@ -79,6 +79,17 @@ class MatcherTest(unittest.TestCase):
         self.assertEqual(result.status, "not_found")
         self.assertFalse(result.stop)
         self.assertIn("near:grass", result.missing)
+        self.assertEqual(result.target_direction, "center")
+        self.assertEqual(result.target_distance, "near")
+
+    def test_unseen_target_has_no_direction(self):
+        scene = scene_pig()
+        scene.objects["pig"] = ObjectBelief(0.1, {"left": 1.0, "center": 0.0, "right": 0.0},
+                                           {"near": 1.0, "mid": 0.0, "far": 0.0})
+        result = Matcher().match(task_4_4(), scene)
+        self.assertEqual(result.status, "not_found")
+        self.assertIsNone(result.target_direction)
+        self.assertIsNone(result.target_distance)
 
     def test_sr_a_stops_when_far(self):
         far = scene_pig(near=0.1)
@@ -104,7 +115,10 @@ class MatcherTest(unittest.TestCase):
 
 class JudgeTest(unittest.TestCase):
     def test_sr_b_and_spl(self):
-        verdict = judge_episode(task_4_4(), True, 10, scene_pig(), 2.0, 12.0, [0, 64, 0], [0, 64, 6])
+        verdict = judge_episode(
+            task_4_4(), True, 10, scene_pig(), 2.0, 12.0, [0, 64, 0], [0, 64, 6],
+            initial_target_distance=9.0, radius=3.0,
+        )
         self.assertTrue(verdict["sr_b"])
         self.assertTrue(verdict["sr_a"])
         self.assertFalse(verdict["false_stop"])
@@ -121,13 +135,19 @@ class JudgeTest(unittest.TestCase):
         bad = judge_episode(task_4_4(), True, 4, scene_pig(grass=0.0), 1.0, 1.0, [0], [1])
         self.assertEqual(bad["outcome"], "false_stop")
         self.assertTrue(bad["false_stop"])
-        late = judge_episode(task_4_4(), False, 3000, None, None, 10, [0], [1], max_steps=3000)
+        late = judge_episode(task_4_4(), False, 3000, None, None, 10, [0], [1], max_steps=3000, initial_target_distance=10)
         self.assertTrue(late["timeout"])
         self.assertEqual(late["spl"], 0.0)
+        beyond = judge_episode(
+            task_4_4(), True, 10, scene_pig(), 2.0, 12.0, [0, 64, 0], [0, 64, 6],
+            initial_target_distance="> 32",
+        )
+        self.assertIsNone(beyond["spl"])
 
     def test_spl_zero_length(self):
         self.assertEqual(spl_approx(True, 0.0, 0.0), 1.0)
         self.assertEqual(spl_approx(False, 3.0, 3.0), 0.0)
+        self.assertIsNone(spl_approx(True, None, 12.0))
 
 
 class StopDistanceTest(unittest.TestCase):

@@ -18,11 +18,28 @@ def expand(value):
     return value
 
 
+def deep_merge(base: dict, overlay: dict) -> dict:
+    for key, value in overlay.items():
+        if key in base and isinstance(base[key], dict) and isinstance(value, dict):
+            deep_merge(base[key], value)
+        else:
+            base[key] = value
+    return base
+
+
 def load_yaml(path) -> dict:
     path = Path(path)
     data = yaml.safe_load(path.read_text()) or {}
     if not isinstance(data, dict):
         raise ValueError(f"{path} must be a mapping")
+    inherit = data.pop("inherit", None)
+    if inherit:
+        parent = Path(os.path.expandvars(str(inherit)))
+        if not parent.is_file():
+            cand = path.parent / inherit
+            parent = cand if cand.is_file() else repo_root() / inherit
+        base = load_yaml(parent)
+        data = deep_merge(base, data)
     data = expand(data)
     data["_path"] = str(path.resolve())
     return data

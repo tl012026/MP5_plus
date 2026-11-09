@@ -185,10 +185,10 @@ class EpisodeTest(unittest.TestCase):
             calls.append(self)
             return original(self)
 
-        def boom(env, task, cfg, perception=None, policy=None, seed=0):
+        def boom(env, task, cfg, perception=None, policy=None, seed=0, **_kwargs):
             if seed == 2:
                 raise RuntimeError("boom")
-            return run_episode(env, task, cfg, perception=perception, policy=policy, seed=seed)
+            return run_episode(env, task, cfg, perception=perception, policy=policy, seed=seed, **_kwargs)
 
         tasks = [str(ROOT / "lfnav/tasks/specs/1-4.json"), str(ROOT / "lfnav/tasks/specs/1-1.json")]
         with tempfile.TemporaryDirectory() as tmp:

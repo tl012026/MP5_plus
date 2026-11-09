@@ -18,13 +18,13 @@ When the sentence names a biome, that biome is `specified_biome`. When it does n
 
 `start_time` is the time named in the sentence, otherwise `day`. `initial_weather` is the weather named in the sentence, otherwise `clear`.
 
-Difficulty (spawn distance, distractors, whether the agent must leave the starting biome) lives in `configs/lfnav/difficulty.yaml` and does not change these files.
+Difficulty (spawn distance band, distractors, `min_initial_distance` rerolls) lives in `configs/lfnav/difficulty.yaml` and does not change these files. `leave_biome` is false: `specified_biome` is a single-biome world, so “leave the start biome” is not staged. Use `hard_cross_biome_seeds.txt` if you want default world generation instead.
 
 ## Real MineDojo scene
 
 `episode_kwargs` copies the episode onto `minedojo.make`. The argument names are `minedojo.param_names` in `configs/lfnav/default.yaml`, taken from HarvestMeta (`specified_biome`, `start_at_night`, `initial_weather`, `initial_mobs`, `initial_mob_spawn_range_low/high`). HarvestMeta has no `allow_mob_spawn` flag.
 
-Tree, grass, and water are blocks. They are not placed and they are not passed as mobs. The selected biome is expected to generate them. Only `kind: mob` entries are spawned. Difficulty distances become xyz ranges `(-d, 1, -d)` to `(d, 3, d)`. Distractors from that table are extra mobs. Those lists are the whole animal population.
+Tree, grass, and water are blocks. They are not placed and they are not passed as mobs. The selected biome is expected to generate them. Only `kind: mob` entries are spawned. Mob distance becomes one axis-aligned box on a ring sector in `[spawn_distance_min, spawn_distance_max]` (hard: behind the agent). Distractors from that table are extra mobs. Those lists are the whole animal population. After reset, if a block target is closer than `min_initial_distance`, the episode remakes the world with `seed*1000+k` up to `max_reroll` times.
 
 ## Open questions
 

@@ -1,7 +1,16 @@
-"""Sum per-patch object labels into present / direction / distance. No torch."""
+"""Sum per-patch object labels into present / direction / distance. No torch.
+
+Also summarizes baseline evaluation trees (policy/difficulty/task JSON).
+"""
 
 from __future__ import annotations
 
+import argparse
+import json
+import statistics
+from pathlib import Path
+
+from lfnav.eval.metrics import mcnemar, wilson_interval
 from lfnav.types import ObjectBelief, SceneState
 
 DIRS = ("left", "center", "right")
@@ -91,3 +100,146 @@ def argmax_name(probs: dict) -> str | None:
     if not probs:
         return None
     return max(probs.items(), key=lambda kv: kv[1])[0]
+
+
+def _numeric_distance(value):
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value).strip()
+    if text.startswith(">"):
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def load_baseline_rows(root: Path) -> list[dict]:
+    rows = []
+    root = Path(root)
+    for path in sorted(root.glob("*/*/*/*.json")):
+        if path.name in ("run_meta.json",):
+            continue
+        rec = json.loads(path.read_text())
+        if "seed" not in rec:
+            continue
+        rec = dict(rec)
+        rec.setdefault("policy_name", path.parts[-4])
+        rec.setdefault("difficulty", path.parts[-3])
+        rec.setdefault("task_name", path.parts[-2])
+        rows.append(rec)
+    if not rows:
+        for path in sorted(root.rglob("*.json")):
+            if path.name in ("run_meta.json",):
+                continue
+            rec = json.loads(path.read_text())
+            if "seed" not in rec:
+                continue
+            rows.append(rec)
+    return rows
+
+
+def _rate(rows: list[dict], key: str) -> dict:
+    vals = [bool(r.get(key)) for r in rows]
+    return wilson_interval(sum(vals), len(vals))
+
+
+def _median_steps(rows: list[dict]):
+    steps = [int(r["steps"]) for r in rows if r.get("steps") is not None]
+    if not steps:
+        return None
+    return statistics.median(steps)
+
+
+def _spl_stats(rows: list[dict]) -> dict:
+    values = [r.get("spl") for r in rows]
+    known = [float(v) for v in values if v is not None]
+    beyond = sum(1 for r in rows if r.get("spl") is None or r.get("initial_distance_beyond_range"))
+    return {
+        "n_known": len(known),
+        "n_beyond_range": beyond,
+        "mean": (sum(known) / len(known)) if known else None,
+        "median": statistics.median(known) if known else None,
+    }
+
+
+def _distance_stats(rows: list[dict]) -> dict:
+    nums = []
+    beyond = 0
+    for row in rows:
+        num = _numeric_distance(row.get("initial_target_distance"))
+        if num is None:
+            beyond += 1
+        else:
+            nums.append(num)
+    out = {
+        "n_numeric": len(nums),
+        "n_beyond_range": beyond,
+        "min": min(nums) if nums else None,
+        "max": max(nums) if nums else None,
+        "median": statistics.median(nums) if nums else None,
+    }
+    return out
+
+
+def summarize_baseline(root: Path) -> dict:
+    rows = load_baseline_rows(root)
+    groups = {}
+    for row in rows:
+        key = (row.get("task_name"), row.get("difficulty"), row.get("policy_name"))
+        groups.setdefault(key, []).append(row)
+    table = []
+    for (task, difficulty, policy), chunk in sorted(groups.items(), key=lambda kv: (str(kv[0][0]), str(kv[0][1]), str(kv[0][2]))):
+        table.append({
+            "task": task,
+            "difficulty": difficulty,
+            "policy": policy,
+            "n": len(chunk),
+            "sr_b": _rate(chunk, "sr_b"),
+            "sr_a": _rate(chunk, "sr_a"),
+            "false_stop": _rate(chunk, "false_stop"),
+            "timeout": _rate(chunk, "timeout"),
+            "steps_median": _median_steps(chunk),
+            "spl": _spl_stats(chunk),
+            "initial_target_distance": _distance_stats(chunk),
+            "difficulty_unmet": _rate(chunk, "difficulty_unmet"),
+        })
+    paired = []
+    by_cell = {}
+    for row in rows:
+        cell = (row.get("task_name"), row.get("difficulty"), row.get("seed"), row.get("policy_name"))
+        by_cell[cell] = bool(row.get("sr_b") or row.get("success"))
+    c1, c0 = [], []
+    for task, difficulty, seed, policy in list(by_cell):
+        if policy != "c1":
+            continue
+        other = by_cell.get((task, difficulty, seed, "c0"))
+        if other is None:
+            continue
+        c1.append(by_cell[(task, difficulty, seed, "c1")])
+        c0.append(other)
+    report = {
+        "n_episodes": len(rows),
+        "by_task_difficulty_policy": table,
+        "mcnemar_c1_vs_c0": mcnemar(c0, c1) if c1 else None,
+    }
+    return report
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--baseline", required=True)
+    parser.add_argument("--out", default=None)
+    args = parser.parse_args(argv)
+    report = summarize_baseline(Path(args.baseline))
+    text = json.dumps(report, indent=2)
+    print(text)
+    if args.out:
+        Path(args.out).write_text(text + "\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

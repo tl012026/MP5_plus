@@ -67,6 +67,8 @@ class FakeMineDojoEnv:
         self._cam_rays = ray_directions(self.n_h, self.n_w, self.fov_deg, self.fov_axis)
         # Match the 2026-11-08 MineDojo probe: size-(1,) arrays except pos length 3.
         self.numpy_location_stats = bool(cfg.get("numpy_location_stats", True))
+        from lfnav.env.frames import FrameRecorder
+        self.frames = FrameRecorder(cfg)
 
     def reset(self, **_kwargs):
         self._stuck_count = 0
@@ -146,6 +148,7 @@ class FakeMineDojoEnv:
         else:
             self._stuck_count = 0
         obs = self.observation()
+        self.frames.after_step(obs)
         info = {"stuck": self._stuck_count >= 2, "jumped": jumped, "blocked": blocked, "action": name}
         return obs, 0.0, False, info
 

@@ -1,0 +1,3 @@
+# Optional hard-mode seeds for default (not specified_biome) world generation.
+# Fill by running lfnav/env/search_biome_seeds.py on a compute node.
+# Each line: seed target_biome spawn_biome

@@ -77,8 +77,12 @@ class Matcher:
         else:
             found = raw_found
 
-        direction = argmax_name(target.direction)
-        distance = argmax_name(target.distance)
+        if target_ok:
+            direction = argmax_name(target.direction)
+            distance = argmax_name(target.distance)
+        else:
+            direction = None
+            distance = None
         near_p = float(target.distance.get("near", 0.0))
         if self.stop_mode == "sr_a":
             stop = found

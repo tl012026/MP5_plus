@@ -21,4 +21,6 @@ SIZE=${SIZE:?set SIZE}
 ANGLE=${ANGLE:?set ANGLE}
 AXIS=${AXIS:-horizontal}
 mkdir -p "$SCR/lfnav/logs" "$SCR/lfnav/calib"
-singularity exec "$SIF" bash -c "source '$ENVSH' && cd '$MP5' && python lfnav/gt/calibrate_camera.py --pixel $PIXEL --size $SIZE --angle-deg $ANGLE --axis $AXIS --out '$SCR/lfnav/calib/fov.json'"
+# shellcheck disable=SC1091
+source "$MP5/lfnav/env/gradle_home.sh"
+lfnav_sif_exec "$SIF" bash -c "export GRADLE_USER_HOME='$GRADLE_USER_HOME' && source '$ENVSH' && cd '$MP5' && python lfnav/gt/calibrate_camera.py --pixel $PIXEL --size $SIZE --angle-deg $ANGLE --axis $AXIS --out '$SCR/lfnav/calib/fov.json'"

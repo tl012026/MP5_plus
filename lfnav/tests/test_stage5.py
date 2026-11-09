@@ -10,7 +10,7 @@ from pathlib import Path
 from lfnav.config import load_config
 from lfnav.data.collect_demos import assert_train_seed, collect
 from lfnav.env.fake import FakeMineDojoEnv
-from lfnav.policy.c2 import BehaviorCloning
+from lfnav.policy.c2 import BehaviorCloning, featurize
 from lfnav.policy.expert import Expert, wide_target
 from lfnav.policy.train_c2 import dry_run
 from lfnav.types import PolicyInput
@@ -26,6 +26,12 @@ class Stage5Test(unittest.TestCase):
         policy = BehaviorCloning({"seed": 1})
         output = policy.act(PolicyInput(match={"status": "not_found", "target_direction": "left", "missing": []}))
         self.assertEqual(len(output.action_chunk), 4)
+        seen = featurize(PolicyInput(match={"status": "found", "target_direction": "left", "missing": []}))
+        hidden = featurize(PolicyInput(match={"status": "not_found", "target_direction": None, "missing": ["target"]}))
+        self.assertEqual(seen.shape, hidden.shape)
+        self.assertEqual(int(seen.shape[0]), 16)
+        self.assertEqual(list(hidden[:4]), [0.0, 0.0, 0.0, 0.0])
+        self.assertEqual(list(seen[:4]), [1.0, 0.0, 0.0, 1.0])
         dry_run()
 
     def test_expert_saves_success(self):

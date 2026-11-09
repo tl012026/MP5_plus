@@ -229,6 +229,38 @@ def _distractor_names(required: list[str], cfg: dict, table: dict, seed: int) ->
     return [rng.choice(pool) for _ in range(count)]
 
 
+def mob_ring_box(min_d, max_d, seed: int, behind: bool = False, y_low: int = 1, y_high: int = 3):
+    """MineDojo only takes an axis-aligned box, so pick one cardinal ring sector.
+
+    hard behind=True uses the agent's back (-z when yaw 0 faces +z).
+    Box corners can sit slightly outside [min_d, max_d]; the true spawn distance
+    is recorded after reset as initial_target_distance.
+    """
+    import random
+
+    min_d = float(min_d)
+    max_d = float(max_d)
+    if max_d < min_d:
+        min_d, max_d = max_d, min_d
+    w = max(abs(min_d) / 2.0, 0.5)
+    dirs = ((0, 1), (0, -1), (1, 0), (-1, 0))
+    if behind:
+        dx, dz = (0, -1)
+    else:
+        dx, dz = random.Random(int(seed)).choice(dirs)
+    if dz == 1:
+        x0, x1, z0, z1 = -w, w, min_d, max_d
+    elif dz == -1:
+        x0, x1, z0, z1 = -w, w, -max_d, -min_d
+    elif dx == 1:
+        x0, x1, z0, z1 = min_d, max_d, -w, w
+    else:
+        x0, x1, z0, z1 = -max_d, -min_d, -w, w
+    low = (min(x0, x1), float(y_low), min(z0, z1))
+    high = (max(x0, x1), float(y_high), max(z0, z1))
+    return low, high
+
+
 def episode_kwargs(task, cfg: dict, seed: int) -> dict:
     """Map one task's scene onto minedojo.make arguments.
 
@@ -240,7 +272,8 @@ def episode_kwargs(task, cfg: dict, seed: int) -> dict:
     episode = _episode_of(task)
     table = _difficulty(cfg)
     out: dict = {}
-    _put(out, names, "biome", episode.get("specified_biome"))
+    if not table.get("leave_biome"):
+        _put(out, names, "biome", episode.get("specified_biome"))
     time_name = episode.get("start_time")
     time_key = names.get("time")
     if time_key and time_name is not None:
@@ -256,12 +289,13 @@ def episode_kwargs(task, cfg: dict, seed: int) -> dict:
     required = _mob_names(episode)
     mobs = required + _distractor_names(required, cfg, table, seed)
     _put(out, names, "mobs", mobs)
-    if "spawn_distance_min" in table:
-        low = int(table["spawn_distance_min"])
-        _put(out, names, "mob_range_low", (-low, 1, -low))
-    if "spawn_distance_max" in table:
-        high = int(table["spawn_distance_max"])
-        _put(out, names, "mob_range_high", (high, 3, high))
+    if "spawn_distance_min" in table and "spawn_distance_max" in table:
+        behind = str(cfg.get("difficulty") or "") == "hard"
+        low, high = mob_ring_box(
+            table["spawn_distance_min"], table["spawn_distance_max"], seed, behind=behind,
+        )
+        _put(out, names, "mob_range_low", low)
+        _put(out, names, "mob_range_high", high)
     return out
 
 
@@ -331,8 +365,12 @@ class MineDojoEnv:
         self.cfg = cfg
         self.task = task
         self.ray_plan = lidar_plan(cfg) if (cfg.get("minedojo") or {}).get("use_lidar", True) else None
-        self._env = minedojo.make(**_kwargs(cfg, seed, task))
+        from lfnav.env.gradle_home import env_create_guard
+        with env_create_guard(cfg):
+            self._env = minedojo.make(**_kwargs(cfg, seed, task))
         self._obs = None
+        from lfnav.env.frames import FrameRecorder
+        self.frames = FrameRecorder(cfg)
 
     def _adopt(self, obs):
         if isinstance(obs, dict):
@@ -358,7 +396,9 @@ class MineDojoEnv:
                 raise RuntimeError("Action vectors are not confirmed. Run probe_obs.py and set actions.confirmed.")
             action = vectors[action]
         obs, reward, done, info = self._env.step(action)
-        return self._adopt(obs), reward, done, info
+        obs = self._adopt(obs)
+        self.frames.after_step(obs)
+        return obs, reward, done, info
 
     def observation(self):
         return self._obs

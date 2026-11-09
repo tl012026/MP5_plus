@@ -2,6 +2,8 @@
 
 Account and partition are left blank in the scripts. Fill them in locally before submitting. Every script sets `--requeue`. Logs go to `/scratch/$USER/lfnav/logs/`. MineDojo jobs use `$SCR/env/minedojo.sif` and source `$SCR/mp5_env.sh` with absolute paths, because the container user is `user`.
 
+MineDojo sbatch templates source `lfnav/env/gradle_home.sh`. That copies `$SCR/.gradle` onto `$SLURM_TMPDIR/gradle_$SLURM_JOB_ID` (or `/tmp/...`), skipping `daemon/` and `*.lock`, exports `GRADLE_USER_HOME` to the copy, and deletes the copy on EXIT. Jobs must not write the master. To build or refresh the master, run one job with `GRADLE_USE_MASTER=1` so it uses `$SCR/.gradle` directly. Several workers in one job share the copy and serialize `minedojo.make` (default). `GRADLE_WORKER_COPIES=1` gives each worker `gradle_<job>_w<k>` instead. `init.d/mixingradle-local.gradle` keeps its absolute `$SCR/env/m2` path.
+
 Create `/scratch/$USER/lfnav/logs` on the login node before the first `sbatch`. Slurm opens `--output` before the job script can `mkdir`.
 
 Do not submit these from the login node until the checkpoint below is done.
@@ -21,6 +23,8 @@ Do not submit these from the login node until the checkpoint below is done.
 5. `sbatch lfnav/slurm/collect_demos.sbatch` with `configs/lfnav/train_seeds.txt`.
 6. `sbatch lfnav/slurm/train_c2.sbatch`. Add `DAGGER=1` only for a second round.
 7. `sbatch lfnav/slurm/eval.sbatch` with `configs/lfnav/eval_seeds.txt`.
+   Frames are on by default (every 20 env steps). `FRAMES_EVERY=0` is not used; pass `--no-frames` or `--frames-every N` on the python command. After a run: `python3 lfnav/eval/make_contact_sheet.py --in $OUT`.
+   Baseline C0/C1 × GT: `POLICY=c1 sbatch lfnav/slurm/baseline_array.sbatch` then `POLICY=c0 sbatch ...` (array 0–47 = 16 tasks × 3 difficulties, 5 seeds ending in 9). Config is `configs/lfnav/baseline_eval.yaml`. Summarize with `python3 -m lfnav.aggregate --baseline /scratch/$USER/lfnav/runs/baseline`.
    `sbatch lfnav/slurm/eval_gpu.sbatch` records CPU latency of the fake encoder and writes the SVG. Point it at a real checkpoint on the GPU node when one exists.
 8. `MINELLM_START='...' sbatch lfnav/slurm/minellm_baseline.sbatch` on a GPU partition.
    The command must serve `POST /image` on port 25541. The job kills that process on exit.

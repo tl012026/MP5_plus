@@ -24,11 +24,13 @@ C3 is `lfnav/policy/c3.py`. `act` raises `NotImplementedError`. The controller a
 
 ## Privileged information
 
-- Wide lidar and ground-truth scene state are used by the expert and by the judge. Evaluation policies do not receive them, except GT perception when that backend is the experiment.
+- Wide lidar and ground-truth scene state are used by the expert, the judge, and initial-difficulty logging. Evaluation policies do not receive them, except GT perception when that backend is the experiment. `initial_target_visible` / `initial_target_distance` are privileged and never enter `PolicyInput`.
 - The voxel crop (`voxel_radius` 5, 11³) is a contact sensor for the controller only. C0, C1, and C2 do not read it.
 - Position is odometry from the environment position field.
 
-`near X` means X and the target are both inside the same camera frame. That is an approximation of the original sentence. SR-b distance is the nearest aligned-ray hit on the target at stop, so the target has to be in the camera frame. The fake env still has Euclidean `distance_to` for tests. SPL uses straight-line path length because Minecraft does not ship a geodesic: `SR-b * d / max(L, d)`.
+`near X` means X and the target are both inside the same camera frame. That is an approximation of the original sentence. SR-b distance is the nearest aligned-ray hit on the target at stop, so the target has to be in the camera frame. The fake env still has Euclidean `distance_to` for tests. SPL uses `l = max(initial_target_distance - judge.radius, 0)` and `success * l / max(path, l)`. That ignores terrain detours. If the start distance is beyond lidar range (`"> 32"`), SPL is empty and counted separately.
+
+`specified_biome` worlds are treated as a single biome (confirm with `lfnav/env/check_biome_world.py`), so `leave_biome` is false. Block-target hardness is `min_initial_distance` plus seed rerolls (`seed*1000+k`). Mobs spawn in a cardinal ring sector; hard uses the sector behind the agent. Optional mixed-biome hard seeds: `lfnav/env/search_biome_seeds.py`.
 
 Aligned rays need a camera model. `lfnav/gt/capture_rotations.py` turns in place (no walk, no sprint, skip water). `fit_intrinsics.py` fits `K` from the pure-rotation homography `x2 ~ K R K^{-1} x1`. HUD (hotbar, crosshair, hand) is masked; RANSAC drops movers. Copy the printed `fov_deg`/`fov_axis`, or a full `intrinsics` block, into `configs/lfnav/default.yaml`. `verify_alignment.py` treats median IoU above 0.5 as good enough. The one-pixel script `calibrate_camera.py` is still there.
 
@@ -42,7 +44,7 @@ python3 lfnav/perception/train_perception.py --dry-run
 python3 lfnav/policy/train_c2.py --dry-run
 ```
 
-Real episodes follow `lfnav/slurm/README.md`. Data, features, checkpoints, and runs default to `/scratch/$USER/lfnav/` via `configs/lfnav/default.yaml`.
+Real episodes follow `lfnav/slurm/README.md`. Data, features, checkpoints, and runs default to `/scratch/$USER/lfnav/` via `configs/lfnav/default.yaml`. Eval writes a JPG every 20 env steps under `OUT/<task>/<seed>/frames/` (`--no-frames` or `--frames-every N`). Keyframes (start / stop / end) also keep a full-size PNG. `python3 lfnav/eval/make_contact_sheet.py --in OUT` stitches each episode.
 
 Each episode closes its environment, including when the episode raises. `reuse_env` defaults to false. Turn it on to keep one MineDojo process for consecutive episodes of the same task and difficulty and to start the next one with `reset`. In that mode `make()` uses the first episode's seed as `world_seed`. Later seeds stay on the result file and on agent-side randomness, but they do not build a new world.
 

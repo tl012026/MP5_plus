@@ -21,6 +21,8 @@ ROT=${ROT:-$SCR/lfnav/calib/rot}
 INTR=${INTR:-$SCR/lfnav/calib/intrinsics.json}
 ALIGN=${ALIGN:-$SCR/lfnav/calib/align}
 mkdir -p "$SCR/lfnav/logs" "$SCR/lfnav/calib" "$ROT" "$ALIGN"
-singularity exec "$SIF" bash -c "source '$ENVSH' && cd '$MP5' && xvfb-run -a python lfnav/gt/capture_rotations.py --out '$ROT'"
-singularity exec "$SIF" bash -c "source '$ENVSH' && cd '$MP5' && python lfnav/gt/fit_intrinsics.py --in '$ROT' --out '$INTR'"
-singularity exec "$SIF" bash -c "source '$ENVSH' && cd '$MP5' && xvfb-run -a python lfnav/gt/verify_alignment.py --intrinsics '$INTR' --out '$ALIGN'"
+# shellcheck disable=SC1091
+source "$MP5/lfnav/env/gradle_home.sh"
+lfnav_sif_exec "$SIF" bash -c "export GRADLE_USER_HOME='$GRADLE_USER_HOME' && source '$ENVSH' && cd '$MP5' && xvfb-run -a python lfnav/gt/capture_rotations.py --out '$ROT'"
+lfnav_sif_exec "$SIF" bash -c "export GRADLE_USER_HOME='$GRADLE_USER_HOME' && source '$ENVSH' && cd '$MP5' && python lfnav/gt/fit_intrinsics.py --in '$ROT' --out '$INTR'"
+lfnav_sif_exec "$SIF" bash -c "export GRADLE_USER_HOME='$GRADLE_USER_HOME' && source '$ENVSH' && cd '$MP5' && xvfb-run -a python lfnav/gt/verify_alignment.py --intrinsics '$INTR' --out '$ALIGN'"

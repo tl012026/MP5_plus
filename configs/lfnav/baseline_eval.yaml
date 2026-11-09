@@ -1,0 +1,14 @@
+inherit: default.yaml
+
+# Wide lidar is for privileged initial-difficulty metrics only.
+# C0/C1 never see those rays (policy_sees_wide_lidar is false).
+wide_lidar: true
+policy_sees_wide_lidar: false
+wide_yaw_step: 5
+backend: minedojo
+perception_backend: gt
+policy_name: c1
+difficulty: easy
+judge:
+  max_steps: 3000
+  radius: 3.0

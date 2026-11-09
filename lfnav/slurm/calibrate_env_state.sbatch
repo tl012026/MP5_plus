@@ -17,4 +17,6 @@ MP5=${MP5:-$HOME/MP5_plus}
 ENVSH=${ENVSH:-$SCR/mp5_env.sh}
 SIF=${SIF:-$SCR/env/minedojo.sif}
 mkdir -p "$SCR/lfnav/logs" "$SCR/lfnav/calib"
-singularity exec "$SIF" bash -c "source '$ENVSH' && cd '$MP5' && xvfb-run -a python lfnav/gt/calibrate_env_state.py --out '$SCR/lfnav/calib/env_state.json'"
+# shellcheck disable=SC1091
+source "$MP5/lfnav/env/gradle_home.sh"
+lfnav_sif_exec "$SIF" bash -c "export GRADLE_USER_HOME='$GRADLE_USER_HOME' && source '$ENVSH' && cd '$MP5' && xvfb-run -a python lfnav/gt/calibrate_env_state.py --out '$SCR/lfnav/calib/env_state.json'"

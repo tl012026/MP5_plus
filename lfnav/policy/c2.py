@@ -14,25 +14,32 @@ ACTIONS = ["forward", "turn_left_15", "turn_right_15", "turn_left_45", "turn_rig
 
 
 def featurize(policy_input: PolicyInput, dim: int = 16) -> np.ndarray:
+    """Fixed-width input. Unseen targets are zeros in [0:3] plus visible=0 at [3]."""
     vector = np.zeros(dim, dtype=np.float64)
     match = policy_input.match or {}
-    direction = {"left": 0, "center": 1, "right": 2}.get(match.get("target_direction"), 1)
-    vector[0] = direction / 2.0
-    vector[1] = 1.0 if match.get("status") == "found" else 0.0
+    direction = match.get("target_direction")
+    if direction == "left":
+        vector[0] = 1.0
+    elif direction == "center":
+        vector[1] = 1.0
+    elif direction == "right":
+        vector[2] = 1.0
+    vector[3] = 1.0 if direction is not None else 0.0
+    vector[4] = 1.0 if match.get("status") == "found" else 0.0
     missing = match.get("missing") or []
-    vector[2] = min(len(missing), 4) / 4.0
+    vector[5] = min(len(missing), 4) / 4.0
     actions = policy_input.recent_actions or []
     for i, name in enumerate(actions[-4:]):
         if name in ACTIONS:
-            vector[3 + i] = ACTIONS.index(name) / max(len(ACTIONS) - 1, 1)
+            vector[6 + i] = ACTIONS.index(name) / max(len(ACTIONS) - 1, 1)
     grid = (policy_input.memory or {}).get("local_grid") or []
     if grid:
         flat = np.asarray(grid, dtype=np.float64).ravel()
-        vector[7] = float(flat.mean()) if flat.size else 0.0
+        vector[10] = float(flat.mean()) if flat.size else 0.0
     feats = policy_input.frame_features
     if isinstance(feats, dict) and feats.get("cls") is not None:
         cls = np.asarray(feats["cls"], dtype=np.float64).ravel()
-        vector[8] = float(cls.mean()) if cls.size else 0.0
+        vector[11] = float(cls.mean()) if cls.size else 0.0
     return vector
 
 
