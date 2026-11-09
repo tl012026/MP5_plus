@@ -41,6 +41,8 @@ camera_calib:
   hud_ignore_frac: 0.5
   iou_good: 0.5
 aligned_ray_range: 16
+# n×n sub-rays per image patch. 1 is the old patch-centre ray.
+aligned_subrays: 3
 wide_ray_range: 32
 wide_lidar: true
 # Extra rings look down (MineDojo pitch+ is up) so short mobs are not missed over the head.

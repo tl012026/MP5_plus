@@ -85,8 +85,9 @@ class MinedojoKwargsTest(unittest.TestCase):
         self.assertTrue(kw["use_lidar"])
         self.assertEqual(kw["break_speed_multiplier"], 100.0)
         plan = lidar_plan(load_config())
+        n_sub = int(plan.get("subrays") or 1)
         self.assertEqual(len(kw["lidar_rays"]), len(plan["lidar_rays"]))
-        self.assertEqual(plan["aligned"], (0, len(plan["rows_cols"])))
+        self.assertEqual(plan["aligned"], (0, len(plan["rows_cols"]) * n_sub * n_sub))
         self.assertEqual(plan["wide"][0], plan["aligned"][1])
 
     def test_missing_task_id(self):
@@ -187,6 +188,7 @@ class RayConvertTest(unittest.TestCase):
     def test_flowing_water_and_index_span(self):
         cfg = self._cfg()
         cfg["image_hw"] = [14, 28]
+        cfg["aligned_subrays"] = 1
         cfg["wide_lidar"] = True
         cfg["wide_yaw_step"] = 180
         cfg["wide_pitches_deg"] = [0]

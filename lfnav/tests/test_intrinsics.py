@@ -148,7 +148,7 @@ class RayKVsFovTest(unittest.TestCase):
         print(f"max K vs 70° fov ray angle error: {max(angs):.6f} deg")
 
     def test_aligned_lidar_rays_same_length(self):
-        cfg = {"image_hw": [224, 364], "patch": 14, "fov_deg": 70, "fov_axis": "vertical", "aligned_ray_range": 16}
+        cfg = {"image_hw": [224, 364], "patch": 14, "fov_deg": 70, "fov_axis": "vertical", "aligned_ray_range": 16, "aligned_subrays": 1}
         h, w = 224, 364
         fy = (h / 2.0) / math.tan(math.radians(70) / 2.0)
         cfg_k = dict(cfg)
@@ -246,6 +246,7 @@ class MineDojoAngleTest(unittest.TestCase):
     def test_roundtrip_cell_via_convert_rays(self):
         cfg = load_config()
         cfg["image_hw"] = [224, 364]
+        cfg["aligned_subrays"] = 1
         plan = lidar_plan(cfg)
         idx = len(plan["rows_cols"]) - 1
         row, col = plan["rows_cols"][idx]

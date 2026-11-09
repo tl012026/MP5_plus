@@ -101,3 +101,77 @@ def rays_from_cfg(cfg: dict) -> list[list[tuple[float, float, float]]]:
         k = scale_intrinsics(intr, height, width)
         return ray_directions_from_K(n_h, n_w, k["fx"], k["fy"], k["cx"], k["cy"], k["width"], k["height"])
     return ray_directions(n_h, n_w, float(cfg.get("fov_deg", 70)), str(cfg.get("fov_axis", "vertical")))
+
+
+def aligned_subrays_n(cfg: dict | None) -> int:
+    cfg = cfg or {}
+    return max(1, int(cfg.get("aligned_subrays", 3)))
+
+
+def _tan_half(n_h: int, n_w: int, fov_deg: float, fov_axis: str) -> tuple[float, float]:
+    if fov_axis not in ("vertical", "horizontal"):
+        raise ValueError(f"fov_axis must be vertical or horizontal, got {fov_axis}")
+    fov = math.radians(float(fov_deg))
+    aspect = n_w / n_h
+    if fov_axis == "vertical":
+        tan_half_v = math.tan(fov / 2.0)
+        tan_half_h = tan_half_v * aspect
+    else:
+        tan_half_h = math.tan(fov / 2.0)
+        tan_half_v = tan_half_h / aspect
+    return tan_half_v, tan_half_h
+
+
+def _unit(x, y, z=1.0):
+    n = math.sqrt(x * x + y * y + z * z) or 1.0
+    return (x / n, y / n, z / n)
+
+
+def subray_directions(n_h: int, n_w: int, fov_deg: float, fov_axis: str = "vertical", n_sub: int = 1):
+    """n_sub×n_sub directions per patch, at sub-patch centres (k+0.5)/n_sub."""
+    n_sub = max(1, int(n_sub))
+    tan_half_v, tan_half_h = _tan_half(n_h, n_w, fov_deg, fov_axis)
+    patches = []
+    for i in range(n_h):
+        row = []
+        for j in range(n_w):
+            dirs = []
+            for si in range(n_sub):
+                for sj in range(n_sub):
+                    v = (i + (si + 0.5) / n_sub) / n_h - 0.5
+                    u = (j + (sj + 0.5) / n_sub) / n_w - 0.5
+                    dirs.append(_unit(u * 2.0 * tan_half_h, v * 2.0 * tan_half_v))
+            row.append(dirs)
+        patches.append(row)
+    return patches
+
+
+def subray_directions_from_K(n_h: int, n_w: int, fx, fy, cx, cy, width: int, height: int, n_sub: int = 1):
+    n_sub = max(1, int(n_sub))
+    patches = []
+    for i in range(n_h):
+        row = []
+        for j in range(n_w):
+            dirs = []
+            for si in range(n_sub):
+                for sj in range(n_sub):
+                    v = (i + (si + 0.5) / n_sub) * height / n_h
+                    u = (j + (sj + 0.5) / n_sub) * width / n_w
+                    dirs.append(_unit((u - float(cx)) / float(fx), (v - float(cy)) / float(fy)))
+            row.append(dirs)
+        patches.append(row)
+    return patches
+
+
+def subray_grid_from_cfg(cfg: dict):
+    height, width = cfg.get("image_hw", [224, 364])
+    height, width = int(height), int(width)
+    n_h, n_w = patch_grid(height, width, int(cfg.get("patch", 14)))
+    n_sub = aligned_subrays_n(cfg)
+    intr = cfg.get("intrinsics")
+    if intr:
+        k = scale_intrinsics(intr, height, width)
+        return subray_directions_from_K(
+            n_h, n_w, k["fx"], k["fy"], k["cx"], k["cy"], k["width"], k["height"], n_sub,
+        )
+    return subray_directions(n_h, n_w, float(cfg.get("fov_deg", 70)), str(cfg.get("fov_axis", "vertical")), n_sub)

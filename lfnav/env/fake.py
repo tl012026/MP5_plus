@@ -9,7 +9,7 @@ import math
 
 import numpy as np
 
-from lfnav.geom import patch_grid, ray_directions
+from lfnav.geom import aligned_subrays_n, patch_grid, ray_directions, subray_grid_from_cfg
 from lfnav.gt.scene_state import biome_id_for_name
 
 
@@ -67,6 +67,7 @@ class FakeMineDojoEnv:
         self._stuck_count = 0
         self.n_h, self.n_w = patch_grid(self.image_hw[0], self.image_hw[1], self.patch)
         self._cam_rays = ray_directions(self.n_h, self.n_w, self.fov_deg, self.fov_axis)
+        self._subray_grid = subray_grid_from_cfg(self.cfg)
         # Match the 2026-11-08 MineDojo probe: size-(1,) arrays except pos length 3.
         self.numpy_location_stats = bool(cfg.get("numpy_location_stats", True))
         from lfnav.env.frames import FrameRecorder
@@ -209,7 +210,7 @@ class FakeMineDojoEnv:
                     grid[ix, iy, iz] = self._voxel_name((cx + dx, cz + dz), dy)
         return grid
 
-    def _aligned_rays(self) -> list[dict]:
+    def _aligned_rays_centers(self) -> list[dict]:
         forward, right = _yaw_basis(self.yaw)
         hits = []
         for i, row in enumerate(self._cam_rays):
@@ -221,6 +222,41 @@ class FakeMineDojoEnv:
                     continue
                 label, dist = hit
                 hits.append({"row": i, "col": j, "label": label, "distance": dist, "pitch": ry})
+        return hits
+
+    def _aligned_rays(self) -> list[dict]:
+        n_sub = aligned_subrays_n(self.cfg)
+        if n_sub <= 1:
+            return self._aligned_rays_centers()
+        forward, right = _yaw_basis(self.yaw)
+        hits = []
+        extras = []
+        grid = self._subray_grid
+        for i, row in enumerate(grid):
+            for j, dirs in enumerate(row):
+                by_obj = {}
+                closest = None
+                pitch = None
+                for rx, ry, rz in dirs:
+                    wx = rz * forward[0] + rx * right[0]
+                    wz = rz * forward[1] + rx * right[1]
+                    hit = self._march(wx, wz, self.max_ray)
+                    if hit is None:
+                        continue
+                    label, dist = hit
+                    if label not in by_obj or dist < by_obj[label]:
+                        by_obj[label] = dist
+                    if closest is None or dist < closest[1]:
+                        closest = (label, dist)
+                        pitch = ry
+                if not by_obj:
+                    continue
+                primary, pdist = closest
+                hits.append({"row": i, "col": j, "label": primary, "distance": pdist, "pitch": pitch})
+                for name, dist in by_obj.items():
+                    if name != primary:
+                        extras.append({"row": i, "col": j, "label": name, "distance": dist})
+        hits.extend(extras)
         return hits
 
     def _wide_rays(self) -> list[dict]:

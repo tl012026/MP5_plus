@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 
-from lfnav.geom import patch_grid, rays_from_cfg
+from lfnav.geom import aligned_subrays_n, patch_grid, rays_from_cfg, subray_grid_from_cfg
 from lfnav.gt.fov import ray_angles_deg
 from lfnav.obsutil import scalar
 
@@ -44,12 +44,20 @@ def from_minedojo_lidar(pitch_rad, yaw_rad) -> tuple[float, float, float]:
 def aligned_lidar_rays(cfg: dict) -> list[tuple[float, float, float]]:
     height, width = cfg.get("image_hw", [224, 364])
     n_h, n_w = patch_grid(int(height), int(width), int(cfg.get("patch", 14)))
-    rays = rays_from_cfg(cfg)
     reach = float(cfg.get("aligned_ray_range", 16))
+    n_sub = aligned_subrays_n(cfg)
     out = []
-    for row in rays:
-        for direction in row:
-            out.append(to_minedojo_lidar(direction, reach))
+    if n_sub <= 1:
+        rays = rays_from_cfg(cfg)
+        for row in rays:
+            for direction in row:
+                out.append(to_minedojo_lidar(direction, reach))
+        return out
+    grid = subray_grid_from_cfg(cfg)
+    for row in grid:
+        for dirs in row:
+            for direction in dirs:
+                out.append(to_minedojo_lidar(direction, reach))
     return out
 
 
@@ -84,8 +92,12 @@ def lidar_plan(cfg: dict) -> dict:
     n_h, n_w = patch_grid(int(height), int(width), int(cfg.get("patch", 14)))
     aligned = aligned_lidar_rays(cfg)
     cells = [(row, col) for row in range(n_h) for col in range(n_w)]
-    if len(cells) != len(aligned):
-        raise RuntimeError(f"aligned rays {len(aligned)} do not match the {n_h}x{n_w} patch grid")
+    n_sub = aligned_subrays_n(cfg)
+    expected = len(cells) if n_sub <= 1 else len(cells) * n_sub * n_sub
+    if len(aligned) != expected:
+        raise RuntimeError(
+            f"aligned rays {len(aligned)} do not match the {n_h}x{n_w} patch grid with subrays={n_sub}"
+        )
     wide, wide_lfnav = wide_lidar_rays(cfg) if cfg.get("wide_lidar", True) else ([], [])
     return {
         "lidar_rays": aligned + wide,
@@ -93,6 +105,7 @@ def lidar_plan(cfg: dict) -> dict:
         "wide": (len(aligned), len(aligned) + len(wide)),
         "rows_cols": cells,
         "wide_angles_deg": wide_lfnav,
+        "subrays": n_sub,
     }
 
 
@@ -178,9 +191,39 @@ def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
 
     aligned = []
     start, stop = plan["aligned"]
-    for offset, (row, col) in enumerate(plan["rows_cols"]):
-        label, dist = one(start + offset)
-        aligned.append({"row": row, "col": col, "label": label, "distance": dist})
+    cells = plan["rows_cols"]
+    n_sub = max(1, int(plan.get("subrays") or 1))
+    if n_sub <= 1:
+        for offset, (row, col) in enumerate(cells):
+            label, dist = one(start + offset)
+            aligned.append({"row": row, "col": col, "label": label, "distance": dist})
+        if stop != start + len(cells):
+            raise RuntimeError("aligned ray span does not match the patch cells")
+    else:
+        per = n_sub * n_sub
+        if stop != start + len(cells) * per:
+            raise RuntimeError("aligned ray span does not match the patch cells times subrays")
+        extras = []
+        for cell_i, (row, col) in enumerate(cells):
+            by_obj = {}
+            closest = (None, None)
+            for s in range(per):
+                label, dist = one(start + cell_i * per + s)
+                if label is None or dist is None:
+                    continue
+                if label not in by_obj or dist < by_obj[label]:
+                    by_obj[label] = dist
+                if closest[1] is None or dist < closest[1]:
+                    closest = (label, dist)
+            if not by_obj:
+                aligned.append({"row": row, "col": col, "label": None, "distance": None})
+                continue
+            primary, pdist = closest
+            aligned.append({"row": row, "col": col, "label": primary, "distance": pdist})
+            for name, dist in by_obj.items():
+                if name != primary:
+                    extras.append({"row": row, "col": col, "label": name, "distance": dist})
+        aligned.extend(extras)
     wide = []
     w0, _w1 = plan["wide"]
     for offset, (pitch, yaw) in enumerate(plan["wide_angles_deg"]):
@@ -192,8 +235,6 @@ def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
             "label": label,
             "distance": dist,
         })
-    if stop != start + len(plan["rows_cols"]):
-        raise RuntimeError("aligned ray span does not match the patch cells")
     return {"aligned": aligned, "wide": wide}
 
 
