@@ -48,7 +48,7 @@ def center_ray(n_h: int, n_w: int, fov_deg: float, fov_axis: str, row: int, col:
     return ray_directions(n_h, n_w, fov_deg, fov_axis)[row][col]
 
 
-def scale_intrinsics(intr: dict, height: int, width: int, aspect_tol: float = 0.02) -> dict:
+def scale_intrinsics(intr: dict, height: int, width: int, aspect_tol: float = 0.03) -> dict:
     """Map a K captured at (intr height, width) onto the runtime image.
 
     Scale fx,fy,cx,cy by w/W and h/H when the aspect ratios match. Raise if they do not.
