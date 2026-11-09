@@ -24,7 +24,7 @@ Difficulty (spawn distance band, distractors, `min_initial_distance` rerolls) li
 
 `episode_kwargs` copies the episode onto `minedojo.make`. The argument names are `minedojo.param_names` in `configs/lfnav/default.yaml`, taken from HarvestMeta (`specified_biome`, `start_at_night`, `initial_weather`, `initial_mobs`, `initial_mob_spawn_range_low/high`). HarvestMeta has no `allow_mob_spawn` flag.
 
-Tree, grass, and water are blocks. They are not placed and they are not passed as mobs. The selected biome is expected to generate them. Only `kind: mob` entries are spawned. Mob distance becomes one axis-aligned box on a ring sector in `[spawn_distance_min, spawn_distance_max]` (hard: behind the agent). Distractors from that table are extra mobs. Those lists are the whole animal population. After reset, if a block target is closer than `min_initial_distance`, the episode remakes the world with `seed*1000+k` up to `max_reroll` times.
+Tree, grass, and water are blocks. They are not placed and they are not passed as mobs. The selected biome is expected to generate them. Animals are summoned by lfnav after reset (not via `initial_mobs`). Distances are sampled on a ring in `[spawn_distance_min, spawn_distance_max]`; hard puts the target behind the agent ±45°. After reset, if a block target is closer than `min_initial_distance`, the episode remakes the world with `seed*1000+k` up to `max_reroll` times. Set `minedojo.spawn_via_reset_hook: true` only to restore the old make() kwargs.
 
 ## Open questions
 

@@ -156,6 +156,7 @@ def open_episode(session, task: TaskSpec, cfg: dict, seed: int):
     else:
         unmet = bool(reroll)
         reroll_count = max_reroll
+    spawn_meta = dict(getattr(env, "spawn_meta", None) or {})
     public = {
         "world_seed": used,
         "reroll_count": reroll_count,
@@ -164,6 +165,9 @@ def open_episode(session, task: TaskSpec, cfg: dict, seed: int):
         "initial_target_distance": metrics.get("initial_target_distance"),
         "initial_distance_beyond_range": metrics.get("initial_distance_beyond_range"),
         "_numeric_initial_distance": metrics.get("initial_target_distance_numeric"),
+        "spawn_failed": bool(spawn_meta.get("spawn_failed", False)),
+        "spawn_attempts": spawn_meta.get("spawn_attempts", 0),
+        "spawn_offsets": spawn_meta.get("spawn_offsets") or [],
     }
     return env, obs, public
 
@@ -306,6 +310,9 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         "initial_target_visible": meta.get("initial_target_visible"),
         "initial_target_distance": meta.get("initial_target_distance"),
         "initial_distance_beyond_range": bool(meta.get("initial_distance_beyond_range", False)),
+        "spawn_failed": bool(meta.get("spawn_failed", False)),
+        "spawn_attempts": meta.get("spawn_attempts", 0),
+        "spawn_offsets": meta.get("spawn_offsets") or [],
     })
     return verdict, events
 
@@ -317,7 +324,7 @@ def write_summary(out: Path) -> None:
         "task_name", "seed", "task_kind", "outcome", "success", "steps", "elapsed_s",
         "failure_category", "self_reported_steps", "sr_a", "sr_b", "false_stop", "timeout", "spl",
         "difficulty", "world_seed", "reroll_count", "difficulty_unmet",
-        "initial_target_visible", "initial_target_distance",
+        "initial_target_visible", "initial_target_distance", "spawn_failed",
     ]
     for path in sorted(out.glob("*/*.json")):
         if path.name == "run_meta.json":

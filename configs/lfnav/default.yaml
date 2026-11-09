@@ -43,6 +43,8 @@ camera_calib:
 aligned_ray_range: 16
 wide_ray_range: 32
 wide_lidar: true
+# Extra rings look down (MineDojo pitch+ is up) so short mobs are not missed over the head.
+wide_pitches_deg: [0, -3, -8]
 
 match:
   tau_obj: 0.5
@@ -117,7 +119,11 @@ minedojo:
   use_voxel: true
   voxel_radius: 5
   use_lidar: true
-  # HarvestMeta has no allow_mob_spawn. Only initial_mobs are spawned.
+  # HarvestMeta reset-hook /summon does not spawn. lfnav summons after reset.
+  spawn_via_reset_hook: false
+  settle_ticks: 5
+  verify_ticks: 10
+  spawn_retries: 3
   distractor_mobs: [sheep, chicken, cow, pig]
   # Names from HarvestMeta via inspect_minedojo.py (MetaTaskName2Class["harvest"]).
   param_names:

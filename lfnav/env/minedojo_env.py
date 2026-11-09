@@ -54,17 +54,27 @@ def aligned_lidar_rays(cfg: dict) -> list[tuple[float, float, float]]:
 
 
 def wide_lidar_rays(cfg: dict) -> tuple[list[tuple[float, float, float]], list[tuple[float, float]]]:
-    """MineDojo tuples plus lfnav (pitch_deg, yaw_deg) for the expert. yaw+ is right."""
+    """MineDojo tuples plus lfnav (pitch_deg, yaw_deg) for the expert. yaw+ is right.
+
+    Extra pitch rings look down. Config pitches use MineDojo's sign (pitch+ is up),
+    so -3/-8 aim under the eye-height horizontal and hit short mobs (pig ~0.9).
+    """
     step = float(cfg.get("wide_yaw_step", 15))
     reach = float(cfg.get("wide_ray_range", 32))
-    yaw = -180.0
+    pitches = list(cfg.get("wide_pitches_deg") or [0.0, -3.0, -8.0])
     out = []
     lfnav_deg = []
-    while yaw < 180.0 - 1e-6:
-        direction = (math.sin(math.radians(yaw)), 0.0, math.cos(math.radians(yaw)))
-        out.append(to_minedojo_lidar(direction, reach))
-        lfnav_deg.append((0.0, yaw))
-        yaw += step
+    for pitch_deg in pitches:
+        p = math.radians(float(pitch_deg))
+        cp = math.cos(p)
+        # Config pitch+ is up; lfnav +y is down, so y = -sin(config_pitch).
+        ly = -math.sin(p)
+        yaw = -180.0
+        while yaw < 180.0 - 1e-6:
+            direction = (math.sin(math.radians(yaw)) * cp, ly, math.cos(math.radians(yaw)) * cp)
+            out.append(to_minedojo_lidar(direction, reach))
+            lfnav_deg.append((float(pitch_deg), yaw))
+            yaw += step
     return out, lfnav_deg
 
 
@@ -288,14 +298,17 @@ def episode_kwargs(task, cfg: dict, seed: int) -> dict:
     _put(out, names, "weather", weather)
     required = _mob_names(episode)
     mobs = required + _distractor_names(required, cfg, table, seed)
-    _put(out, names, "mobs", mobs)
-    if "spawn_distance_min" in table and "spawn_distance_max" in table:
-        behind = str(cfg.get("difficulty") or "") == "hard"
-        low, high = mob_ring_box(
-            table["spawn_distance_min"], table["spawn_distance_max"], seed, behind=behind,
-        )
-        _put(out, names, "mob_range_low", low)
-        _put(out, names, "mob_range_high", high)
+    # Old path: HarvestMeta reset-hook /summon. It does not actually spawn (2026-11).
+    # Keep the code; turn it on with minedojo.spawn_via_reset_hook.
+    if env_cfg.get("spawn_via_reset_hook", False):
+        _put(out, names, "mobs", mobs)
+        if "spawn_distance_min" in table and "spawn_distance_max" in table:
+            behind = str(cfg.get("difficulty") or "") == "hard"
+            low, high = mob_ring_box(
+                table["spawn_distance_min"], table["spawn_distance_max"], seed, behind=behind,
+            )
+            _put(out, names, "mob_range_low", low)
+            _put(out, names, "mob_range_high", high)
     return out
 
 
@@ -343,6 +356,98 @@ def _kwargs(cfg: dict, seed: int, task=None) -> dict:
     return kwargs
 
 
+def sample_mob_offset(min_d, max_d, yaw_deg, seed: int, index: int, behind: bool = False, y: int = 1):
+    """World offset for /summon. yaw=0 faces +z; forward is (-sin yaw, cos yaw)."""
+    import random
+
+    rng = random.Random(int(seed) * 7919 + int(index))
+    radius = rng.uniform(float(min_d), float(max_d))
+    if behind:
+        phi = rng.uniform(180.0 - 45.0, 180.0 + 45.0)
+    else:
+        phi = rng.uniform(-180.0, 180.0)
+    bearing = math.radians(float(yaw_deg) + phi)
+    dx = int(round(-radius * math.sin(bearing)))
+    dz = int(round(radius * math.cos(bearing)))
+    dy = int(y)
+    return {"dx": dx, "dy": dy, "dz": dz, "radius": radius, "bearing_deg": phi, "y": dy}
+
+
+def _noop_tick(env) -> dict:
+    inner = env._env
+    nop = inner.action_space.no_op()
+    obs, _reward, _done, _info = inner.step(nop)
+    adopt = getattr(env, "_adopt", None)
+    return adopt(obs) if callable(adopt) else obs
+
+
+def _execute_summon(env, name: str, dx: int, dy: int, dz: int) -> None:
+    inner = env._env
+    sim = getattr(inner, "env", inner)
+    sim.execute_cmd(f"/summon {name} ~{dx} ~{dy} ~{dz}")
+
+
+def spawn_task_mobs(env, task, cfg: dict, seed: int) -> dict:
+    """Summon task mobs after reset. Invalid chat commands do not advance the tick."""
+    from lfnav.gt.initial import privileged_ray_distance
+    from lfnav.obsutil import yaw_of
+
+    env_cfg = cfg.get("minedojo") or {}
+    settle = int(env_cfg.get("settle_ticks", 5))
+    verify = int(env_cfg.get("verify_ticks", 10))
+    retries = int(env_cfg.get("spawn_retries", 3))
+    table = _difficulty(cfg)
+    episode = _episode_of(task)
+    required = _mob_names(episode)
+    distractors = _distractor_names(required, cfg, table, seed)
+    names = required + distractors
+    obs = getattr(env, "_obs", None)
+    meta = {
+        "spawn_failed": False,
+        "spawn_attempts": 0,
+        "spawn_offsets": [],
+    }
+    if not names:
+        env.spawn_meta = meta
+        return obs
+    for _ in range(max(settle, 0)):
+        obs = _noop_tick(env)
+    yaw = yaw_of(obs, cfg)
+    min_d = float(table.get("spawn_distance_min", 4))
+    max_d = float(table.get("spawn_distance_max", 8))
+    hard = str(cfg.get("difficulty") or "") == "hard"
+    target = getattr(task, "target", None) or (task.get("target") if isinstance(task, dict) else None)
+
+    def summon_one(name, index, behind, y):
+        offset = sample_mob_offset(min_d, max_d, yaw, seed, index, behind=behind, y=y)
+        offset = dict(offset)
+        offset["name"] = name
+        _execute_summon(env, name, offset["dx"], offset["dy"], offset["dz"])
+        tick = _noop_tick(env)
+        meta["spawn_offsets"].append(offset)
+        return tick
+
+    for i, name in enumerate(names):
+        obs = summon_one(name, i, behind=(hard and name == target), y=1)
+    for _ in range(max(verify, 0)):
+        obs = _noop_tick(env)
+    attempts = 1
+    failed = False
+    if target and any(name == target for name in names):
+        failed = privileged_ray_distance(obs, cfg, target) is None
+        target_index = next(i for i, name in enumerate(names) if name == target)
+        while failed and attempts < max(retries, 1):
+            attempts += 1
+            obs = summon_one(target, target_index + 1000 * (attempts - 1), behind=hard, y=3)
+            for _ in range(max(verify, 0)):
+                obs = _noop_tick(env)
+            failed = privileged_ray_distance(obs, cfg, target) is None
+    meta["spawn_failed"] = bool(failed)
+    meta["spawn_attempts"] = attempts
+    env.spawn_meta = meta
+    return obs
+
+
 def python_location_stats(loc: dict) -> dict:
     """MineDojo location_stats: size-1 arrays become Python scalars; pos is 3 floats.
 
@@ -364,6 +469,8 @@ class MineDojoEnv:
         import minedojo
         self.cfg = cfg
         self.task = task
+        self.seed = int(seed)
+        self.spawn_meta = {}
         self.ray_plan = lidar_plan(cfg) if (cfg.get("minedojo") or {}).get("use_lidar", True) else None
         from lfnav.env.gradle_home import env_create_guard
         with env_create_guard(cfg):
@@ -386,8 +493,15 @@ class MineDojoEnv:
         self._obs = obs
         return obs
 
-    def reset(self, **_kwargs):
-        return self._adopt(self._env.reset())
+    def reset(self, **kwargs):
+        obs = self._adopt(self._env.reset())
+        task = kwargs.get("task", self.task)
+        seed = int(kwargs.get("seed", self.seed))
+        self.task = task
+        self.seed = seed
+        if task is not None and not (self.cfg.get("minedojo") or {}).get("spawn_via_reset_hook", False):
+            obs = spawn_task_mobs(self, task, self.cfg, seed)
+        return obs
 
     def step(self, action):
         if isinstance(action, str):

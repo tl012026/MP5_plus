@@ -192,28 +192,36 @@ def summarize_baseline(root: Path) -> dict:
         groups.setdefault(key, []).append(row)
     table = []
     for (task, difficulty, policy), chunk in sorted(groups.items(), key=lambda kv: (str(kv[0][0]), str(kv[0][1]), str(kv[0][2]))):
+        counted = [row for row in chunk if not row.get("spawn_failed")]
         table.append({
             "task": task,
             "difficulty": difficulty,
             "policy": policy,
             "n": len(chunk),
-            "sr_b": _rate(chunk, "sr_b"),
-            "sr_a": _rate(chunk, "sr_a"),
-            "false_stop": _rate(chunk, "false_stop"),
-            "timeout": _rate(chunk, "timeout"),
-            "steps_median": _median_steps(chunk),
-            "spl": _spl_stats(chunk),
-            "initial_target_distance": _distance_stats(chunk),
-            "difficulty_unmet": _rate(chunk, "difficulty_unmet"),
+            "n_scored": len(counted),
+            "sr_b": _rate(counted, "sr_b"),
+            "sr_a": _rate(counted, "sr_a"),
+            "false_stop": _rate(counted, "false_stop"),
+            "timeout": _rate(counted, "timeout"),
+            "steps_median": _median_steps(counted),
+            "spl": _spl_stats(counted),
+            "initial_target_distance": _distance_stats(counted),
+            "difficulty_unmet": _rate(counted, "difficulty_unmet"),
+            "spawn_failed": _rate(chunk, "spawn_failed"),
         })
     paired = []
     by_cell = {}
+    failed = set()
     for row in rows:
         cell = (row.get("task_name"), row.get("difficulty"), row.get("seed"), row.get("policy_name"))
         by_cell[cell] = bool(row.get("sr_b") or row.get("success"))
+        if row.get("spawn_failed"):
+            failed.add(cell[:3])
     c1, c0 = [], []
     for task, difficulty, seed, policy in list(by_cell):
         if policy != "c1":
+            continue
+        if (task, difficulty, seed) in failed:
             continue
         other = by_cell.get((task, difficulty, seed, "c0"))
         if other is None:

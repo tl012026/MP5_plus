@@ -40,13 +40,13 @@ SPL is `success * l / max(path, l)` with `l = max(initial_target_distance - judg
 
 | | Mob spawn ring | Block target min. start distance | Distractors |
 | --- | --- | --- | --- |
-| easy | 4–8 | 0 | 0 |
-| medium | 8–16 | 8 | 2 |
-| hard | 16–32, sector behind the agent | 16 | 4 |
+| easy | 4–8, any yaw | 0 | 0 |
+| medium | 8–16, any yaw | 8 | 2 |
+| hard | 16–32, behind the agent ±45° | 16 | 4 |
 
-- Block targets reroll the world seed (`seed*1000+k`, up to `max_reroll`) until the minimum distance holds. Otherwise the episode is marked `difficulty_unmet`.
-- `specified_biome` worlds are assumed to be single-biome, so `leave_biome` is false. Confirm this with step 0 of the baseline.
-- Optional mixed-biome hard seeds come from `lfnav/env/search_biome_seeds.py`.
+Animals are summoned by lfnav *after* `reset()`, not by MineDojo `initial_mobs`. HarvestMeta's reset hook runs `/summon` in a way that does not actually spawn (measured: 0/8 bearings had a pig after reset; a manual `/summon pig ~ ~1 ~3` appeared immediately). `minedojo.spawn_via_reset_hook: false` (default) skips those make() kwargs. After reset, lfnav waits `settle_ticks` real no-op steps (invalid chat commands are skipped and do not advance the tick), then `/summon`s each mob on a ring and verifies with wide lidar (horizontal plus pitch −3°/−8°, because a pitch-0 ray from eye height 1.62 misses a 0.9-tall pig). Failed summons are `spawn_failed` and are excluded from SR.
+
+Block targets (tree, grass, water) and block `near` conditions still reroll the world seed (`seed*1000+k`, up to `max_reroll`) until `min_initial_distance` holds. Otherwise the episode is `difficulty_unmet`. `specified_biome` worlds are treated as single-biome, so `leave_biome` is false. Optional mixed-biome seeds: `lfnav/env/search_biome_seeds.py`.
 
 ### Camera
 

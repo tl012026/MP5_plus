@@ -189,6 +189,7 @@ class RayConvertTest(unittest.TestCase):
         cfg["image_hw"] = [14, 28]
         cfg["wide_lidar"] = True
         cfg["wide_yaw_step"] = 180
+        cfg["wide_pitches_deg"] = [0]
         plan = lidar_plan(cfg)
         self.assertEqual(plan["rows_cols"], [(0, 0), (0, 1)])
         self.assertEqual(plan["aligned"], (0, 2))
@@ -209,7 +210,6 @@ class EpisodeKwargsTest(unittest.TestCase):
     def test_sixteen_specs_match_scene(self):
         cfg = load_config()
         names = cfg["minedojo"]["param_names"]
-        easy = cfg["difficulty_table"]["easy"]
         tasks = _load_specs()
         self.assertEqual(len(tasks), 16)
         for task in tasks:
@@ -220,14 +220,12 @@ class EpisodeKwargsTest(unittest.TestCase):
             self.assertEqual(kw[names["weather"]], episode["initial_weather"], task.id)
             mobs = [item["name"] for item in episode["spawn"] if item["kind"] == "mob"]
             blocks = [item["name"] for item in episode["spawn"] if item["kind"] == "block"]
-            self.assertEqual(kw[names["mobs"]], mobs, task.id)
-            for block in blocks:
-                self.assertNotIn(block, kw[names["mobs"]], task.id)
+            self.assertNotIn(names["mobs"], kw, task.id)
+            self.assertNotIn(names["mob_range_low"], kw, task.id)
             self.assertNotIn("allow_mob_spawn", kw, task.id)
-            low, high = mob_ring_box(easy["spawn_distance_min"], easy["spawn_distance_max"], 0, behind=False)
-            self.assertEqual(kw[names["mob_range_low"]], low, task.id)
-            self.assertEqual(kw[names["mob_range_high"]], high, task.id)
             self.assertEqual(names["mob_range_low"], "initial_mob_spawn_range_low")
+            for block in blocks:
+                self.assertTrue(block)
 
     def test_make_kwargs_use_the_task_scene(self):
         cfg = load_config()
@@ -239,13 +237,17 @@ class EpisodeKwargsTest(unittest.TestCase):
         self.assertEqual(kw[names["biome"]], "plains")
         self.assertIs(kw[names["time"]], True)
         self.assertEqual(kw[names["weather"]], "rain")
-        self.assertEqual(kw[names["mobs"]], ["pig"])
+        self.assertNotIn(names["mobs"], kw)
 
     def test_distractors_are_extra_mobs(self):
         cfg = load_config()
         cfg["difficulty"] = "medium"
         names = cfg["minedojo"]["param_names"]
         pig = next(task for task in _load_specs() if task.id == "1-4")
+        kw = episode_kwargs(pig, cfg, 1)
+        self.assertNotIn(names["mobs"], kw)
+        cfg["minedojo"] = dict(cfg["minedojo"])
+        cfg["minedojo"]["spawn_via_reset_hook"] = True
         kw = episode_kwargs(pig, cfg, 1)
         mobs = kw[names["mobs"]]
         self.assertEqual(mobs[0], "pig")
