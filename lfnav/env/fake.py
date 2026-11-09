@@ -56,6 +56,8 @@ class FakeMineDojoEnv:
         self.tall = {tuple(p) for p in layout.get("tall", [])}
         self.water = {tuple(p) for p in layout.get("water", [])}
         self.lava = {tuple(p) for p in layout.get("lava", [])}
+        self.holes = {tuple(p) for p in layout.get("holes", [])}
+        self.voxel_radius = int((cfg.get("minedojo") or {}).get("voxel_radius", layout.get("voxel_radius", 5)))
         self.biome = layout.get("biome", "plains")
         self.time_name = layout.get("time", "day")
         self.weather = layout.get("weather", "clear")
@@ -169,30 +171,31 @@ class FakeMineDojoEnv:
         self.pos[2] += forward[1]
         return jumped, False
 
+    def _voxel_name(self, cell, dy: int) -> str:
+        if dy > 0:
+            return "dirt" if cell in self.tall else "air"
+        if dy == 0:
+            if cell in self.lava:
+                return "lava"
+            if cell in self.water:
+                return "water"
+            if cell in self.solids:
+                return "dirt"
+            return str(self.blocks.get(cell, "air"))
+        if cell in self.holes:
+            return "air"
+        return "dirt"
+
     def _voxels(self):
+        """(2r+1)^3 crop, axes x,y,z, centre at r. Matches MineDojo voxel_radius=5 → 11^3."""
+        radius = int(self.voxel_radius)
         cx, cz = self._cell(self.pos[0], self.pos[2])
-        grid = []
-        for dx in (-1, 0, 1):
-            plane = []
-            for _dy in (-1, 0, 1):
-                row = []
-                for dz in (-1, 0, 1):
-                    cell = (cx + dx, cz + dz)
-                    if _dy > 0 and cell in self.tall:
-                        name = "solid"
-                    elif _dy == 0 and cell in self.lava:
-                        name = "lava"
-                    elif _dy == 0 and cell in self.water:
-                        name = "water"
-                    elif _dy == 0 and cell in self.solids:
-                        name = "solid"
-                    elif _dy == 0:
-                        name = self.blocks.get(cell, "air")
-                    else:
-                        name = "air"
-                    row.append(name)
-                plane.append(row)
-            grid.append(plane)
+        n = 2 * radius + 1
+        grid = np.empty((n, n, n), dtype=object)
+        for ix, dx in enumerate(range(-radius, radius + 1)):
+            for iy, dy in enumerate(range(-radius, radius + 1)):
+                for iz, dz in enumerate(range(-radius, radius + 1)):
+                    grid[ix, iy, iz] = self._voxel_name((cx + dx, cz + dz), dy)
         return grid
 
     def _aligned_rays(self) -> list[dict]:

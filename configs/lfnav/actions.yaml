@@ -26,3 +26,19 @@ degrees:
   turn_left_45: -45
   turn_right_45: 45
 stuck_threshold: 2
+# Raw MineDojo voxel names (spaces become underscores). grass/dirt/sand/stone are solid.
+passable_blocks:
+  - air
+  - tallgrass
+  - double_plant
+  - red_flower
+  - yellow_flower
+  - deadbush
+  - snow_layer
+  - reeds
+hazard_blocks:
+  - water
+  - flowing_water
+  - lava
+  - flowing_lava
+avoid_cliffs: true

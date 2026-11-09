@@ -8,7 +8,9 @@ import unittest
 from pathlib import Path
 
 from lfnav.config import load_config
-from lfnav.control.controller import Controller
+import numpy as np
+
+from lfnav.control.controller import Controller, _front_delta, choose_forward
 from unittest.mock import patch
 
 from lfnav.env.fake import FakeMineDojoEnv
@@ -68,6 +70,33 @@ class ControllerTest(unittest.TestCase):
         result = Controller(env, cfg).execute_waypoints([(15, 1)])
         self.assertGreater(result.env_steps, 1)
         self.assertGreater(result.obs["location_stats"]["pos"][2], 0.4)
+
+    def test_numpy_voxels_and_grass_block_are_solid(self):
+        cfg = small_cfg()
+        world = np.full((11, 11, 11), "air", dtype=object)
+        world[:, :5, :] = "dirt"
+        self.assertEqual(choose_forward(world, 0.0, cfg), "forward")
+        stone = world.copy()
+        stone[5, 5, 6] = "grass block"
+        self.assertEqual(choose_forward(stone, 0.0, cfg), "jump_forward")
+        wall = stone.copy()
+        wall[5, 6, 6] = "dirt"
+        self.assertEqual(choose_forward(wall, 0.0, cfg), "turn_left_45")
+        water = world.copy()
+        water[5, 5, 6] = "flowing_water"
+        self.assertEqual(choose_forward(water, 0.0, cfg), "turn_right_45")
+        cliff = world.copy()
+        cliff[5, 4, 6] = "air"
+        cliff[5, 3, 6] = "air"
+        self.assertEqual(choose_forward(cliff, 0.0, cfg), "turn_right_45")
+        self.assertEqual(_front_delta(0), (0, 1))
+        self.assertEqual(_front_delta(90), (1, 0))
+        self.assertEqual(_front_delta(180), (0, -1))
+        self.assertEqual(_front_delta(270), (-1, 0))
+        env = FakeMineDojoEnv(cfg, {})
+        voxels = env.reset()["voxels"]["block_name"]
+        self.assertEqual(tuple(np.asarray(voxels).shape), (11, 11, 11))
+        self.assertEqual(choose_forward(voxels, 0.0, cfg), "forward")
 
 
 class EpisodeTest(unittest.TestCase):

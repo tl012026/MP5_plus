@@ -1,15 +1,105 @@
 """Turn named actions into environment steps.
 
-The 3x3x3 voxel crop is a local collision sensor for this controller only.
-Policies never read it. Jumping, stuck recovery, and refusing water or lava
-live here. Waypoints are yaw-then-forward, the stand-in for a later C3 controller.
+The voxel crop (MineDojo voxel_radius, default 5 → 11^3) is a local collision
+sensor for this controller only. Policies never read it. Jumping, stuck
+recovery, and refusing water or lava live here. Waypoints are yaw-then-forward.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from lfnav.obsutil import lookup, position_of, yaw_of
+import numpy as np
+
+from lfnav.obsutil import lookup, position_of, scalar, yaw_of
+
+DEFAULT_PASSABLE = (
+    "air",
+    "tallgrass",
+    "double_plant",
+    "red_flower",
+    "yellow_flower",
+    "deadbush",
+    "snow_layer",
+    "reeds",
+)
+DEFAULT_HAZARD = (
+    "water",
+    "flowing_water",
+    "lava",
+    "flowing_lava",
+)
+
+
+def _front_delta(yaw: float) -> tuple[int, int]:
+    """Integer step in voxel x/z for the current look direction.
+
+    lfnav yaw 0 looks +z; yaw increases when turning right (Minecraft).
+    0° → (dx, dz)=(0, +1); 90° → (+1, 0); 180° → (0, -1); 270° → (-1, 0).
+    Confirm in the MineDojo image with lfnav/control/check_heading.py
+    (heading check 2026-11-08).
+    """
+    y = float(yaw) % 360.0
+    if y < 45.0 or y >= 315.0:
+        return 0, 1
+    if y < 135.0:
+        return 1, 0
+    if y < 225.0:
+        return 0, -1
+    return -1, 0
+
+
+def block_key(value) -> str:
+    raw = scalar(value)
+    if raw is None:
+        return "air"
+    text = str(raw).strip().lower().replace(" ", "_")
+    return text or "air"
+
+
+def _nameset(cfg: dict, key: str, default) -> set[str]:
+    actions = cfg.get("actions") or {}
+    raw = actions.get(key)
+    if raw is None:
+        raw = cfg.get(key)
+    if not raw:
+        raw = default
+    return {block_key(name) for name in raw}
+
+
+def choose_forward(voxels, yaw: float, cfg: dict | None = None) -> str:
+    """Pick forward / jump_forward / turn when the cell ahead is blocked or a hazard."""
+    cfg = cfg or {}
+    actions = cfg.get("actions") or {}
+    if voxels is None or np.size(voxels) == 0:
+        return "forward"
+    arr = np.asarray(voxels)
+    if arr.ndim != 3:
+        return "forward"
+    c = int(arr.shape[0] // 2)
+    dx, dz = _front_delta(yaw)
+    ix, iy_foot, iz = c + dx, c, c + dz
+    if not (0 <= ix < arr.shape[0] and 0 <= iz < arr.shape[2]):
+        return "forward"
+    foot = block_key(arr[ix, iy_foot, iz])
+    head = block_key(arr[ix, iy_foot + 1, iz]) if iy_foot + 1 < arr.shape[1] else "air"
+    below = block_key(arr[ix, iy_foot - 1, iz]) if iy_foot - 1 >= 0 else "air"
+    below2 = block_key(arr[ix, iy_foot - 2, iz]) if iy_foot - 2 >= 0 else "air"
+    passable = _nameset(cfg, "passable_blocks", DEFAULT_PASSABLE)
+    hazard = _nameset(cfg, "hazard_blocks", DEFAULT_HAZARD)
+    can_jump = "jump_forward" in (actions.get("vectors") or {})
+    if foot in hazard or head in hazard:
+        return "turn_right_45"
+    foot_solid = foot not in passable
+    head_ok = head in passable
+    if foot_solid and not head_ok:
+        return "turn_left_45"
+    if foot_solid and head_ok:
+        return "jump_forward" if can_jump else "forward"
+    avoid_cliffs = bool(actions.get("avoid_cliffs", cfg.get("avoid_cliffs", True)))
+    if avoid_cliffs and (not foot_solid) and below in passable and below2 in passable:
+        return "turn_right_45"
+    return "forward"
 
 
 @dataclass
@@ -21,17 +111,6 @@ class ControlResult:
 
     def to_dict(self) -> dict:
         return {"env_steps": self.env_steps, "stuck": self.stuck, "jumped": self.jumped}
-
-
-def _front_delta(yaw: float) -> tuple[int, int]:
-    y = yaw % 360.0
-    if y < 45.0 or y >= 315.0:
-        return 0, 1
-    if y < 135.0:
-        return 1, 0
-    if y < 225.0:
-        return 0, -1
-    return -1, 0
 
 
 class Controller:
@@ -101,20 +180,7 @@ class Controller:
         obs = self.env.observation()
         voxels = lookup(obs, self.keys.get("voxels"))
         yaw = yaw_of(obs, self.cfg)
-        if not voxels:
-            return "forward"
-        dx, dz = _front_delta(yaw)
-        # Voxels are indexed [x+1][y+1][z+1] over the {-1,0,1} neighborhood.
-        ix, iz = dx + 1, dz + 1
-        ground = voxels[ix][1][iz]
-        above = voxels[ix][2][iz]
-        if ground in ("water", "lava"):
-            return "turn_right_45"
-        if ground not in ("air", None, "grass", "sand") and above not in ("air", None):
-            return "turn_left_45"
-        if ground not in ("air", None, "grass", "sand"):
-            return "jump_forward" if "jump_forward" in (self.actions.get("vectors") or {}) else "forward"
-        return "forward"
+        return choose_forward(voxels, yaw, self.cfg)
 
     def _unstuck(self) -> str:
         self._unstuck_toggle = not self._unstuck_toggle

@@ -17,7 +17,7 @@ stop --> judge (SR-b, SR-a)
 | A `lfnav/perception` | Percipient (MineLLM), without GPT-4 asking the questions |
 | B `lfnav/matcher.py` | The part of the percipient prompt that decides the object is found |
 | C0 / C1 / C2 | The scripted explore branch inside the find action |
-| controller | `structured_actions.py` movement, reimplemented and limited to a 3x3x3 voxel crop |
+| controller | `structured_actions.py` movement, reimplemented on the MineDojo voxel crop (`voxel_radius` 5 → 11³) |
 | judge | A new automatic check. MP5's original success rule is SR-a |
 
 C3 is `lfnav/policy/c3.py`. `act` raises `NotImplementedError`. The controller already accepts `(dyaw_deg, forward_blocks)` waypoints.
@@ -25,7 +25,7 @@ C3 is `lfnav/policy/c3.py`. `act` raises `NotImplementedError`. The controller a
 ## Privileged information
 
 - Wide lidar and ground-truth scene state are used by the expert and by the judge. Evaluation policies do not receive them, except GT perception when that backend is the experiment.
-- The 3x3x3 voxel crop is a contact sensor for the controller only. C0, C1, and C2 do not read it.
+- The voxel crop (`voxel_radius` 5, 11³) is a contact sensor for the controller only. C0, C1, and C2 do not read it.
 - Position is odometry from the environment position field.
 
 `near X` means X and the target are both inside the same camera frame. That is an approximation of the original sentence. SR-b distance is the nearest aligned-ray hit on the target at stop, so the target has to be in the camera frame. The fake env still has Euclidean `distance_to` for tests. SPL uses straight-line path length because Minecraft does not ship a geodesic: `SR-b * d / max(L, d)`.
