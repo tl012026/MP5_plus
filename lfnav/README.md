@@ -1,6 +1,6 @@
 # lfnav
 
-LLM-free conditional goal navigation for the 16 creative tasks in MP5. No language model is called on the control path. MineLLM is only a perception baseline, and it is queried with fixed templates.
+LLM-free conditional goal navigation for the 16 creative tasks in MP5. No language model is called on the control path. MineLLM appears only as a perception baseline, queried with fixed templates.
 
 ## Modules
 
@@ -20,43 +20,34 @@ stop --> judge (SR-b, SR-a)
 | controller | `structured_actions.py` movement, reimplemented on the MineDojo voxel crop (`voxel_radius` 5 → 11³) |
 | judge | A new automatic check. MP5's original success rule is SR-a |
 
-C3 is `lfnav/policy/c3.py`. `act` raises `NotImplementedError`. The controller already accepts `(dyaw_deg, forward_blocks)` waypoints.
+C3 is `lfnav/policy/c3.py`. Its `act` raises `NotImplementedError`. The controller already accepts `(dyaw_deg, forward_blocks)` waypoints.
 
 ## Privileged information
 
-- Wide lidar and ground-truth scene state are used by the expert, the judge, and initial-difficulty logging. Evaluation policies do not receive them, except GT perception when that backend is the experiment. `initial_target_visible` / `initial_target_distance` are privileged and never enter `PolicyInput`.
-- The voxel crop (`voxel_radius` 5, 11³) is a contact sensor for the controller only. C0, C1, and C2 do not read it.
+- The expert, the judge and initial-difficulty logging use the wide lidar and the ground-truth scene state. Evaluation policies never receive them, except when GT perception is the backend under test.
+- `initial_target_visible` / `initial_target_distance` are logged only and never enter `PolicyInput`.
+- The voxel crop is a contact sensor for the controller. C0, C1 and C2 do not read it.
 - Position is odometry from the environment position field.
+- When the target is not in the camera frame, B reports `direction = None` and `distance = None`.
 
-`near X` means X and the target are both inside the same camera frame. That is an approximation of the original sentence. SR-b distance is the nearest aligned-ray hit on the target at stop, so the target has to be in the camera frame. The fake env still has Euclidean `distance_to` for tests. SPL uses `l = max(initial_target_distance - judge.radius, 0)` and `success * l / max(path, l)`. That ignores terrain detours. If the start distance is beyond lidar range (`"> 32"`), SPL is empty and counted separately.
+`near X` means X and the target appear in the same camera frame. This approximates the original sentence.
 
-`specified_biome` worlds are treated as a single biome (confirm with `lfnav/env/check_biome_world.py`), so `leave_biome` is false. Block-target hardness is `min_initial_distance` plus seed rerolls (`seed*1000+k`). Mobs spawn in a cardinal ring sector; hard uses the sector behind the agent. Optional mixed-biome hard seeds: `lfnav/env/search_biome_seeds.py`.
+SR-b distance is the nearest aligned-ray hit on the target at stop, so the target must be in the camera frame. The fake env keeps a Euclidean `distance_to` for tests.
 
-Aligned rays need a camera model. `lfnav/gt/capture_rotations.py` turns in place (no walk, no sprint, skip water). `fit_intrinsics.py` fits `K` from the pure-rotation homography `x2 ~ K R K^{-1} x1`. HUD (hotbar, crosshair, hand) is masked; RANSAC drops movers. Copy the printed `fov_deg`/`fov_axis`, or a full `intrinsics` block, into `configs/lfnav/default.yaml`. `verify_alignment.py` treats median IoU above 0.5 as good enough. The one-pixel script `calibrate_camera.py` is still there.
+SPL is `success * l / max(path, l)` with `l = max(initial_target_distance - judge.radius, 0)`. It ignores terrain detours. When the start distance is beyond lidar range (`"> 32"`), SPL is empty and counted separately.
 
-## Run order
+### Difficulty (`configs/lfnav/difficulty.yaml`)
 
-Login-node tests need no MineDojo and no GPU:
+| | Mob spawn ring | Block target min. start distance | Distractors |
+| --- | --- | --- | --- |
+| easy | 4–8 | 0 | 0 |
+| medium | 8–16 | 8 | 2 |
+| hard | 16–32, sector behind the agent | 16 | 4 |
 
-```bash
-python3 -m unittest discover -s lfnav/tests
-python3 lfnav/perception/train_perception.py --dry-run
-python3 lfnav/policy/train_c2.py --dry-run
-```
+- Block targets reroll the world seed (`seed*1000+k`, up to `max_reroll`) until the minimum distance holds. Otherwise the episode is marked `difficulty_unmet`.
+- `specified_biome` worlds are assumed to be single-biome, so `leave_biome` is false. Confirm this with step 0 of the baseline.
+- Optional mixed-biome hard seeds come from `lfnav/env/search_biome_seeds.py`.
 
-Real episodes follow `lfnav/slurm/README.md`. Data, features, checkpoints, and runs default to `/scratch/$USER/lfnav/` via `configs/lfnav/default.yaml`. Eval writes a JPG every 20 env steps under `OUT/<task>/<seed>/frames/` (`--no-frames` or `--frames-every N`). Keyframes (start / stop / end) also keep a full-size PNG. `python3 lfnav/eval/make_contact_sheet.py --in OUT` stitches each episode.
+### Camera
 
-Each episode closes its environment, including when the episode raises. `reuse_env` defaults to false. Turn it on to keep one MineDojo process for consecutive episodes of the same task and difficulty and to start the next one with `reset`. In that mode `make()` uses the first episode's seed as `world_seed`. Later seeds stay on the result file and on agent-side randomness, but they do not build a new world.
-
-## Matrix
-
-`configs/lfnav/matrix.yaml` names the primary pairs: MineLLM+C0, DINOv2+C0, DINOv2+C1, DINOv2+C2, GT+C1, GT+C2. Perception options also include ViT-B/14 and MineCLIP. MineCLIP is not connected until a local checkout exists under the configured directory.
-
-The original MP5 loop is not executed. `lfnav.eval.run.make_policy` rejects `mp5` and points at `eval/run_batch.py` for a later API run under the same specs, seeds, and judge.
-
-## Limits
-
-- Camera field of view is unconfirmed until `sbatch lfnav/slurm/calibrate_camera.sbatch` has been run. Time, brightness, and biome ids are filled by `lfnav/gt/calibrate_env_state.py`. Until `time_day_min` and `brightness_min_light` are set, those conditions are unknown rather than failed. See `lfnav/REPORT.md`.
-- Action vectors in `configs/lfnav/actions.yaml` are confirmed against the harvest_milk probe.
-- Tree labels match name fragments `log`, `leaves`, and `wood` until the probe shows the real block ids.
-- A learned head without a checkpoint reports a token statistic, not a trained probability.
+- Aligned rays use one ray per DINOv2 patch (224×364
