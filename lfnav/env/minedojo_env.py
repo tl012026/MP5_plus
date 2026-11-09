@@ -13,6 +13,33 @@ from lfnav.geom import patch_grid, rays_from_cfg
 from lfnav.gt.fov import ray_angles_deg
 
 
+def to_minedojo_lidar(direction, reach: float) -> tuple[float, float, float]:
+    """lfnav camera direction -> MineDojo lidar_rays (pitch, yaw, range).
+
+    lfnav: +x right, +y down, +z forward; yaw+ is right; pitch+ is down
+    (same as lfnav.gt.fov). MineDojo lidar_rays: yaw+ is left, pitch+ is up.
+    So this function negates both angles. Evidence: verify_alignment overlay
+    2026-11-08 on 512x820 — pig pixels at x≈0–180, y≈90–310 while pig-labeled
+    patches sat at x≈630–820, y≈190–415 (left-right and up-down mirrored).
+    Intrinsics calibration is unaffected. Call this once; do not negate again
+    in convert_rays, the expert, or scene_state.
+    """
+    yaw_deg, pitch_deg = ray_angles_deg(direction)
+    return (math.radians(-pitch_deg), math.radians(-yaw_deg), float(reach))
+
+
+def from_minedojo_lidar(pitch_rad, yaw_rad) -> tuple[float, float, float]:
+    """Inverse of to_minedojo_lidar: MineDojo (pitch, yaw) -> lfnav unit ray."""
+    yaw = -float(yaw_rad)
+    pitch = -float(pitch_rad)
+    cp = math.cos(pitch)
+    x = math.sin(yaw) * cp
+    y = math.sin(pitch)
+    z = math.cos(yaw) * cp
+    n = math.sqrt(x * x + y * y + z * z) or 1.0
+    return (x / n, y / n, z / n)
+
+
 def aligned_lidar_rays(cfg: dict) -> list[tuple[float, float, float]]:
     height, width = cfg.get("image_hw", [224, 364])
     n_h, n_w = patch_grid(int(height), int(width), int(cfg.get("patch", 14)))
@@ -21,20 +48,23 @@ def aligned_lidar_rays(cfg: dict) -> list[tuple[float, float, float]]:
     out = []
     for row in rays:
         for direction in row:
-            yaw, pitch = ray_angles_deg(direction)
-            out.append((math.radians(pitch), math.radians(yaw), reach))
+            out.append(to_minedojo_lidar(direction, reach))
     return out
 
 
-def wide_lidar_rays(cfg: dict) -> list[tuple[float, float, float]]:
+def wide_lidar_rays(cfg: dict) -> tuple[list[tuple[float, float, float]], list[tuple[float, float]]]:
+    """MineDojo tuples plus lfnav (pitch_deg, yaw_deg) for the expert. yaw+ is right."""
     step = float(cfg.get("wide_yaw_step", 15))
     reach = float(cfg.get("wide_ray_range", 32))
     yaw = -180.0
     out = []
+    lfnav_deg = []
     while yaw < 180.0 - 1e-6:
-        out.append((0.0, math.radians(yaw), reach))
+        direction = (math.sin(math.radians(yaw)), 0.0, math.cos(math.radians(yaw)))
+        out.append(to_minedojo_lidar(direction, reach))
+        lfnav_deg.append((0.0, yaw))
         yaw += step
-    return out
+    return out, lfnav_deg
 
 
 def lidar_plan(cfg: dict) -> dict:
@@ -45,14 +75,26 @@ def lidar_plan(cfg: dict) -> dict:
     cells = [(row, col) for row in range(n_h) for col in range(n_w)]
     if len(cells) != len(aligned):
         raise RuntimeError(f"aligned rays {len(aligned)} do not match the {n_h}x{n_w} patch grid")
-    wide = wide_lidar_rays(cfg) if cfg.get("wide_lidar", True) else []
+    wide, wide_lfnav = wide_lidar_rays(cfg) if cfg.get("wide_lidar", True) else ([], [])
     return {
         "lidar_rays": aligned + wide,
         "aligned": (0, len(aligned)),
         "wide": (len(aligned), len(aligned) + len(wide)),
         "rows_cols": cells,
-        "wide_angles_deg": [(math.degrees(pitch), math.degrees(yaw)) for pitch, yaw, _reach in wide],
+        "wide_angles_deg": wide_lfnav,
     }
+
+
+def nearest_patch(direction, cfg: dict) -> tuple[int, int]:
+    rays = rays_from_cfg(cfg)
+    best_dot, best = -2.0, (0, 0)
+    tx, ty, tz = direction
+    for i, row in enumerate(rays):
+        for j, (x, y, z) in enumerate(row):
+            dot = x * tx + y * ty + z * tz
+            if dot > best_dot:
+                best_dot, best = dot, (i, j)
+    return best
 
 
 def _ray_at(values, index):
@@ -135,7 +177,7 @@ def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
         wide.append({
             "pitch": pitch,
             "yaw": yaw,
-            "yaw_offset": yaw,
+            "yaw_offset": yaw,  # lfnav degrees: +yaw is right, already un-flipped in lidar_plan
             "label": label,
             "distance": dist,
         })

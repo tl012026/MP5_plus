@@ -84,22 +84,49 @@ def project_points(K, R, xy1) -> np.ndarray:
     return mapped
 
 
-def hud_mask(height: int, width: int, calib: dict | None = None) -> np.ndarray:
+def hud_hand_mask(height: int, width: int, calib: dict | None = None) -> np.ndarray:
+    """True on world pixels. False on the hotbar and the on-screen hand.
+
+    Fractions come from camera_calib (same keys as capture_rotations).
+    """
     calib = calib or {}
     bottom = float(calib.get("bottom_frac", 0.18))
-    cross = float(calib.get("crosshair_frac", 0.03))
     hand_w = float(calib.get("hand_width_frac", 0.22))
     hand_h = float(calib.get("hand_height_frac", 0.28))
     mask = np.ones((height, width), bool)
     y0 = int((1.0 - bottom) * height)
     mask[y0:, :] = False
-    cx, cy = width // 2, height // 2
-    r = max(2, int(cross * min(height, width)))
-    mask[cy - r:cy + r + 1, cx - r:cx + r + 1] = False
     x0 = int((1.0 - hand_w) * width)
     y1 = int((1.0 - hand_h) * height)
     mask[y1:, x0:] = False
     return mask
+
+
+def hud_mask(height: int, width: int, calib: dict | None = None) -> np.ndarray:
+    calib = calib or {}
+    mask = hud_hand_mask(height, width, calib)
+    cross = float(calib.get("crosshair_frac", 0.03))
+    cx, cy = width // 2, height // 2
+    r = max(2, int(cross * min(height, width)))
+    mask[cy - r:cy + r + 1, cx - r:cx + r + 1] = False
+    return mask
+
+
+def patch_ignore(height: int, width: int, n_h: int, n_w: int, calib: dict | None = None) -> list[list[bool]]:
+    """Patches whose HUD/hand coverage is at least hud_ignore_frac."""
+    calib = calib or {}
+    frac = float(calib.get("hud_ignore_frac", 0.5))
+    keep = hud_hand_mask(height, width, calib)
+    ignored = [[False for _ in range(n_w)] for _ in range(n_h)]
+    ph, pw = height / n_h, width / n_w
+    for i in range(n_h):
+        for j in range(n_w):
+            y0, y1 = int(i * ph), int((i + 1) * ph)
+            x0, x1 = int(j * pw), int((j + 1) * pw)
+            cell = keep[y0:y1, x0:x1]
+            if cell.size and float((~cell).mean()) >= frac:
+                ignored[i][j] = True
+    return ignored
 
 
 def gradient_mask(rgb: np.ndarray, grad_min: float = 8.0) -> np.ndarray:

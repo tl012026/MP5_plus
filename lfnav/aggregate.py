@@ -36,11 +36,12 @@ def distance_bin(blocks: float, near: float = 3.0, mid: float = 10.0) -> str:
     return "far"
 
 
-def aggregate_object(present_hw, dist_hw=None) -> ObjectBelief:
+def aggregate_object(present_hw, dist_hw=None, ignore_hw=None) -> ObjectBelief:
     """present_hw[row][col] in [0, 1]. dist_hw[row][col] is near/mid/far or a {bin: prob} map.
 
     present is the max over patches. Direction mass is the sum of present in each horizontal
-    third, normalized. Distance mass is present-weighted over patches.
+    third, normalized. Distance mass is present-weighted over patches. Ignored HUD/hand
+    patches are skipped.
     """
     if not present_hw or not present_hw[0]:
         return ObjectBelief()
@@ -51,6 +52,8 @@ def aggregate_object(present_hw, dist_hw=None) -> ObjectBelief:
     dist_mass = _blank_dist()
     for i in range(n_h):
         for j in range(n_w):
+            if ignore_hw and i < len(ignore_hw) and j < len(ignore_hw[i]) and ignore_hw[i][j]:
+                continue
             p = float(present_hw[i][j])
             present = max(present, p)
             dir_mass[column_direction(j, n_w)] += p

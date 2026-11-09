@@ -34,9 +34,11 @@ camera_calib:
   hand_height_frac: 0.28
   grad_min: 8
   ransac_px: 4.0
-  pig_rgb_low: [180, 80, 80]
-  pig_rgb_high: [255, 200, 180]
+  pig_h_deg: [320, 30]
+  pig_s: [0.22, 0.90]
+  pig_v: [0.40, 1.0]
   pig_frac: 0.08
+  hud_ignore_frac: 0.5
   iou_good: 0.5
 aligned_ray_range: 16
 wide_ray_range: 32

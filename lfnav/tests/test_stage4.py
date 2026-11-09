@@ -13,6 +13,7 @@ from lfnav.perception.encoder import FakeEncoder
 from lfnav.perception.extract_features import extract_shard
 from lfnav.perception.minellm import parse_choice, parse_yes, scene_from_answers
 from lfnav.perception.preprocess import target_hw
+from lfnav.perception.learned import train_step_numpy
 from lfnav.perception.train_perception import dry_run, split_name
 
 
@@ -61,6 +62,13 @@ class PerceptionTest(unittest.TestCase):
         self.assertGreater(report["present"]["f1"], 0.0)
         self.assertGreater(report["present"]["hallucination"], 0.0)
         self.assertEqual(report["direction_accuracy"], 1.0)
+
+    def test_ignore_patches_drop_out_of_loss(self):
+        logits = np.array([10.0, -10.0])
+        target = np.array([0.0, 0.0])
+        full = train_step_numpy(logits, target)
+        masked = train_step_numpy(logits, target, ignore=[1.0, 0.0])
+        self.assertLess(masked, full)
 
 
 if __name__ == "__main__":

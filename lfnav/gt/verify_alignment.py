@@ -13,16 +13,44 @@ import numpy as np
 
 from lfnav.config import load_config
 from lfnav.geom import patch_grid
+from lfnav.gt.camera import hud_hand_mask
 from lfnav.gt.capture_rotations import NOOP, as_hwc, pose_of
 from lfnav.io import atomic_write_json
 from lfnav.obsutil import lookup
 
 
-def pink_mask(rgb: np.ndarray, low, high) -> np.ndarray:
-    low = np.asarray(low, np.float32)
-    high = np.asarray(high, np.float32)
-    pix = rgb.astype(np.float32)
-    return np.all((pix >= low) & (pix <= high), axis=-1)
+def rgb_to_hsv(rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    pix = rgb.astype(np.float64) / 255.0
+    r, g, b = pix[..., 0], pix[..., 1], pix[..., 2]
+    maxc = np.maximum(np.maximum(r, g), b)
+    minc = np.minimum(np.minimum(r, g), b)
+    v = maxc
+    span = maxc - minc
+    s = np.divide(span, maxc, out=np.zeros_like(maxc), where=maxc > 1e-8)
+    h = np.zeros_like(maxc)
+    rc = np.divide(maxc - r, span, out=np.zeros_like(maxc), where=span > 1e-8)
+    gc = np.divide(maxc - g, span, out=np.zeros_like(maxc), where=span > 1e-8)
+    bc = np.divide(maxc - b, span, out=np.zeros_like(maxc), where=span > 1e-8)
+    h = np.where((maxc == r) & (span > 1e-8), (bc - gc) * 60.0, h)
+    h = np.where((maxc == g) & (span > 1e-8), 120.0 + (rc - bc) * 60.0, h)
+    h = np.where((maxc == b) & (span > 1e-8), 240.0 + (gc - rc) * 60.0, h)
+    h = np.mod(h, 360.0)
+    return h, s, v
+
+
+def pink_mask(rgb: np.ndarray, calib: dict) -> np.ndarray:
+    """Hue near pink, medium saturation, mid-to-high value. HUD/hand excluded."""
+    h_lo, h_hi = [float(v) for v in (calib.get("pig_h_deg") or [320, 30])]
+    s_lo, s_hi = [float(v) for v in (calib.get("pig_s") or [0.22, 0.90])]
+    v_lo, v_hi = [float(v) for v in (calib.get("pig_v") or [0.40, 1.0])]
+    hue, sat, val = rgb_to_hsv(rgb)
+    if h_lo <= h_hi:
+        hue_ok = (hue >= h_lo) & (hue <= h_hi)
+    else:
+        hue_ok = (hue >= h_lo) | (hue <= h_hi)
+    pig = hue_ok & (sat >= s_lo) & (sat <= s_hi) & (val >= v_lo) & (val <= v_hi)
+    keep = hud_hand_mask(rgb.shape[0], rgb.shape[1], calib)
+    return pig & keep
 
 
 def patch_sets(mask: np.ndarray, n_h: int, n_w: int, frac: float) -> set[tuple[int, int]]:
@@ -48,6 +76,31 @@ def ray_pig_patches(obs: dict, cfg: dict) -> set[tuple[int, int]]:
             continue
         hit.add((int(ray["row"]), int(ray["col"])))
     return hit
+
+
+def mirror_cells(cells: set[tuple[int, int]], n_h: int, n_w: int, flip_lr: bool, flip_ud: bool) -> set[tuple[int, int]]:
+    out = set()
+    for i, j in cells:
+        ii = n_h - 1 - i if flip_ud else i
+        jj = n_w - 1 - j if flip_lr else j
+        out.add((ii, jj))
+    return out
+
+
+def centroid_cells(cells: set[tuple[int, int]], n_h: int, n_w: int, height: int, width: int):
+    if not cells:
+        return None
+    ph, pw = height / n_h, width / n_w
+    xs = [(j + 0.5) * pw for i, j in cells]
+    ys = [(i + 0.5) * ph for i, j in cells]
+    return [float(np.mean(xs)), float(np.mean(ys))]
+
+
+def centroid_mask(mask: np.ndarray):
+    ys, xs = np.where(mask)
+    if len(xs) == 0:
+        return None
+    return [float(xs.mean()), float(ys.mean())]
 
 
 def iou(a: set, b: set) -> float:
@@ -136,8 +189,6 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     cfg = apply_intrinsics(load_config(args.config), Path(args.intrinsics))
     calib = cfg.get("camera_calib") or {}
-    low = calib.get("pig_rgb_low", [180, 80, 80])
-    high = calib.get("pig_rgb_high", [255, 200, 180])
     frac = float(calib.get("pig_frac", 0.08))
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -161,39 +212,60 @@ def main(argv=None) -> int:
                 raw = dict(raw)
                 raw[key] = converted["aligned"]
             rgb = as_hwc(raw["rgb"])
-            pink = pink_mask(rgb, low, high)
+            pink = pink_mask(rgb, calib)
             pink_cells = patch_sets(pink, n_h, n_w, frac)
             ray_cells = ray_pig_patches(raw, cfg)
             score = iou(ray_cells, pink_cells)
             dist = mean_center_distance(ray_cells, pink, n_h, n_w)
+            mirrors = {
+                "none": iou(ray_cells, pink_cells),
+                "flip_lr": iou(mirror_cells(ray_cells, n_h, n_w, True, False), pink_cells),
+                "flip_ud": iou(mirror_cells(ray_cells, n_h, n_w, False, True), pink_cells),
+                "flip_both": iou(mirror_cells(ray_cells, n_h, n_w, True, True), pink_cells),
+            }
             vis = overlay(rgb, ray_cells, pink_cells, n_h, n_w)
             name = f"align_{t:02d}.png"
+            mask_name = f"mask_{t:02d}.png"
             try:
                 from PIL import Image
                 Image.fromarray(vis).save(out / name)
+                mask_rgb = np.zeros_like(rgb)
+                mask_rgb[pink] = (255, 80, 180)
+                Image.fromarray(mask_rgb).save(out / mask_name)
             except ImportError:
                 (out / name).write_bytes(b"")
             rows.append({
                 "file": name,
+                "mask": mask_name,
                 "iou": score,
                 "mean_px": dist,
                 "n_ray": len(ray_cells),
                 "n_pink": len(pink_cells),
+                "ray_centroid": centroid_cells(ray_cells, n_h, n_w, rgb.shape[0], rgb.shape[1]),
+                "pink_centroid": centroid_mask(pink),
+                "iou_mirrors": mirrors,
                 "pose": pose_of(raw, cfg),
             })
     finally:
         close_env(env)
     ious = [r["iou"] for r in rows]
     dists = [r["mean_px"] for r in rows if r["mean_px"] is not None]
+    mirror_med = {}
+    for key in ("none", "flip_lr", "flip_ud", "flip_both"):
+        vals = [r["iou_mirrors"][key] for r in rows]
+        mirror_med[key] = float(np.median(vals)) if vals else None
+    best_mirror = max((k for k in mirror_med if mirror_med[k] is not None), key=lambda k: mirror_med[k], default="none")
     summary = {
         "frames": rows,
         "iou_median": float(np.median(ious)) if ious else None,
         "mean_px": float(np.mean(dists)) if dists else None,
         "iou_good": float(calib.get("iou_good", 0.5)),
-        "note": "median IoU above iou_good is treated as aligned enough",
+        "iou_mirrors_median": mirror_med,
+        "best_mirror": best_mirror,
+        "note": "median IoU above iou_good is treated as aligned enough; none should be the best of the four mirrors",
     }
     atomic_write_json(out / "verify.json", summary)
-    print(json.dumps({k: summary[k] for k in ("iou_median", "mean_px", "iou_good")}, indent=2))
+    print(json.dumps({k: summary[k] for k in ("iou_median", "mean_px", "iou_good", "iou_mirrors_median", "best_mirror")}, indent=2))
     return 0
 
 

@@ -7,8 +7,16 @@ import unittest
 
 import numpy as np
 
-from lfnav.env.minedojo_env import aligned_lidar_rays
-from lfnav.geom import ray_directions, ray_directions_from_K, scale_intrinsics
+from lfnav.config import load_config
+from lfnav.env.minedojo_env import (
+    aligned_lidar_rays,
+    convert_rays,
+    from_minedojo_lidar,
+    lidar_plan,
+    nearest_patch,
+    to_minedojo_lidar,
+)
+from lfnav.geom import ray_directions, ray_directions_from_K, rays_from_cfg, scale_intrinsics
 from lfnav.gt.camera import (
     hud_mask,
     initial_K,
@@ -225,6 +233,39 @@ class SyntheticFitTest(unittest.TestCase):
         self.assertTrue(ok)
         self.assertGreaterEqual(len(pairs), 2)
         self._assert_close(k_fit, k)
+
+
+class MineDojoAngleTest(unittest.TestCase):
+    def test_bottom_right_patch_minedojo_yaw_pitch_negative(self):
+        cfg = {"image_hw": [224, 364], "patch": 14, "fov_deg": 70, "fov_axis": "vertical", "aligned_ray_range": 16}
+        rays = rays_from_cfg(cfg)
+        pitch, yaw, _reach = to_minedojo_lidar(rays[-1][-1], 16)
+        self.assertLess(yaw, 0.0)
+        self.assertLess(pitch, 0.0)
+
+    def test_roundtrip_cell_via_convert_rays(self):
+        cfg = load_config()
+        cfg["image_hw"] = [224, 364]
+        plan = lidar_plan(cfg)
+        idx = len(plan["rows_cols"]) - 1
+        row, col = plan["rows_cols"][idx]
+        md = plan["lidar_rays"][idx]
+        self.assertEqual(nearest_patch(from_minedojo_lidar(md[0], md[1]), cfg), (row, col))
+        n = plan["wide"][1]
+        names = ["air"] * n
+        names[idx] = "pig"
+        converted = convert_rays(
+            {
+                "block_name": names,
+                "block_distance": [4.0] * n,
+                "entity_name": ["null"] * n,
+                "entity_distance": [0.0] * n,
+            },
+            plan,
+            cfg,
+        )
+        hit = converted["aligned"][idx]
+        self.assertEqual((hit["row"], hit["col"], hit["label"]), (row, col, "pig"))
 
 
 if __name__ == "__main__":

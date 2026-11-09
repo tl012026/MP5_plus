@@ -249,6 +249,13 @@ class AggregateTest(unittest.TestCase):
         self.assertEqual(distance_bin(3.1), "mid")
         self.assertEqual(distance_bin(11), "far")
 
+    def test_ignore_skips_present_and_direction(self):
+        present = [[1.0, 0.0], [0.0, 1.0]]
+        ignore = [[True, False], [False, False]]
+        belief = aggregate_object(present, ignore_hw=ignore)
+        self.assertEqual(belief.present, 1.0)
+        self.assertEqual(max(belief.direction, key=belief.direction.get), "right")
+
 
 class SweepAndEnvTest(unittest.TestCase):
     def test_sweep_prefers_separating_threshold(self):

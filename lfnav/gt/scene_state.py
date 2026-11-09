@@ -12,6 +12,7 @@ import logging
 
 from lfnav.aggregate import aggregate_object, distance_bin
 from lfnav.geom import patch_grid
+from lfnav.gt.camera import patch_ignore
 from lfnav.obsutil import lookup
 from lfnav.types import SceneState
 
@@ -180,6 +181,7 @@ def scene_state_from_obs(obs: dict, cfg: dict) -> SceneState:
     mid = float((cfg.get("distance_bins") or {}).get("mid", 10))
     present = {name: [[0.0 for _ in range(n_w)] for _ in range(n_h)] for name in objects}
     dist = {name: [[None for _ in range(n_w)] for _ in range(n_h)] for name in objects}
+    ignored = patch_ignore(int(height), int(width), n_h, n_w, cfg.get("camera_calib") or {})
     rays = lookup(obs, keys.get("aligned_rays"), []) or []
     for ray in rays:
         name = resolve_label(ray.get("label"), aliases, objects)
@@ -188,9 +190,11 @@ def scene_state_from_obs(obs: dict, cfg: dict) -> SceneState:
         i, j = int(ray["row"]), int(ray["col"])
         if not (0 <= i < n_h and 0 <= j < n_w):
             continue
+        if ignored[i][j]:
+            continue
         present[name][i][j] = 1.0
         dist[name][i][j] = distance_bin(float(ray.get("distance", mid + 1)), near, mid)
-    beliefs = {name: aggregate_object(present[name], dist[name]) for name in objects}
+    beliefs = {name: aggregate_object(present[name], dist[name], ignored) for name in objects}
 
     unknown: list[str] = []
     biome_value = decode_biome(obs, cfg, unknown)
@@ -204,4 +208,6 @@ def scene_state_from_obs(obs: dict, cfg: dict) -> SceneState:
         weather=_one_hot(weather_value, list(labels.get("weather") or ["clear", "rain"])),
         brightness=_one_hot(bright, list(labels.get("brightness") or [])),
         unknown=unknown,
+        ignore=ignored,
+        patches=present,
     )

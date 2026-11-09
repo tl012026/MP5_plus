@@ -20,6 +20,7 @@ def wide_target(obs: dict, target: str, cfg: dict) -> dict:
     offset = float(best.get("yaw_offset", 0.0))
     if offset > 180.0:
         offset -= 360.0
+    # yaw_offset is lfnav degrees (+ is right). MineDojo sign flip happens only in to_minedojo_lidar.
     if offset < -20.0:
         direction = "left"
     elif offset > 20.0:

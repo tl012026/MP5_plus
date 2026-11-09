@@ -54,12 +54,17 @@ class CollectTest(unittest.TestCase):
             self.assertEqual(again, frames_done(out))
             with np.load(sorted(out.glob("shard_*.npz"))[0]) as data:
                 self.assertEqual(data["rgb"].shape[-1], 3)
+                scene = json.loads(str(data["scene"][0]))
+                self.assertIn("ignore", scene)
+                self.assertIn("patches", scene)
 
     def test_tint_writes_ppm(self):
         rgb = np.zeros((8, 8, 3), dtype=np.uint8)
         present = {"pig": [[0.0, 1.0], [0.0, 0.0]]}
         painted = tint(rgb, present, ["pig"])
         self.assertGreater(int(painted[0, 4, 0]), 0)
+        ignored = tint(rgb, present, ["pig"], [[True, False], [False, False]])
+        self.assertEqual(tuple(int(v) for v in ignored[0, 0]), (128, 128, 128))
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "frame.ppm"
             write_ppm(path, painted)

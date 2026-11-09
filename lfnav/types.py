@@ -63,6 +63,8 @@ class SceneState:
     weather: dict = field(default_factory=dict)
     brightness: dict = field(default_factory=dict)
     unknown: list = field(default_factory=list)
+    ignore: list = field(default_factory=list)
+    patches: dict = field(default_factory=dict)
 
     def object(self, name: str) -> ObjectBelief:
         raw = self.objects.get(name)
@@ -83,6 +85,8 @@ class SceneState:
             "weather": dict(self.weather),
             "brightness": dict(self.brightness),
             "unknown": list(self.unknown),
+            "ignore": [list(row) for row in (self.ignore or [])],
+            "patches": {name: [list(row) for row in grid] for name, grid in (self.patches or {}).items()},
         }
 
     @classmethod
@@ -95,6 +99,8 @@ class SceneState:
             weather=dict(data.get("weather") or {}),
             brightness=dict(data.get("brightness") or {}),
             unknown=list(data.get("unknown") or []),
+            ignore=[list(row) for row in (data.get("ignore") or [])],
+            patches={name: [list(row) for row in grid] for name, grid in (data.get("patches") or {}).items()},
         )
 
 

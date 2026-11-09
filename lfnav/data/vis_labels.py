@@ -11,7 +11,7 @@ import numpy as np
 from lfnav.aggregate import column_direction
 
 
-def tint(rgb: np.ndarray, present, names: list[str]) -> np.ndarray:
+def tint(rgb: np.ndarray, present, names: list[str], ignore=None) -> np.ndarray:
     image = np.array(rgb, copy=True)
     if image.dtype != np.uint8:
         image = image.astype(np.uint8)
@@ -21,15 +21,18 @@ def tint(rgb: np.ndarray, present, names: list[str]) -> np.ndarray:
     ph, pw = height // n_h, width // n_w
     for i in range(n_h):
         for j in range(n_w):
+            y0, x0 = i * ph, j * pw
+            if ignore and i < len(ignore) and j < len(ignore[i]) and ignore[i][j]:
+                image[y0:y0 + ph, x0:x0 + pw] = (128, 128, 128)
+                continue
             label = None
             for name in names:
-                if present[name][i][j] >= 0.5:
+                if name in present and present[name][i][j] >= 0.5:
                     label = name
                     break
             if label is None:
                 continue
             color = {"pig": (220, 80, 80), "grass": (40, 160, 40), "tree": (20, 100, 20), "cow": (80, 80, 200)}.get(label, (200, 200, 40))
-            y0, x0 = i * ph, j * pw
             image[y0:y0 + max(ph // 5, 1), x0:x0 + pw] = color
             image[y0:y0 + ph, x0:x0 + max(pw // 8, 1)] = color
     return image
@@ -55,12 +58,16 @@ def main():
     with np.load(args.shard, allow_pickle=False) as data:
         rgb = data["rgb"][args.index]
         scene = json.loads(str(data["scene"][args.index]))
-    # The stored scene is aggregated. Overlay is informative only when patch maps
-    # were saved. This draws the direction of the target if present.
     image = np.asarray(rgb)
+    if image.ndim == 2:
+        image = np.repeat(image[..., None], 3, axis=-1)
+    patches = scene.get("patches") or {}
+    names = [n for n in args.names if n in patches] or args.names
+    if patches:
+        image = tint(image, patches, names, scene.get("ignore"))
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    write_ppm(out, image if image.ndim == 3 else np.repeat(image[..., None], 3, axis=-1))
+    write_ppm(out, image)
     print(json.dumps({"out": str(out), "target_present": {n: scene.get("objects", {}).get(n, {}).get("present", 0) for n in args.names}}))
 
 

@@ -44,10 +44,20 @@ class LearnedPerception:
         return SceneState(objects=beliefs)
 
 
-def train_step_numpy(logits, target) -> float:
-    """One BCE-with-logits step on numpy arrays, used when torch is absent."""
+def train_step_numpy(logits, target, ignore=None) -> float:
+    """One BCE-with-logits step on numpy arrays, used when torch is absent.
+
+    Ignored HUD/hand patches (ignore=1) drop out of the mean.
+    """
     preds = 1.0 / (1.0 + np.exp(-np.asarray(logits, dtype=np.float64)))
     target = np.asarray(target, dtype=np.float64)
     eps = 1e-6
     loss = -(target * np.log(preds + eps) + (1.0 - target) * np.log(1.0 - preds + eps))
-    return float(loss.mean())
+    if ignore is None:
+        return float(loss.mean())
+    w = 1.0 - np.asarray(ignore, dtype=np.float64)
+    w = np.broadcast_to(w, loss.shape)
+    denom = float(w.sum())
+    if denom <= 0:
+        return 0.0
+    return float((loss * w).sum() / denom)
