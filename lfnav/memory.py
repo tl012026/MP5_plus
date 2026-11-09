@@ -28,8 +28,15 @@ class Memory:
         self.recent_actions.clear()
         self.recent_matches.clear()
 
-    def observe(self, pos, yaw: float, action: str | None = None, match: dict | None = None) -> None:
-        if pos is not None:
+    def observe(
+        self,
+        pos,
+        yaw: float,
+        action: str | None = None,
+        match: dict | None = None,
+        increment_visits: bool = True,
+    ) -> None:
+        if pos is not None and increment_visits:
             cell = (int(math.floor(pos[0])), int(math.floor(pos[2] if len(pos) > 2 else pos[1])))
             self.visits[cell] = self.visits.get(cell, 0) + 1
         if action:
@@ -65,4 +72,7 @@ class Memory:
             "local_grid": self.local_grid(pos, yaw),
             "recent_actions": list(self.recent_actions),
             "recent_matches": list(self.recent_matches),
+            "visits": {f"{x},{z}": n for (x, z), n in self.visits.items()},
+            "pos": None if pos is None else list(pos),
+            "yaw": float(yaw) if yaw is not None else 0.0,
         }

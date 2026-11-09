@@ -60,7 +60,11 @@ class ControllerTest(unittest.TestCase):
         self.assertGreater(result.obs["location_stats"]["pos"][2], 0.5)
 
         water = FakeMineDojoEnv(cfg, {"water": [(0, 1)]})
-        avoided = Controller(water, cfg).execute("forward")
+        waded = Controller(water, cfg).execute("forward")
+        self.assertGreater(waded.obs["location_stats"]["pos"][2], 0.5)
+        self.assertTrue(waded.jumped)
+        deep = FakeMineDojoEnv(cfg, {"deep_water": [(0, 1)]})
+        avoided = Controller(deep, cfg).execute("forward")
         self.assertLess(abs(avoided.obs["location_stats"]["pos"][2]), 0.2)
         self.assertNotEqual(yaw_of(avoided.obs, cfg) % 360.0, 0.0)
 
@@ -84,7 +88,11 @@ class ControllerTest(unittest.TestCase):
         self.assertEqual(choose_forward(wall, 0.0, cfg), "turn_left_45")
         water = world.copy()
         water[5, 5, 6] = "flowing_water"
-        self.assertEqual(choose_forward(water, 0.0, cfg), "turn_right_45")
+        self.assertEqual(choose_forward(water, 0.0, cfg), "jump_forward")
+        deep = world.copy()
+        deep[5, 5, 6] = "flowing_water"
+        deep[5, 4, 6] = "water"
+        self.assertEqual(choose_forward(deep, 0.0, cfg), "turn_right_45")
         cliff = world.copy()
         cliff[5, 4, 6] = "air"
         cliff[5, 3, 6] = "air"
@@ -136,6 +144,7 @@ class EpisodeTest(unittest.TestCase):
                 return None
 
         env = FakeMineDojoEnv(cfg, {})
+        cfg["match"]["stop_rule"] = "fraction"
         rec, events = run_episode(env, task, cfg, perception=AlwaysFound(), seed=0)
         self.assertTrue(rec["false_stop"])
         self.assertFalse(rec["success"])

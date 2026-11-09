@@ -24,13 +24,16 @@ class Matcher:
         self.tau_cond = float(match.get("tau_cond", 0.5))
         self.tau_near = float(match.get("tau_near", 0.5))
         self.stop_mode = str(match.get("stop_mode", "sr_b"))
+        self.stop_rule = str(match.get("stop_rule", "nearest"))
+        judge = cfg.get("judge") or {}
+        self.judge_radius = float(match.get("judge_radius", judge.get("radius", 3.0)))
         self.smooth_n = int(match.get("smooth_n", 1))
         self._found_hist: list[bool] = []
 
     def reset(self) -> None:
         self._found_hist.clear()
 
-    def match(self, task: TaskSpec, scene: SceneState) -> MatchResult:
+    def match(self, task: TaskSpec, scene: SceneState, aligned_distance=None) -> MatchResult:
         target = scene.object(task.target)
         satisfied = {}
         missing = []
@@ -86,8 +89,15 @@ class Matcher:
         near_p = float(target.distance.get("near", 0.0))
         if self.stop_mode == "sr_a":
             stop = found
-        else:
+        elif self.stop_rule == "fraction":
             stop = found and near_p >= self.tau_near
+        else:
+            # nearest (default): same as SR-b — found and closest aligned target ray ≤ judge.radius.
+            stop = (
+                found
+                and aligned_distance is not None
+                and float(aligned_distance) <= self.judge_radius
+            )
 
         conf = target.present
         for key, ok in satisfied.items():

@@ -20,12 +20,17 @@ vectors:
   look_reset: [0, 0, 0, 12, 12, 0, 0, 0]
   look_down_15: [0, 0, 0, 13, 12, 0, 0, 0]
   look_up_15: [0, 0, 0, 11, 12, 0, 0, 0]
+  backward: [2, 0, 0, 12, 12, 0, 0, 0]
 degrees:
   turn_left_15: -15
   turn_right_15: 15
   turn_left_45: -45
   turn_right_45: 45
 stuck_threshold: 2
+displacement_stuck: true
+stuck_window: 60
+stuck_displacement: 1.0
+shallow_water_ok: true
 # Raw MineDojo voxel names (spaces become underscores). grass/dirt/sand/stone are solid.
 passable_blocks:
   - air
@@ -36,9 +41,18 @@ passable_blocks:
   - deadbush
   - snow_layer
   - reeds
+# Used only when shallow_water_ok is false.
 hazard_blocks:
   - water
   - flowing_water
   - lava
   - flowing_lava
+hard_hazard_blocks:
+  - lava
+  - flowing_lava
+  - fire
+  - cactus
+water_blocks:
+  - water
+  - flowing_water
 avoid_cliffs: true

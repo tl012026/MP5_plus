@@ -12,7 +12,7 @@ from lfnav.types import SceneState, TaskSpec
 
 
 def score(rows, taus, stop_mode: str) -> dict:
-    cfg = {"match": {"tau_obj": taus[0], "tau_cond": taus[1], "tau_near": taus[2], "stop_mode": stop_mode, "smooth_n": 1}}
+    cfg = {"match": {"tau_obj": taus[0], "tau_cond": taus[1], "tau_near": taus[2], "stop_mode": stop_mode, "stop_rule": "fraction", "smooth_n": 1}}
     matcher = Matcher(cfg)
     found_ok = stop_ok = 0
     for row in rows:

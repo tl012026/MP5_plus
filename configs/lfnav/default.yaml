@@ -51,6 +51,7 @@ match:
   tau_cond: 0.5
   tau_near: 0.5
   stop_mode: sr_b
+  stop_rule: nearest
   smooth_n: 1
 
 judge:
@@ -73,6 +74,12 @@ policy:
   recent_k: 8
   memory_size: 15
   dagger: false
+  c1_opening_scan: true
+  c1_eight_sectors: true
+  c1_mid_cap: 2
+  c1_lost_horizon: 20
+  c1_recover_scan: true
+  skip_visits_when_stuck: true
 
 perception:
   encoder: dinov2_vits14
@@ -123,7 +130,10 @@ minedojo:
   spawn_via_reset_hook: false
   settle_ticks: 5
   clear_entities: true
-  spawn_drop_height: 8
+  spawn_drop_height: 2
+  spawn_resistance: true
+  freeze_mobs: true
+  clear_vegetation: true
   settle_after_spawn: 20
   spawn_verify_retry: false
   verify_ticks: 10

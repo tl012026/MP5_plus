@@ -394,6 +394,45 @@ def _execute_summon(env, name: str, dx: int, dy: int, dz: int) -> None:
     _execute_cmd(env, f"/summon {name} ~{dx} ~{dy} ~{dz}")
 
 
+MC_FILL_LIMIT = 32768
+
+
+def task_mentions_grass(task) -> bool:
+    target = getattr(task, "target", None)
+    if target is None and isinstance(task, dict):
+        target = task.get("target")
+    if str(target or "").strip().lower() == "grass":
+        return True
+    cond = getattr(task, "conditions", None)
+    if cond is None and isinstance(task, dict):
+        cond = task.get("conditions")
+    near = (cond or {}).get("near") or []
+    if isinstance(near, str):
+        near = [near]
+    return any(str(name).strip().lower() == "grass" for name in near)
+
+
+def vegetation_fill_commands(radius_xz: int = 32, radius_y: int = 4, blocks=("tallgrass", "double_plant")) -> list[str]:
+    """Chunked /fill replace so each command stays under the 32768-block cap."""
+    y0, y1 = -int(radius_y), int(radius_y)
+    z0, z1 = -int(radius_xz), int(radius_xz)
+    ny = y1 - y0 + 1
+    nz = z1 - z0 + 1
+    max_nx = max(1, MC_FILL_LIMIT // max(ny * nz, 1))
+    cmds = []
+    x = -int(radius_xz)
+    x_end = int(radius_xz)
+    while x <= x_end:
+        x1 = min(x + max_nx - 1, x_end)
+        vol = (x1 - x + 1) * ny * nz
+        if vol > MC_FILL_LIMIT:
+            raise RuntimeError(f"fill volume {vol} exceeds {MC_FILL_LIMIT}")
+        for block in blocks:
+            cmds.append(f"/fill ~{x} ~{y0} ~{z0} ~{x1} ~{y1} ~{z1} air 0 replace {block}")
+        x = x1 + 1
+    return cmds
+
+
 def _verify_and_retry_target(env, obs, cfg, target, names, seed, min_d, max_d, yaw, hard, retries, verify, summon_one, meta):
     """Old ray-check retry. Kept behind minedojo.spawn_verify_retry (default false)."""
     from lfnav.gt.initial import privileged_ray_distance
@@ -419,7 +458,7 @@ def spawn_task_mobs(env, task, cfg: dict, seed: int) -> dict:
     settle = int(env_cfg.get("settle_ticks", 5))
     verify = int(env_cfg.get("verify_ticks", 10))
     retries = int(env_cfg.get("spawn_retries", 3))
-    drop_y = int(env_cfg.get("spawn_drop_height", 8))
+    drop_y = int(env_cfg.get("spawn_drop_height", 2))
     settle_after = int(env_cfg.get("settle_after_spawn", 20))
     table = _difficulty(cfg)
     episode = _episode_of(task)
@@ -434,6 +473,7 @@ def spawn_task_mobs(env, task, cfg: dict, seed: int) -> dict:
         "target_spawn_offset": None,
         "n_targets_spawned": 0,
         "natural_mobs_cleared": False,
+        "vegetation_cleared": False,
     }
     env.spawn_meta = meta
     if not names:
@@ -446,6 +486,12 @@ def spawn_task_mobs(env, task, cfg: dict, seed: int) -> dict:
             meta["natural_mobs_cleared"] = True
             for _ in range(2):
                 obs = _noop_tick(env)
+        skip_plants = task_mentions_grass(task)
+        if env_cfg.get("clear_vegetation", True) and not skip_plants:
+            for cmd in vegetation_fill_commands():
+                _execute_cmd(env, cmd)
+                obs = _noop_tick(env)
+            meta["vegetation_cleared"] = True
         yaw = yaw_of(obs, cfg)
         min_d = float(table.get("spawn_distance_min", 4))
         max_d = float(table.get("spawn_distance_max", 8))
@@ -458,6 +504,9 @@ def spawn_task_mobs(env, task, cfg: dict, seed: int) -> dict:
             offset["name"] = name
             _execute_summon(env, name, offset["dx"], offset["dy"], offset["dz"])
             tick = _noop_tick(env)
+            if env_cfg.get("spawn_resistance", True):
+                _execute_cmd(env, f"/effect @e[type={name}] resistance 10 4")
+                tick = _noop_tick(env)
             meta["spawn_offsets"].append(offset)
             if name == target:
                 meta["n_targets_spawned"] = int(meta["n_targets_spawned"]) + 1
@@ -467,6 +516,14 @@ def spawn_task_mobs(env, task, cfg: dict, seed: int) -> dict:
 
         for i, name in enumerate(names):
             obs = summon_one(name, i, behind=(hard and name == target), y=drop_y)
+        if env_cfg.get("freeze_mobs", True):
+            seen = []
+            for name in names:
+                if name in seen:
+                    continue
+                seen.append(name)
+                _execute_cmd(env, f"/effect @e[type={name}] slowness 1000000 10 true")
+                obs = _noop_tick(env)
         if env_cfg.get("spawn_verify_retry", False) and target and any(n == target for n in names):
             for _ in range(max(verify, 0)):
                 obs = _noop_tick(env)

@@ -68,7 +68,9 @@ class TypesTest(unittest.TestCase):
 
 class MatcherTest(unittest.TestCase):
     def test_found_and_stop_sr_b(self):
-        result = Matcher({"match": {"stop_mode": "sr_b"}}).match(task_4_4(), scene_pig())
+        result = Matcher({"match": {"stop_mode": "sr_b"}}).match(
+            task_4_4(), scene_pig(), aligned_distance=2.0,
+        )
         self.assertEqual(result.status, "found")
         self.assertTrue(result.stop)
         self.assertEqual(result.target_direction, "center")
@@ -90,6 +92,20 @@ class MatcherTest(unittest.TestCase):
         self.assertEqual(result.status, "not_found")
         self.assertIsNone(result.target_direction)
         self.assertIsNone(result.target_distance)
+
+    def test_nearest_stop_uses_aligned_ray(self):
+        far = Matcher({"match": {"stop_rule": "nearest"}, "judge": {"radius": 3}}).match(
+            task_4_4(), scene_pig(), aligned_distance=8.0,
+        )
+        close = Matcher({"match": {"stop_rule": "nearest"}, "judge": {"radius": 3}}).match(
+            task_4_4(), scene_pig(), aligned_distance=2.0,
+        )
+        fraction = Matcher({"match": {"stop_rule": "fraction", "tau_near": 0.5}}).match(
+            task_4_4(), scene_pig(near=1.0), aligned_distance=8.0,
+        )
+        self.assertTrue(far.status == "found" and not far.stop)
+        self.assertTrue(close.stop)
+        self.assertTrue(fraction.stop)
 
     def test_sr_a_stops_when_far(self):
         far = scene_pig(near=0.1)

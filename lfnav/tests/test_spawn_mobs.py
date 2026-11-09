@@ -9,7 +9,13 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from lfnav.config import load_config
-from lfnav.env.minedojo_env import lidar_plan, sample_mob_offset, spawn_task_mobs
+from lfnav.env.minedojo_env import (
+    lidar_plan,
+    sample_mob_offset,
+    spawn_task_mobs,
+    task_mentions_grass,
+    vegetation_fill_commands,
+)
 from lfnav.gt.initial import apply_spawn_offset_distance, initial_scene_metrics
 from lfnav.types import TaskSpec
 
@@ -94,6 +100,42 @@ class SpawnOnceTest(unittest.TestCase):
         self.assertEqual(wrapper.spawn_meta["n_targets_spawned"], 1)
         self.assertFalse(wrapper.spawn_meta["spawn_failed"])
         self.assertTrue(wrapper.spawn_meta["natural_mobs_cleared"])
+        fills = [c for c in cmds if c.startswith("/fill ")]
+        self.assertTrue(fills)
+        self.assertTrue(wrapper.spawn_meta["vegetation_cleared"])
+        self.assertTrue(any("resistance 10 4" in c for c in cmds))
+        self.assertTrue(any("slowness 1000000 10 true" in c for c in cmds))
+        self.assertLess(cmds.index(fills[0]), next(i for i, c in enumerate(cmds) if c.startswith("/summon")))
+
+    def test_grass_tasks_skip_vegetation_clear(self):
+        cfg = self._cfg()
+        task = TaskSpec.from_dict(json.loads((SPECS / "4-4.json").read_text()))
+        self.assertTrue(task_mentions_grass(task))
+        cmds, steps = [], []
+        wrapper = _stub(cfg, cmds, steps)
+        spawn_task_mobs(wrapper, task, cfg, seed=3)
+        self.assertFalse(any(c.startswith("/fill ") for c in cmds))
+        self.assertFalse(wrapper.spawn_meta["vegetation_cleared"])
+
+    def test_fill_chunks_stay_under_limit(self):
+        cmds = vegetation_fill_commands()
+        self.assertGreaterEqual(len(cmds), 4)
+        for cmd in cmds:
+            parts = cmd.split()
+            x0, y0, z0, x1, y1, z1 = (int(p.replace("~", "") or "0") for p in parts[1:7])
+            vol = (abs(x1 - x0) + 1) * (abs(y1 - y0) + 1) * (abs(z1 - z0) + 1)
+            self.assertLessEqual(vol, 32768)
+            self.assertIn("replace", cmd)
+
+    def test_default_drop_height_is_two(self):
+        cfg = self._cfg()
+        del cfg["minedojo"]["spawn_drop_height"]
+        task = TaskSpec.from_dict(json.loads((SPECS / "1-4.json").read_text()))
+        cmds, steps = [], []
+        wrapper = _stub(cfg, cmds, steps)
+        spawn_task_mobs(wrapper, task, cfg, seed=3)
+        summons = [c for c in cmds if c.startswith("/summon pig")]
+        self.assertTrue(any("~2" in c for c in summons))
 
     def test_hard_offset_distance_is_the_initial_distance(self):
         cfg = self._cfg()

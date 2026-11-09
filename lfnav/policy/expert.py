@@ -36,5 +36,6 @@ class Expert(RuleBased):
     def act(self, policy_input: PolicyInput) -> PolicyOutput:
         wide = (policy_input.memory or {}).get("wide_target") or {}
         if wide.get("visible") and policy_input.match.get("status") != "found":
+            self._scan_left = 0
             return PolicyOutput([self._steer(wide.get("direction"))])
         return super().act(policy_input)

@@ -55,6 +55,8 @@ class FakeMineDojoEnv:
         self.solids = {tuple(p) for p in layout.get("solids", [])}
         self.tall = {tuple(p) for p in layout.get("tall", [])}
         self.water = {tuple(p) for p in layout.get("water", [])}
+        self.deep_water = {tuple(p) for p in layout.get("deep_water", [])}
+        self.water |= self.deep_water
         self.lava = {tuple(p) for p in layout.get("lava", [])}
         self.holes = {tuple(p) for p in layout.get("holes", [])}
         self.voxel_radius = int((cfg.get("minedojo") or {}).get("voxel_radius", layout.get("voxel_radius", 5)))
@@ -127,7 +129,9 @@ class FakeMineDojoEnv:
         jumped = False
         blocked = False
         if name in ("forward", "jump_forward"):
-            jumped, blocked = self._forward()
+            jumped, blocked = self._forward(jump=name == "jump_forward")
+        elif name == "backward":
+            jumped, blocked = self._forward(sign=-1)
         elif name == "turn_left_15":
             self.yaw = (self.yaw - 15.0) % 360.0
         elif name == "turn_right_15":
@@ -164,14 +168,16 @@ class FakeMineDojoEnv:
     def _cell(self, x, z):
         return (int(math.floor(x)), int(math.floor(z)))
 
-    def _forward(self) -> tuple[bool, bool]:
+    def _forward(self, sign: float = 1.0, jump: bool = False) -> tuple[bool, bool]:
         forward, _right = _yaw_basis(self.yaw)
-        nxt = self._cell(self.pos[0] + forward[0], self.pos[2] + forward[1])
-        if nxt in self.lava or nxt in self.water or nxt in self.tall:
+        nxt = self._cell(self.pos[0] + sign * forward[0], self.pos[2] + sign * forward[1])
+        if nxt in self.lava or nxt in self.tall:
             return False, True
-        jumped = nxt in self.solids
-        self.pos[0] += forward[0]
-        self.pos[2] += forward[1]
+        if nxt in self.deep_water:
+            return False, True
+        jumped = bool(jump) or nxt in self.solids or nxt in self.water
+        self.pos[0] += sign * forward[0]
+        self.pos[2] += sign * forward[1]
         return jumped, False
 
     def _voxel_name(self, cell, dy: int) -> str:
@@ -180,11 +186,13 @@ class FakeMineDojoEnv:
         if dy == 0:
             if cell in self.lava:
                 return "lava"
-            if cell in self.water:
+            if cell in self.water or cell in self.deep_water:
                 return "water"
             if cell in self.solids:
                 return "dirt"
             return str(self.blocks.get(cell, "air"))
+        if dy == -1 and cell in self.deep_water:
+            return "water"
         if cell in self.holes:
             return "air"
         return "dirt"

@@ -177,6 +177,7 @@ def open_episode(session, task: TaskSpec, cfg: dict, seed: int):
         "target_spawn_offset": spawn_meta.get("target_spawn_offset"),
         "n_targets_spawned": spawn_meta.get("n_targets_spawned", 0),
         "natural_mobs_cleared": bool(spawn_meta.get("natural_mobs_cleared", False)),
+        "vegetation_cleared": bool(spawn_meta.get("vegetation_cleared", False)),
     }
     return env, obs, public
 
@@ -234,13 +235,14 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         t0 = time.perf_counter()
         scene = perception.perceive(obs)
         t1 = time.perf_counter()
-        match = matcher.match(task, scene)
+        match = matcher.match(task, scene, aligned_distance=aligned_target_distance(obs, cfg, task.target))
         t2 = time.perf_counter()
         pos = position_of(obs, cfg)
         yaw = yaw_of(obs, cfg)
         mem = memory.to_dict(pos, yaw)
         mem["stuck"] = last_stuck
         mem["blocked"] = last_stuck
+        mem["env_steps"] = env_steps
         gt_frame = scene_state_from_obs(obs, cfg)
         if rec is not None:
             rec.set_info(match.to_dict())
@@ -276,7 +278,14 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
             if prev is not None and new_pos is not None:
                 path += math.hypot(new_pos[0] - prev[0], new_pos[-1] - prev[-1])
             prev = new_pos or prev
-            memory.observe(new_pos, yaw_of(result.obs, cfg), action, match.to_dict())
+            skip_stuck = bool((cfg.get("policy") or {}).get("skip_visits_when_stuck", True))
+            memory.observe(
+                new_pos,
+                yaw_of(result.obs, cfg),
+                action,
+                match.to_dict(),
+                increment_visits=not (skip_stuck and result.stuck),
+            )
             last_stuck = result.stuck
             obs = result.obs
             control_rows.append(result.to_dict())
@@ -337,6 +346,10 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         "natural_mobs_cleared": bool(meta.get("natural_mobs_cleared", False)),
         "target_never_seen": not seen_gt,
         "initial_target_distance_rays": meta.get("initial_target_distance_rays"),
+        "vegetation_cleared": bool(meta.get("vegetation_cleared", False)),
+        "n_stuck": int(getattr(controller, "n_stuck", 0)),
+        "n_escape": int(getattr(controller, "n_escape", 0)),
+        "stuck_steps_total": int(getattr(controller, "stuck_steps_total", 0)),
     })
     return verdict, events
 
@@ -350,6 +363,7 @@ def write_summary(out: Path) -> None:
         "difficulty", "world_seed", "reroll_count", "difficulty_unmet",
         "initial_target_visible", "initial_target_distance", "initial_target_distance_rays",
         "spawn_failed", "target_never_seen", "natural_mobs_cleared", "n_targets_spawned",
+        "vegetation_cleared", "n_stuck", "stuck_steps_total",
     ]
     for path in sorted(out.glob("*/*.json")):
         if path.name == "run_meta.json":
