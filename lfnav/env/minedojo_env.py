@@ -9,14 +9,14 @@ from __future__ import annotations
 
 import math
 
-from lfnav.geom import patch_grid, ray_directions
+from lfnav.geom import patch_grid, rays_from_cfg
 from lfnav.gt.fov import ray_angles_deg
 
 
 def aligned_lidar_rays(cfg: dict) -> list[tuple[float, float, float]]:
     height, width = cfg.get("image_hw", [224, 364])
     n_h, n_w = patch_grid(int(height), int(width), int(cfg.get("patch", 14)))
-    rays = ray_directions(n_h, n_w, float(cfg.get("fov_deg", 70)), str(cfg.get("fov_axis", "vertical")))
+    rays = rays_from_cfg(cfg)
     reach = float(cfg.get("aligned_ray_range", 16))
     out = []
     for row in rays:
