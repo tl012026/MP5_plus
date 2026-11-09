@@ -12,3 +12,5 @@ difficulty: easy
 judge:
   max_steps: 3000
   radius: 3.0
+frames:
+  every: 10

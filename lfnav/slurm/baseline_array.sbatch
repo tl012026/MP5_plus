@@ -33,4 +33,4 @@ DIFF=${DIFFS[$((idx % 3))]}
 OUT="$ROOT_OUT/$POLICY/$DIFF/$TASK"
 mkdir -p "$OUT"
 SPEC="$MP5/lfnav/tasks/specs/${TASK}.json"
-lfnav_sif_exec "$SIF" bash -c "export GRADLE_USER_HOME='$GRADLE_USER_HOME' && source '$ENVSH' && cd '$MP5' && xvfb-run -a python -m lfnav.eval.run --config '$CFG' --tasks '$SPEC' --seeds '$SEEDS' --out '$OUT' --skip-done --policy '$POLICY' --perception '$PERCEPTION' --backend minedojo --difficulty '$DIFF'"
+lfnav_sif_exec "$SIF" bash -c "source '$ENVSH' && export GRADLE_USER_HOME='$GRADLE_USER_HOME' && cd '$MP5' && xvfb-run -a python -m lfnav.eval.run --config '$CFG' --tasks '$SPEC' --seeds '$SEEDS' --out '$OUT' --skip-done --policy '$POLICY' --perception '$PERCEPTION' --backend minedojo --difficulty '$DIFF'"
