@@ -1,0 +1,7 @@
+inherit: demo_collect.yaml
+
+# Natural animals stay in the world. Tall grass still hides GT rays, so vegetation is cleared.
+minedojo:
+  freeze_mobs: false
+  clear_entities: false
+  clear_vegetation: true

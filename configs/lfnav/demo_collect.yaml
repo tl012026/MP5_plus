@@ -1,0 +1,5 @@
+inherit: baseline_eval.yaml
+
+save_decision_frames: true
+policy_name: expert
+policy_sees_wide_lidar: true

@@ -20,7 +20,7 @@ Do not submit these from the login node until the checkpoint below is done.
    Draw a few frames with `lfnav/data/vis_labels.py`. If the tint misses the object, stop and refit the camera.
 4. `sbatch lfnav/slurm/extract_features.sbatch` on a GPU partition, then `sbatch lfnav/slurm/train_perception.sbatch`.
    Source `~/lfnav_train_env.sh` so the job uses a PyTorch 2.x env, not the MineDojo image.
-5. `sbatch lfnav/slurm/collect_demos.sbatch` with `configs/lfnav/train_seeds.txt`.
+5. `sbatch lfnav/slurm/collect_demos.sbatch` with `configs/lfnav/train_seeds.txt`. Dynamic-scene C2 demos: `sbatch lfnav/slurm/collect_demos_array.sbatch` (see [`../docs/DEMOS.md`](../docs/DEMOS.md)).
 6. `sbatch lfnav/slurm/train_c2.sbatch`. Add `DAGGER=1` only for a second round.
 7. `sbatch lfnav/slurm/eval.sbatch` with `configs/lfnav/eval_seeds.txt`.
    Frames are on by default (every 20 env steps). `FRAMES_EVERY=0` is not used; pass `--no-frames` or `--frames-every N` on the python command. After a run: `python3 lfnav/eval/make_contact_sheet.py --in $OUT`.

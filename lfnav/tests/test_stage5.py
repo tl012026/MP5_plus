@@ -42,9 +42,8 @@ class Stage5Test(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             saved = collect(cfg, [str(ROOT / "lfnav/tasks/specs/1-4.json")], [1], Path(tmp))
             self.assertGreaterEqual(saved["success"], 1)
-            path = next((Path(tmp) / "success").glob("*/*.json"))
-            rec = json.loads(path.read_text())
-            self.assertTrue(rec["record"]["success"])
+            rec = json.loads(next((Path(tmp) / "success").glob("**/record.json")).read_text())
+            self.assertTrue(rec["success"])
 
     def test_expert_turns_right_when_target_is_to_the_right(self):
         cfg = load_config()

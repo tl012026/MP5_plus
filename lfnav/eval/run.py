@@ -152,6 +152,7 @@ def open_episode(session, task: TaskSpec, cfg: dict, seed: int):
         metrics = apply_spawn_offset_distance(
             initial_scene_metrics(obs, env, cfg, task),
             getattr(env, "spawn_meta", None),
+            cfg,
         )
         if not reroll or distance_meets_min(metrics, min_d):
             reroll_count = attempt
@@ -178,6 +179,8 @@ def open_episode(session, task: TaskSpec, cfg: dict, seed: int):
         "n_targets_spawned": spawn_meta.get("n_targets_spawned", 0),
         "natural_mobs_cleared": bool(spawn_meta.get("natural_mobs_cleared", False)),
         "vegetation_cleared": bool(spawn_meta.get("vegetation_cleared", False)),
+        "spawn_target_distance": metrics.get("spawn_target_distance"),
+        "natural_target_closer": bool(metrics.get("natural_target_closer", False)),
     }
     return env, obs, public
 
@@ -186,7 +189,7 @@ def _recorder(env):
     return getattr(env, "frames", None)
 
 
-def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, seed: int = 0, obs=None, episode_meta=None) -> tuple[dict, list]:
+def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, seed: int = 0, obs=None, episode_meta=None, on_decision=None) -> tuple[dict, list]:
     perception = perception or make_perception(cfg)
     policy = policy or make_policy(cfg)
     if hasattr(perception, "reset"):
@@ -210,6 +213,7 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         metrics = apply_spawn_offset_distance(
             initial_scene_metrics(obs, env, cfg, task),
             getattr(env, "spawn_meta", None),
+            cfg,
         )
         meta.update({
             "world_seed": seed,
@@ -220,6 +224,8 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
             "initial_target_distance_rays": metrics.get("initial_target_distance_rays"),
             "initial_distance_beyond_range": metrics.get("initial_distance_beyond_range"),
             "_numeric_initial_distance": metrics.get("initial_target_distance_numeric"),
+            "spawn_target_distance": metrics.get("spawn_target_distance"),
+            "natural_target_closer": bool(metrics.get("natural_target_closer", False)),
         })
     seen_gt = privileged_ray_distance(obs, cfg, task.target) is not None
     obs = _hide_wide(obs, cfg)
@@ -250,7 +256,7 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
             if rec is not None:
                 rec.set_info(match.to_dict(), action="stop")
                 rec.capture(obs, tag="stop", keyframe=True)
-            events.append({
+            row = {
                 "decision": len(events),
                 "scene": scene.to_dict(),
                 "perception": scene.to_dict(),
@@ -259,10 +265,14 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
                 "policy": None,
                 "control": None,
                 "seconds": {"perceive": t1 - t0, "match": t2 - t1, "policy": 0.0},
-            })
+            }
+            events.append(row)
+            if on_decision is not None:
+                on_decision(row, obs, mem)
             stopped = True
             break
         pin = PolicyInput(perception.features(obs), task.to_dict(), match.to_dict(), scene.to_dict(), mem, list(memory.recent_actions))
+        decision_obs = obs
         output = policy.act(pin)
         t3 = time.perf_counter()
         control_rows = []
@@ -294,7 +304,7 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
             control_rows.append(result.to_dict())
             if env_steps >= max_steps:
                 break
-        events.append({
+        row = {
             "decision": len(events),
             "scene": scene.to_dict(),
             "perception": scene.to_dict(),
@@ -303,7 +313,10 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
             "policy": output.to_dict(),
             "control": control_rows,
             "seconds": {"perceive": t1 - t0, "match": t2 - t1, "policy": t3 - t2},
-        })
+        }
+        events.append(row)
+        if on_decision is not None:
+            on_decision(row, decision_obs, mem)
     if rec is not None:
         rec.capture(obs, tag="end", keyframe=True)
     live = env.observation() if hasattr(env, "observation") else obs
@@ -353,6 +366,8 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         "n_stuck": int(getattr(controller, "n_stuck", 0)),
         "n_escape": int(getattr(controller, "n_escape", 0)),
         "stuck_steps_total": int(getattr(controller, "stuck_steps_total", 0)),
+        "spawn_target_distance": meta.get("spawn_target_distance"),
+        "natural_target_closer": bool(meta.get("natural_target_closer", False)),
     })
     return verdict, events
 
