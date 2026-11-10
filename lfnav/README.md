@@ -208,7 +208,7 @@ The only baseline file committed to the repo is `summary.json`, under `results/b
 - Things to watch:
   - conditions that may never trigger (night, rain, near water);
   - small mobs leaving the frame at close range.
-- Remaining limits and a partial score table after the fixes: [`C0C1_BASELINE.md`](C0C1_BASELINE.md).
+- Remaining limits and a partial score table after the fixes: [`C0C1_BASELINE.md`](docs/C0C1_BASELINE.md).
 
 ## Matrix
 

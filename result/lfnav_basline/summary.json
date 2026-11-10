@@ -1,0 +1,6358 @@
+{
+  "n_episodes": 460,
+  "by_task_difficulty_policy": [
+    {
+      "task": "1-1",
+      "difficulty": "easy",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 4,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.5980331504723357,
+        "median": 0.9313164676749296
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 0.5,
+        "max": 9.622442245483398,
+        "median": 1.596217155456543
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-1",
+      "difficulty": "easy",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 3,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.6,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 0.5,
+        "max": 9.622442245483398,
+        "median": 1.596217155456543
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-1",
+      "difficulty": "hard",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 0,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 1.0,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 0.5,
+        "max": 23.7308406829834,
+        "median": 0.5
+      },
+      "difficulty_unmet": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-1",
+      "difficulty": "hard",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 0,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 1.0,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 0.5,
+        "max": 23.7308406829834,
+        "median": 0.5
+      },
+      "difficulty_unmet": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-1",
+      "difficulty": "medium",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 51,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 0.9828291169187324,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 0.5,
+        "max": 23.7308406829834,
+        "median": 5.061221122741699
+      },
+      "difficulty_unmet": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-1",
+      "difficulty": "medium",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 98,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 0.75,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 0.5,
+        "max": 23.7308406829834,
+        "median": 5.061221122741699
+      },
+      "difficulty_unmet": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-2",
+      "difficulty": "easy",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 0,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 1.0,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 1.5735567808151245,
+        "max": 2.210021734237671,
+        "median": 1.5736013650894165
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-2",
+      "difficulty": "easy",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 0,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 1.0,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 1.5735567808151245,
+        "max": 2.210021734237671,
+        "median": 1.5736013650894165
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-2",
+      "difficulty": "hard",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 0,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 1.0,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 1.4501944780349731,
+        "max": 1.5735567808151245,
+        "median": 1.5118756294250488
+      },
+      "difficulty_unmet": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-2",
+      "difficulty": "hard",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 0,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 1.0,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 1.4501944780349731,
+        "max": 1.5735567808151245,
+        "median": 1.5118756294250488
+      },
+      "difficulty_unmet": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-2",
+      "difficulty": "medium",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 0,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 1.0,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 1.4501944780349731,
+        "max": 1.5735567808151245,
+        "median": 1.5118756294250488
+      },
+      "difficulty_unmet": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-2",
+      "difficulty": "medium",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 0,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 1.0,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 1.4501944780349731,
+        "max": 1.5735567808151245,
+        "median": 1.5118756294250488
+      },
+      "difficulty_unmet": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-3",
+      "difficulty": "easy",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.20355710525442916,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 5.0,
+        "max": 8.06225774829855,
+        "median": 7.280109889280519
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-3",
+      "difficulty": "easy",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 30,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.9961716694139195,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 5.0,
+        "max": 8.06225774829855,
+        "median": 7.280109889280519
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-3",
+      "difficulty": "hard",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.01929144438168495,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 19.697715603592208,
+        "max": 31.400636936215164,
+        "median": 30.06659275674582
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-3",
+      "difficulty": "hard",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "steps_median": 949,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.42777567844553427,
+        "median": 0.3181750819905268
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 19.697715603592208,
+        "max": 31.400636936215164,
+        "median": 30.06659275674582
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-3",
+      "difficulty": "medium",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.0034961946534687407,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 10.04987562112089,
+        "max": 16.1245154965971,
+        "median": 15.524174696260024
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-3",
+      "difficulty": "medium",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 65,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.9758831675710828,
+        "median": 0.9919154959543031
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 10.04987562112089,
+        "max": 16.1245154965971,
+        "median": 15.524174696260024
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-4",
+      "difficulty": "easy",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "steps_median": 1876,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.21102898292593503,
+        "median": 0.01983921097209553
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 4.47213595499958,
+        "max": 7.280109889280519,
+        "median": 7.0710678118654755
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-4",
+      "difficulty": "easy",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 28,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.7969269358122312,
+        "median": 0.9138362491444253
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 4.47213595499958,
+        "max": 7.280109889280519,
+        "median": 7.0710678118654755
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-4",
+      "difficulty": "hard",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.02615553202590799,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 18.110770276274835,
+        "max": 31.304951684997057,
+        "median": 29.732137494637012
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-4",
+      "difficulty": "hard",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 352,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.7133348715876903,
+        "median": 0.7337764552884698
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 18.110770276274835,
+        "max": 31.304951684997057,
+        "median": 29.732137494637012
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-4",
+      "difficulty": "medium",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.07256190342412536,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 8.602325267042627,
+        "max": 15.811388300841898,
+        "median": 15.297058540778355
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "1-4",
+      "difficulty": "medium",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 257,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.546052060490598,
+        "median": 0.577976035404352
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 8.602325267042627,
+        "max": 15.811388300841898,
+        "median": 15.297058540778355
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-1",
+      "difficulty": "easy",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 4,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.5980331504723357,
+        "median": 0.9313164676749296
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 0.5,
+        "max": 9.622442245483398,
+        "median": 1.596217155456543
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-1",
+      "difficulty": "easy",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 3,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.6,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 0.5,
+        "max": 9.622442245483398,
+        "median": 1.596217155456543
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-1",
+      "difficulty": "hard",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 0,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 1.0,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 0.5,
+        "max": 23.7308406829834,
+        "median": 0.5
+      },
+      "difficulty_unmet": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-1",
+      "difficulty": "hard",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 1,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 1.0,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 0.5,
+        "max": 23.7308406829834,
+        "median": 0.5
+      },
+      "difficulty_unmet": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-1",
+      "difficulty": "medium",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 51,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 0.9828291169187324,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 0.5,
+        "max": 23.7308406829834,
+        "median": 5.061221122741699
+      },
+      "difficulty_unmet": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-1",
+      "difficulty": "medium",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 98,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 0.75,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 0.5,
+        "max": 23.7308406829834,
+        "median": 5.061221122741699
+      },
+      "difficulty_unmet": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-2",
+      "difficulty": "easy",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 6,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.4,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 1.5735567808151245,
+        "max": 2.210021734237671,
+        "median": 1.5736013650894165
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-2",
+      "difficulty": "easy",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 6,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.4,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 1.5735567808151245,
+        "max": 2.210021734237671,
+        "median": 1.5736013650894165
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-2",
+      "difficulty": "hard",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 0.25,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 1.4501944780349731,
+        "max": 1.5735567808151245,
+        "median": 1.5118756294250488
+      },
+      "difficulty_unmet": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-2",
+      "difficulty": "hard",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 32,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 1.4501944780349731,
+        "max": 1.5735567808151245,
+        "median": 1.5118756294250488
+      },
+      "difficulty_unmet": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-2",
+      "difficulty": "medium",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "steps_median": 2489,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 1.4501944780349731,
+        "max": 1.5735567808151245,
+        "median": 1.5118756294250488
+      },
+      "difficulty_unmet": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-2",
+      "difficulty": "medium",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 24,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 1.4501944780349731,
+        "max": 1.5735567808151245,
+        "median": 1.5118756294250488
+      },
+      "difficulty_unmet": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-3",
+      "difficulty": "easy",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.20618451744519892,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 4.123105625617661,
+        "max": 6.0827625302982185,
+        "median": 5.0
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-3",
+      "difficulty": "easy",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 19,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.6836079055545483,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 4.123105625617661,
+        "max": 6.0827625302982185,
+        "median": 5.0
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-3",
+      "difficulty": "hard",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 17.029386365926403,
+        "max": 24.020824298928627,
+        "median": 20.248456731316587
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-3",
+      "difficulty": "hard",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 116,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.8344500028041646,
+        "median": 0.9876212902529451
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 17.029386365926403,
+        "max": 24.020824298928627,
+        "median": 20.248456731316587
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-3",
+      "difficulty": "medium",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.39996420936115784,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 8.246211251235321,
+        "max": 12.041594578792294,
+        "median": 10.0
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-3",
+      "difficulty": "medium",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 44,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.7603051672301931,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 8.246211251235321,
+        "max": 12.041594578792294,
+        "median": 10.0
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-4",
+      "difficulty": "easy",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 5.385164807134505,
+        "max": 8.06225774829855,
+        "median": 5.656854249492381
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-4",
+      "difficulty": "easy",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 48,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.6737612558198673,
+        "median": 0.8836057163165643
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 5.385164807134505,
+        "max": 8.06225774829855,
+        "median": 5.656854249492381
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-4",
+      "difficulty": "hard",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.019888451321892285,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 19.924858845171276,
+        "max": 31.953090617340916,
+        "median": 22.47220505424423
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-4",
+      "difficulty": "hard",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 1130,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.4472928486827765,
+        "median": 0.17447188943558273
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 19.924858845171276,
+        "max": 31.953090617340916,
+        "median": 22.47220505424423
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-4",
+      "difficulty": "medium",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.004375830953772787,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 9.848857801796104,
+        "max": 16.1245154965971,
+        "median": 11.40175425099138
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "2-4",
+      "difficulty": "medium",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 54,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.6361694073903675,
+        "median": 0.9577008771514648
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 9.848857801796104,
+        "max": 16.1245154965971,
+        "median": 11.40175425099138
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-1",
+      "difficulty": "easy",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 4,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.3980331504723357,
+        "median": 0.05884928468674875
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 0.5,
+        "max": 9.622442245483398,
+        "median": 1.596217155456543
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-1",
+      "difficulty": "hard",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 0,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 1.0,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 0.5,
+        "max": 23.7308406829834,
+        "median": 0.5
+      },
+      "difficulty_unmet": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-1",
+      "difficulty": "hard",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 0,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 1.0,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 0.5,
+        "max": 23.7308406829834,
+        "median": 0.5
+      },
+      "difficulty_unmet": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-1",
+      "difficulty": "medium",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 51,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 0.9828291169187324,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 0.5,
+        "max": 23.7308406829834,
+        "median": 5.061221122741699
+      },
+      "difficulty_unmet": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-2",
+      "difficulty": "easy",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.2,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 1.5735567808151245,
+        "max": 2.210021734237671,
+        "median": 1.5736013650894165
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-2",
+      "difficulty": "easy",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 4,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.2,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 1.5735567808151245,
+        "max": 2.210021734237671,
+        "median": 1.5736013650894165
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-2",
+      "difficulty": "hard",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "steps_median": 1127,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 0.25,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 1.4501944780349731,
+        "max": 1.5735567808151245,
+        "median": 1.5118756294250488
+      },
+      "difficulty_unmet": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-2",
+      "difficulty": "hard",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 12,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 0.25,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 1.4501944780349731,
+        "max": 1.5735567808151245,
+        "median": 1.5118756294250488
+      },
+      "difficulty_unmet": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-2",
+      "difficulty": "medium",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 12,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 0.25,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 1.4501944780349731,
+        "max": 1.5735567808151245,
+        "median": 1.5118756294250488
+      },
+      "difficulty_unmet": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-3",
+      "difficulty": "easy",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.20997933226427676,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 6.4031242374328485,
+        "max": 7.615773105863909,
+        "median": 7.0710678118654755
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-3",
+      "difficulty": "easy",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 28,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 1.0,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 6.4031242374328485,
+        "max": 7.615773105863909,
+        "median": 7.0710678118654755
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-3",
+      "difficulty": "hard",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 27.459060435491963,
+        "max": 32.14031735997639,
+        "median": 28.792360097775934
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-3",
+      "difficulty": "hard",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 337,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.7783789523993615,
+        "median": 0.7095510996299476
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 27.459060435491963,
+        "max": 32.14031735997639,
+        "median": 28.792360097775934
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-3",
+      "difficulty": "medium",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 13.453624047073712,
+        "max": 16.155494421403514,
+        "median": 14.317821063276352
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-3",
+      "difficulty": "medium",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 72,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.9972326408746817,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 13.453624047073712,
+        "max": 16.155494421403514,
+        "median": 14.317821063276352
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-4",
+      "difficulty": "easy",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.11590702306873416,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 5.656854249492381,
+        "max": 7.280109889280519,
+        "median": 6.324555320336759
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-4",
+      "difficulty": "easy",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 138,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.6542818625823823,
+        "median": 0.9455396828077083
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 5.656854249492381,
+        "max": 7.280109889280519,
+        "median": 6.324555320336759
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-4",
+      "difficulty": "hard",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 22.360679774997894,
+        "max": 29.068883707497267,
+        "median": 23.40939982143925
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-4",
+      "difficulty": "hard",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 295,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.7150712412177993,
+        "median": 0.7447824820600902
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 22.360679774997894,
+        "max": 29.068883707497267,
+        "median": 23.40939982143925
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-4",
+      "difficulty": "medium",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.011407483997226431,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 11.313708498984761,
+        "max": 14.866068747318506,
+        "median": 12.206555615733702
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "3-4",
+      "difficulty": "medium",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 163,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.4772070569057559,
+        "median": 0.5459447461169389
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 11.313708498984761,
+        "max": 14.866068747318506,
+        "median": 12.206555615733702
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-1",
+      "difficulty": "easy",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 4,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.5980331504723357,
+        "median": 0.9313164676749296
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 0.5,
+        "max": 9.622442245483398,
+        "median": 1.596217155456543
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-1",
+      "difficulty": "easy",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 3,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.6,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 0.5,
+        "max": 9.622442245483398,
+        "median": 1.596217155456543
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-1",
+      "difficulty": "hard",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 0,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 1.0,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 0.5,
+        "max": 23.7308406829834,
+        "median": 0.5
+      },
+      "difficulty_unmet": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-1",
+      "difficulty": "hard",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 0,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 1.0,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 0.5,
+        "max": 23.7308406829834,
+        "median": 0.5
+      },
+      "difficulty_unmet": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-1",
+      "difficulty": "medium",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 51,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 0.9828291169187324,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 0.5,
+        "max": 23.7308406829834,
+        "median": 5.061221122741699
+      },
+      "difficulty_unmet": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-1",
+      "difficulty": "medium",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 98,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 0.75,
+        "median": 1.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 0.5,
+        "max": 23.7308406829834,
+        "median": 5.061221122741699
+      },
+      "difficulty_unmet": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-2",
+      "difficulty": "easy",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "steps_median": 1434,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 1.5735567808151245,
+        "max": 2.210021734237671,
+        "median": 1.5736013650894165
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-2",
+      "difficulty": "easy",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 23,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 1.5735567808151245,
+        "max": 2.210021734237671,
+        "median": 1.5736013650894165
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-2",
+      "difficulty": "hard",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 1.4501944780349731,
+        "max": 1.5735567808151245,
+        "median": 1.5118756294250488
+      },
+      "difficulty_unmet": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-2",
+      "difficulty": "hard",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 8,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 1.4501944780349731,
+        "max": 1.5735567808151245,
+        "median": 1.5118756294250488
+      },
+      "difficulty_unmet": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-2",
+      "difficulty": "medium",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 1.4501944780349731,
+        "max": 1.5735567808151245,
+        "median": 1.5118756294250488
+      },
+      "difficulty_unmet": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-2",
+      "difficulty": "medium",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "steps_median": 8,
+      "spl": {
+        "n_known": 4,
+        "n_beyond_range": 1,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 4,
+        "n_beyond_range": 1,
+        "min": 1.4501944780349731,
+        "max": 1.5735567808151245,
+        "median": 1.5118756294250488
+      },
+      "difficulty_unmet": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-3",
+      "difficulty": "easy",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 4.123105625617661,
+        "max": 7.0710678118654755,
+        "median": 5.8309518948453
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-3",
+      "difficulty": "easy",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 4.123105625617661,
+        "max": 7.0710678118654755,
+        "median": 5.8309518948453
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-3",
+      "difficulty": "hard",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 22.360679774997894,
+        "max": 28.442925306655788,
+        "median": 25.942243542145697
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-3",
+      "difficulty": "hard",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.0596394033983977,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 22.360679774997894,
+        "max": 28.442925306655788,
+        "median": 25.942243542145697
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-3",
+      "difficulty": "medium",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 8.246211251235321,
+        "max": 14.866068747318504,
+        "median": 12.529964086141668
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-3",
+      "difficulty": "medium",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 8.246211251235321,
+        "max": 14.866068747318504,
+        "median": 12.529964086141668
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-4",
+      "difficulty": "easy",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.8,
+        "low": 0.3755282641185388,
+        "high": 0.9637768390302125,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.0013254490083889543,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 4.47213595499958,
+        "max": 7.280109889280519,
+        "median": 5.656854249492381
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-4",
+      "difficulty": "easy",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "steps_median": 36,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.8636475587991445,
+        "median": 0.8833521708682867
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 4.47213595499958,
+        "max": 7.280109889280519,
+        "median": 5.656854249492381
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-4",
+      "difficulty": "hard",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 18.681541692269406,
+        "max": 27.65863337187866,
+        "median": 22.47220505424423
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.2,
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-4",
+      "difficulty": "hard",
+      "policy": "c1",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.6,
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 0.4,
+        "low": 0.1176182311592533,
+        "high": 0.769280067791163,
+        "n": 5
+      },
+      "steps_median": 1206,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.3852521342409437,
+        "median": 0.18844365713743905
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 18.681541692269406,
+        "max": 27.65863337187866,
+        "median": 22.47220505424423
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    },
+    {
+      "task": "4-4",
+      "difficulty": "medium",
+      "policy": "c0",
+      "n": 5,
+      "n_scored": 5,
+      "sr_b": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "sr_a": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "false_stop": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "timeout": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      },
+      "steps_median": 3000,
+      "spl": {
+        "n_known": 5,
+        "n_beyond_range": 0,
+        "mean": 0.0,
+        "median": 0.0
+      },
+      "initial_target_distance": {
+        "n_numeric": 5,
+        "n_beyond_range": 0,
+        "min": 9.433981132056603,
+        "max": 13.601470508735444,
+        "median": 11.313708498984761
+      },
+      "difficulty_unmet": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "spawn_failed": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "target_never_seen": {
+        "rate": 0.0,
+        "low": 0.0,
+        "high": 0.43449149475208104,
+        "n": 5
+      },
+      "natural_mobs_cleared": {
+        "rate": 1.0,
+        "low": 0.5655085052479191,
+        "high": 1.0,
+        "n": 5
+      }
+    }
+  ],
+  "mcnemar_c1_vs_c0": {
+    "only_reference": 8,
+    "only_other": 89,
+    "chi2_continuity": 65.97938144329896
+  }
+}
