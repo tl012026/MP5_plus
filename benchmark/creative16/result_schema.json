@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "creative16-v1/result_schema.json",
+  "title": "creative16-v1 episode result",
+  "description": "Required fields on each episode JSON. Ground truth is lfnav/eval/run.py run_episode output. Extra keys from run.py are allowed. task and policy are aliases of task_name and policy_name.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "task",
+    "difficulty",
+    "seed",
+    "policy",
+    "sr_b",
+    "sr_a",
+    "false_stop",
+    "timeout",
+    "steps",
+    "path_length",
+    "spl",
+    "initial_target_distance",
+    "difficulty_unmet",
+    "target_never_seen"
+  ],
+  "properties": {
+    "task": { "type": "string", "description": "Task id, e.g. 1-4. Same as task_name." },
+    "task_name": { "type": "string" },
+    "difficulty": { "type": ["string", "null"], "enum": ["easy", "medium", "hard", null] },
+    "seed": { "type": "integer" },
+    "policy": { "type": "string", "description": "Policy name. Same as policy_name." },
+    "policy_name": { "type": "string" },
+    "sr_b": { "type": "boolean", "description": "Primary metric: conditions hold and aligned-ray distance <= judge.radius." },
+    "sr_a": { "type": "boolean", "description": "Conditions hold in the same camera view (MP5-style)." },
+    "false_stop": { "type": "boolean" },
+    "timeout": { "type": "boolean" },
+    "steps": { "type": "integer", "minimum": 0 },
+    "path_length": { "type": "number", "minimum": 0 },
+    "spl": { "type": ["number", "null"] },
+    "initial_target_distance": {
+      "type": ["number", "string", "null"],
+      "description": "Start distance used for SPL. String form is \"> N\" when beyond lidar range."
+    },
+    "difficulty_unmet": { "type": "boolean" },
+    "target_never_seen": { "type": "boolean" }
+  }
+}

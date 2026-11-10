@@ -19,13 +19,11 @@ from lfnav.config import load_config
 from lfnav.control.controller import Controller
 from lfnav.env.fake import FakeMineDojoEnv
 from lfnav.env.minedojo_env import mob_ring_box
+from lfnav.env.scene import make_scene_env
 from lfnav.gt.initial import (
     apply_spawn_offset_distance,
-    distance_meets_min,
     initial_scene_metrics,
     privileged_ray_distance,
-    spawn_has_blocks,
-    world_seed_attempt,
 )
 from lfnav.gt.judge import aligned_target_distance, judge_episode
 from lfnav.gt.scene_state import scene_state_from_obs
@@ -132,57 +130,7 @@ def _hide_wide(obs: dict, cfg: dict) -> dict:
 
 def open_episode(session, task: TaskSpec, cfg: dict, seed: int):
     """Make/reset until min_initial_distance holds, then return obs before the first decision."""
-    table = (cfg.get("difficulty_table") or {}).get(cfg.get("difficulty", "easy"), {}) or {}
-    min_d = float(table.get("min_initial_distance") or 0)
-    max_reroll = int(table.get("max_reroll") or 0)
-    reroll = spawn_has_blocks(task) and min_d > 0
-    attempts = max_reroll + 1 if reroll else 1
-    env = None
-    obs = None
-    metrics = {}
-    used = int(seed)
-    unmet = False
-    reroll_count = 0
-    for attempt in range(attempts):
-        used = world_seed_attempt(seed, attempt)
-        if reroll:
-            session.release()
-        env = session.acquire(task, used)
-        obs = env.reset(seed=used, task=task)
-        metrics = apply_spawn_offset_distance(
-            initial_scene_metrics(obs, env, cfg, task),
-            getattr(env, "spawn_meta", None),
-            cfg,
-        )
-        if not reroll or distance_meets_min(metrics, min_d):
-            reroll_count = attempt
-            unmet = False
-            break
-        reroll_count = attempt + 1
-    else:
-        unmet = bool(reroll)
-        reroll_count = max_reroll
-    spawn_meta = dict(getattr(env, "spawn_meta", None) or {})
-    public = {
-        "world_seed": used,
-        "reroll_count": reroll_count,
-        "difficulty_unmet": unmet,
-        "initial_target_visible": metrics.get("initial_target_visible"),
-        "initial_target_distance": metrics.get("initial_target_distance"),
-        "initial_target_distance_rays": metrics.get("initial_target_distance_rays"),
-        "initial_distance_beyond_range": metrics.get("initial_distance_beyond_range"),
-        "_numeric_initial_distance": metrics.get("initial_target_distance_numeric"),
-        "spawn_failed": bool(spawn_meta.get("spawn_failed", False)),
-        "spawn_attempts": spawn_meta.get("spawn_attempts", 0),
-        "spawn_offsets": spawn_meta.get("spawn_offsets") or [],
-        "target_spawn_offset": spawn_meta.get("target_spawn_offset"),
-        "n_targets_spawned": spawn_meta.get("n_targets_spawned", 0),
-        "natural_mobs_cleared": bool(spawn_meta.get("natural_mobs_cleared", False)),
-        "vegetation_cleared": bool(spawn_meta.get("vegetation_cleared", False)),
-        "spawn_target_distance": metrics.get("spawn_target_distance"),
-        "natural_target_closer": bool(metrics.get("natural_target_closer", False)),
-    }
-    return env, obs, public
+    return make_scene_env(task, cfg.get("difficulty"), seed, cfg, session=session)
 
 
 def _recorder(env):
@@ -360,6 +308,8 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         "target_spawn_offset": meta.get("target_spawn_offset"),
         "n_targets_spawned": meta.get("n_targets_spawned", 0),
         "natural_mobs_cleared": bool(meta.get("natural_mobs_cleared", False)),
+        "task": task.id,
+        "policy": cfg.get("policy_name", "c1"),
         "target_never_seen": not seen_gt,
         "initial_target_distance_rays": meta.get("initial_target_distance_rays"),
         "vegetation_cleared": bool(meta.get("vegetation_cleared", False)),

@@ -1,0 +1,69 @@
+# creative16-v1. Paths only — do not copy these files.
+# Primary data lives at the listed repo paths. This file is an index.
+version: creative16-v1
+git_commit: 0fa456d1673ec5b37df49dac0d543d84b68a7c96
+
+tasks:
+  role: primary
+  glob: lfnav/tasks/specs/*.json
+  files:
+    - lfnav/tasks/specs/1-1.json
+    - lfnav/tasks/specs/1-2.json
+    - lfnav/tasks/specs/1-3.json
+    - lfnav/tasks/specs/1-4.json
+    - lfnav/tasks/specs/2-1.json
+    - lfnav/tasks/specs/2-2.json
+    - lfnav/tasks/specs/2-3.json
+    - lfnav/tasks/specs/2-4.json
+    - lfnav/tasks/specs/3-1.json
+    - lfnav/tasks/specs/3-2.json
+    - lfnav/tasks/specs/3-3.json
+    - lfnav/tasks/specs/3-4.json
+    - lfnav/tasks/specs/4-1.json
+    - lfnav/tasks/specs/4-2.json
+    - lfnav/tasks/specs/4-3.json
+    - lfnav/tasks/specs/4-4.json
+  original_contrast_only:
+    note: MP5 wording. Do not load these as eval input. creature.json is out of scope.
+    glob: MP5_agent/agent/tasks/creative/*.json
+    files:
+      - MP5_agent/agent/tasks/creative/1-1.json
+      - MP5_agent/agent/tasks/creative/1-2.json
+      - MP5_agent/agent/tasks/creative/1-3.json
+      - MP5_agent/agent/tasks/creative/1-4.json
+      - MP5_agent/agent/tasks/creative/2-1.json
+      - MP5_agent/agent/tasks/creative/2-2.json
+      - MP5_agent/agent/tasks/creative/2-3.json
+      - MP5_agent/agent/tasks/creative/2-4.json
+      - MP5_agent/agent/tasks/creative/3-1.json
+      - MP5_agent/agent/tasks/creative/3-2.json
+      - MP5_agent/agent/tasks/creative/3-3.json
+      - MP5_agent/agent/tasks/creative/3-4.json
+      - MP5_agent/agent/tasks/creative/4-1.json
+      - MP5_agent/agent/tasks/creative/4-2.json
+      - MP5_agent/agent/tasks/creative/4-3.json
+      - MP5_agent/agent/tasks/creative/4-4.json
+    excluded:
+      - MP5_agent/agent/tasks/creative/creature.json
+
+difficulty: configs/lfnav/difficulty.yaml
+
+seeds:
+  eval: configs/lfnav/eval_seeds_baseline.txt
+  train: configs/lfnav/train_seeds_demo.txt
+  train_note: Demo / C2 training seeds. The MP5 group does not use these for this protocol.
+
+env:
+  file: configs/lfnav/baseline_eval.yaml
+  inherits:
+    - configs/lfnav/default.yaml
+
+judge: lfnav/gt/judge.py
+
+labels:
+  - lfnav/labels.yaml
+  - configs/lfnav/obs_keys.yaml
+
+result_schema: benchmark/creative16/result_schema.json
+
+scene: lfnav/env/scene.py
