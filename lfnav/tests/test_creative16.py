@@ -1,4 +1,4 @@
-"""creative16-v1: run.py episode JSON matches result_schema.json."""
+"""creative16 protocol tests: result schema and eval_dynamic flags."""
 
 from __future__ import annotations
 
@@ -69,6 +69,22 @@ class ResultSchemaTest(unittest.TestCase):
         validate_episode_result(rec, schema)
         self.assertEqual(rec["task"], rec["task_name"])
         self.assertEqual(rec["policy"], rec["policy_name"])
+
+
+class DynamicEvalConfigTest(unittest.TestCase):
+    def test_eval_dynamic_unfreezes_and_keeps_natural_mobs(self):
+        dyn = load_config(ROOT / "configs/lfnav/eval_dynamic.yaml")
+        self.assertFalse(dyn["minedojo"]["freeze_mobs"])
+        self.assertFalse(dyn["minedojo"]["clear_entities"])
+        self.assertTrue(dyn["minedojo"]["clear_vegetation"])
+
+    def test_static_baseline_still_freezes_and_clears(self):
+        static = load_config(ROOT / "configs/lfnav/baseline_eval.yaml")
+        default = load_config(ROOT / "configs/lfnav/default.yaml")
+        self.assertTrue(static["minedojo"]["freeze_mobs"])
+        self.assertTrue(static["minedojo"]["clear_entities"])
+        self.assertTrue(default["minedojo"]["freeze_mobs"])
+        self.assertTrue(default["minedojo"]["clear_entities"])
 
 
 class ManifestTest(unittest.TestCase):

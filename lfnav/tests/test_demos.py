@@ -73,13 +73,12 @@ class UsedWideTest(unittest.TestCase):
 
 
 class DynamicDistanceTest(unittest.TestCase):
-    def test_clear_entities_false_uses_nearest_ray(self):
-        cfg = load_config()
+    def _nearest_ray_metrics(self, cfg):
+        cfg = dict(cfg)
         cfg["image_hw"] = [14, 14]
         cfg["aligned_ray_range"] = 32
         cfg["wide_ray_range"] = 32
         cfg["minedojo"] = dict(cfg.get("minedojo") or {})
-        cfg["minedojo"]["clear_entities"] = False
         env = FakeMineDojoEnv(cfg, {"entities": [
             {"name": "pig", "x": 0.0, "z": 3.0},
             {"name": "pig", "x": 0.0, "z": 16.0},
@@ -89,11 +88,25 @@ class DynamicDistanceTest(unittest.TestCase):
         task = TaskSpec.from_dict(json.loads((SPECS / "1-4.json").read_text()))
         metrics = apply_spawn_offset_distance(initial_scene_metrics(obs, env, cfg, task), env.spawn_meta, cfg)
         ray = aligned_target_distance(obs, cfg, "pig")
+        return metrics, ray
+
+    def test_clear_entities_false_uses_nearest_ray(self):
+        cfg = load_config()
+        cfg["minedojo"] = dict(cfg.get("minedojo") or {})
+        cfg["minedojo"]["clear_entities"] = False
+        metrics, ray = self._nearest_ray_metrics(cfg)
         self.assertIsNotNone(ray)
         self.assertAlmostEqual(float(metrics["initial_target_distance"]), float(ray), delta=0.4)
         self.assertAlmostEqual(float(metrics["spawn_target_distance"]), 16.0)
         self.assertTrue(metrics["natural_target_closer"])
         self.assertLess(float(metrics["initial_target_distance"]), 8.0)
+
+    def test_eval_dynamic_uses_the_same_ray_distance(self):
+        cfg = load_config(ROOT / "configs/lfnav/eval_dynamic.yaml")
+        metrics, ray = self._nearest_ray_metrics(cfg)
+        self.assertFalse(cfg["minedojo"]["clear_entities"])
+        self.assertIsNotNone(ray)
+        self.assertAlmostEqual(float(metrics["initial_target_distance"]), float(ray), delta=0.4)
 
 
 class DemoSeedsFileTest(unittest.TestCase):

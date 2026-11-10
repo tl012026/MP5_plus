@@ -44,7 +44,7 @@ SPL is `success * l / max(path, l)` with `l = max(initial_target_distance - judg
 | medium | 8–16, any yaw | 8 | 2 |
 | hard | 16–32, behind the agent ±45° | 16 | 4 |
 
-Animals are summoned by lfnav *after* `reset()`, not by MineDojo `initial_mobs`. HarvestMeta's reset-hook `/summon` does not spawn. Default path: settle with real no-op ticks, `/kill @e[type=!player]`, one `/summon` per mob from `y=spawn_drop_height` (8) on the ring, then `settle_after_spawn` ticks to land. `initial_target_distance` is `hypot(dx, dz)` from that offset (SPL uses it); ray range is kept as `initial_target_distance_rays`. Ray-check retries stay behind `spawn_verify_retry` (off). Episodes with no GT lidar hit on the target are `target_never_seen` and still count in SR. Only a spawn exception is `spawn_failed` and is dropped from SR. `natural_mobs_cleared` marks the `/kill` path.
+Animals are summoned by lfnav *after* `reset()`, not by MineDojo `initial_mobs`. HarvestMeta's reset-hook `/summon` does not spawn. Main eval (`eval_dynamic.yaml`) does not `/kill` natural mobs and does not freeze them; `initial_target_distance` and SPL use the nearest same-species opening ray (`apply_spawn_offset_distance`). Static robustness (`baseline_eval.yaml`) still clears, freezes, and uses `hypot(dx, dz)` from the summon offset. Ray range is always logged as `initial_target_distance_rays`. Ray-check retries stay behind `spawn_verify_retry` (off). Episodes with no GT lidar hit on the target are `target_never_seen` and still count in SR. Only a spawn exception is `spawn_failed` and is dropped from SR. `natural_mobs_cleared` marks the `/kill` path.
 
 Block targets (tree, grass, water) and block `near` conditions still reroll the world seed (`seed*1000+k`, up to `max_reroll`) until `min_initial_distance` holds. Otherwise the episode is `difficulty_unmet`. `specified_biome` worlds are treated as single-biome, so `leave_biome` is false. Optional mixed-biome seeds: `lfnav/env/search_biome_seeds.py`.
 
@@ -92,8 +92,8 @@ Purpose: get an upper bound (C1 + GT) and a lower bound (C0 + GT, close to MP5's
 | Seeds | `configs/lfnav/eval_seeds_baseline.txt` (9, 19, 29, 39, 49; no overlap with training) |
 | Episodes | 16 × 3 × 5 = 240 per policy, 480 in total |
 | Step limit | 3000 env steps (`judge.max_steps`) |
-| Config | `configs/lfnav/baseline_eval.yaml` |
-| Job | `lfnav/slurm/baseline_array.sbatch`. Array index `i` maps to task `i // 3`, difficulty `i % 3` (`lfnav/eval/baseline_index.py`). Each index runs 5 seeds |
+| Config | `configs/lfnav/eval_dynamic.yaml` (static robustness: `configs/lfnav/baseline_eval.yaml`) |
+| Job | `lfnav/slurm/baseline_array.sbatch` → `$SCR/lfnav/runs/baseline_dynamic`. Array index `i` maps to task `i // 3`, difficulty `i % 3` (`lfnav/eval/baseline_index.py`). Each index runs 5 seeds |
 | Compute | CPU only (no GPU, no API) |
 
 ### Before submitting
@@ -175,8 +175,8 @@ done
 ### Step 3: aggregate
 
 ```bash
-python3 -m lfnav.aggregate --baseline $SCR/lfnav/runs/baseline --out $SCR/lfnav/runs/baseline/summary.json
-python3 lfnav/eval/make_contact_sheet.py --in $SCR/lfnav/runs/baseline/c1/hard/1-1   # spot-check any cell
+python3 -m lfnav.aggregate --baseline $SCR/lfnav/runs/baseline_dynamic --out $SCR/lfnav/runs/baseline_dynamic/summary.json
+python3 lfnav/eval/make_contact_sheet.py --in $SCR/lfnav/runs/baseline_dynamic/c1/hard/1-1   # spot-check any cell
 ```
 
 `summary.json` holds:
@@ -187,7 +187,7 @@ python3 lfnav/eval/make_contact_sheet.py --in $SCR/lfnav/runs/baseline/c1/hard/1
 ### Outputs
 
 ```
-$SCR/lfnav/runs/baseline/<policy>/<difficulty>/<task>/
+$SCR/lfnav/runs/baseline_dynamic/<policy>/<difficulty>/<task>/
   run_meta.json
   <task>/<seed>.json              per-episode result
   <task>/<seed>/events.jsonl      per-decision log

@@ -75,11 +75,11 @@ def initial_scene_metrics(obs: dict, env, cfg: dict, task: TaskSpec) -> dict:
 
 
 def apply_spawn_offset_distance(metrics: dict, spawn_meta: dict | None, cfg: dict | None = None) -> dict:
-    """Prefer hypot(dx, dz) from /summon for SPL; keep the ray distance as a reference.
+    """Set initial_target_distance used by eval and demo collection (and by SPL).
 
-    When minedojo.clear_entities is false, natural animals of the same type may sit
-    closer than the summoned offset, so the primary distance is the nearest aligned
-    or wide ray instead.
+    When minedojo.clear_entities is true (static robustness), use hypot(dx, dz)
+    from /summon. When it is false (main eval / dynamic demos), use the nearest
+    aligned or wide ray on the same species. spawn_target_distance is always the offset.
     """
     metrics = dict(metrics)
     if "initial_target_distance_rays" not in metrics:
