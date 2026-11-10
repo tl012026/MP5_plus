@@ -136,7 +136,7 @@ Full report: `result/lfnav_basline/report.md`.
 
 ## 5. Environment
 
-Runs on HPC the cluster (account `<SLURM_ACCOUNT>`). Full guide: `Minedojo environment/` and the setup PDF.
+Runs on HPC. Full guide: `Minedojo environment/` and the setup PDF.
 
 | Part | Where | Used for |
 |---|---|---|
