@@ -71,6 +71,11 @@ distance_bins:
 time_day_min: 0.42          # calibrate_env_state 2026-11-08: midpoint of night vs day sun_brightness
 brightness_min_light: 13    # calibrate_env_state 2026-11-08: midpoint of night vs day light_level
 
+c2:
+  checkpoint: null
+  wide_weight: 0.5
+  hidden: 256
+
 policy:
   chunk: 4
   recent_k: 8

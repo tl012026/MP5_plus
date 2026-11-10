@@ -21,7 +21,7 @@ Do not submit these from the login node until the checkpoint below is done.
 4. `sbatch lfnav/slurm/extract_features.sbatch` on a GPU partition, then `sbatch lfnav/slurm/train_perception.sbatch`.
    Source `~/lfnav_train_env.sh` so the job uses a PyTorch 2.x env, not the MineDojo image.
 5. `sbatch lfnav/slurm/collect_demos.sbatch` with `configs/lfnav/train_seeds.txt`. Dynamic-scene C2 demos: `sbatch lfnav/slurm/collect_demos_array.sbatch` (see [`../docs/DEMOS.md`](../docs/DEMOS.md)).
-6. `sbatch lfnav/slurm/train_c2.sbatch`. Add `DAGGER=1` only for a second round.
+6. `sbatch lfnav/slurm/train_c2.sbatch` on a CPU partition (sources `~/lfnav_train_env.sh`). Defaults: `DEMOS=$SCR/lfnav/data/demos_dynamic`, `OUT=$SCR/lfnav/ckpt/c2_gt_v1`. Add `DAGGER=1` only for a second round.
 7. `sbatch lfnav/slurm/eval.sbatch` with `configs/lfnav/eval_seeds.txt`.
    Frames are on by default (every 20 env steps). `FRAMES_EVERY=0` is not used; pass `--no-frames` or `--frames-every N` on the python command. After a run: `python3 lfnav/eval/make_contact_sheet.py --in $OUT`.
    Baseline C0/C1 × GT: `POLICY=c1 sbatch lfnav/slurm/baseline_array.sbatch` then `POLICY=c0 sbatch ...` (array 0–47 = 16 tasks × 3 difficulties, 5 seeds ending in 9). Default config is `configs/lfnav/eval_dynamic.yaml`, output `$SCR/lfnav/runs/baseline_dynamic`. Static robustness: `CFG=$MP5/configs/lfnav/baseline_eval.yaml ROOT_OUT=$SCR/lfnav/runs/baseline`. Summarize with `python3 -m lfnav.aggregate --baseline /scratch/$USER/lfnav/runs/baseline_dynamic`.

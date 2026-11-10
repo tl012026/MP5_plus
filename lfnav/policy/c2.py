@@ -1,6 +1,6 @@
-"""Behavior cloning over a short action chunk. Weights stay in numpy unless torch is present.
+"""C2 behavior cloning: GT scene features → K discrete action heads (PyTorch MLP).
 
-DAgger is a config switch: run the learner, ask the expert for the action, and append those rows.
+The numpy linear placeholder is lfnav.policy.c2_linear. DINOv2 inputs come later.
 """
 
 from __future__ import annotations
@@ -8,81 +8,96 @@ from __future__ import annotations
 import numpy as np
 
 from lfnav.policy.base import Policy
+from lfnav.policy.c2_data import FeatureSpec, encode_policy_input
+from lfnav.policy.c2_linear import ACTIONS, featurize
+from lfnav.policy.c2_linear import BehaviorCloning as LinearBehaviorCloning
 from lfnav.types import PolicyInput, PolicyOutput
 
-ACTIONS = ["forward", "turn_left_15", "turn_right_15", "turn_left_45", "turn_right_45", "look_reset"]
+c2_linear = LinearBehaviorCloning
 
 
-def featurize(policy_input: PolicyInput, dim: int = 16) -> np.ndarray:
-    """Fixed-width input. Unseen targets are zeros in [0:3] plus visible=0 at [3]."""
-    vector = np.zeros(dim, dtype=np.float64)
-    match = policy_input.match or {}
-    direction = match.get("target_direction")
-    if direction == "left":
-        vector[0] = 1.0
-    elif direction == "center":
-        vector[1] = 1.0
-    elif direction == "right":
-        vector[2] = 1.0
-    vector[3] = 1.0 if direction is not None else 0.0
-    vector[4] = 1.0 if match.get("status") == "found" else 0.0
-    missing = match.get("missing") or []
-    vector[5] = min(len(missing), 4) / 4.0
-    actions = policy_input.recent_actions or []
-    for i, name in enumerate(actions[-4:]):
-        if name in ACTIONS:
-            vector[6 + i] = ACTIONS.index(name) / max(len(ACTIONS) - 1, 1)
-    grid = (policy_input.memory or {}).get("local_grid") or []
-    if grid:
-        flat = np.asarray(grid, dtype=np.float64).ravel()
-        vector[10] = float(flat.mean()) if flat.size else 0.0
-    feats = policy_input.frame_features
-    if isinstance(feats, dict) and feats.get("cls") is not None:
-        cls = np.asarray(feats["cls"], dtype=np.float64).ravel()
-        vector[11] = float(cls.mean()) if cls.size else 0.0
-    return vector
+def _visible(match: dict) -> bool:
+    if (match or {}).get("target_direction") is not None:
+        return True
+    return (match or {}).get("status") == "found"
+
+
+def ChunkMLP(dim: int, n_actions: int, horizon: int, hidden: int = 256):
+    from torch import nn
+
+    class _ChunkMLP(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.horizon = int(horizon)
+            self.n_actions = int(n_actions)
+            self.fc1 = nn.Linear(int(dim), int(hidden))
+            self.fc2 = nn.Linear(int(hidden), int(hidden))
+            self.heads = nn.ModuleList(nn.Linear(int(hidden), int(n_actions)) for _ in range(int(horizon)))
+
+        def forward(self, x):
+            h = nn.functional.relu(self.fc1(x))
+            h = nn.functional.relu(self.fc2(h))
+            return [head(h) for head in self.heads]
+
+    return _ChunkMLP()
 
 
 class BehaviorCloning(Policy):
     name = "c2"
 
     def __init__(self, cfg: dict | None = None):
-        cfg = cfg or {}
-        pol = cfg.get("policy") or {}
-        self.horizon = int(pol.get("chunk", 4))
-        self.dim = 16
-        rng = np.random.default_rng(int(cfg.get("seed", 0)))
-        self.weight = rng.normal(scale=0.01, size=(self.horizon, len(ACTIONS), self.dim))
-        self.bias = np.zeros((self.horizon, len(ACTIONS)))
+        self.cfg = cfg or {}
+        pol = self.cfg.get("policy") or {}
+        c2 = self.cfg.get("c2") or {}
+        self.spec = FeatureSpec.from_cfg(self.cfg)
+        self.horizon = int(c2.get("chunk") or pol.get("chunk") or self.spec.horizon)
+        self.spec.horizon = self.horizon
+        self.hidden = int(c2.get("hidden") or 256)
         self.dagger = bool(pol.get("dagger", False))
+        self._fallback = None
+        self.model = None
+        self._torch = None
+        try:
+            import torch
+        except ImportError:
+            self._fallback = LinearBehaviorCloning(self.cfg)
+        else:
+            self._torch = torch
+            self.model = ChunkMLP(self.spec.dim, len(self.spec.actions), self.horizon, self.hidden)
+            ckpt = c2.get("checkpoint")
+            if ckpt:
+                payload = torch.load(ckpt, map_location="cpu")
+                state = payload["model"] if isinstance(payload, dict) and "model" in payload else payload
+                self.model.load_state_dict(state)
+            self.model.eval()
+        self.reset()
+
+    def reset(self) -> None:
+        self.last_seen = None
+        if self._fallback is not None:
+            self._fallback.reset()
+
+    def n_parameters(self) -> int:
+        if self._fallback is not None:
+            return int(self._fallback.weight.size + self._fallback.bias.size)
+        return int(sum(p.numel() for p in self.model.parameters()))
 
     def act(self, policy_input: PolicyInput) -> PolicyOutput:
-        scores = self._scores(featurize(policy_input, self.dim))
-        chunk = [ACTIONS[int(np.argmax(row))] for row in scores]
+        if self._fallback is not None:
+            return self._fallback.act(policy_input)
+        match = policy_input.match or {}
+        env_step = int((policy_input.memory or {}).get("env_steps") or 0)
+        if _visible(match):
+            self.last_seen = {
+                "step": env_step,
+                "direction": match.get("target_direction"),
+                "distance": match.get("target_distance"),
+            }
+        vector = encode_policy_input(policy_input, self.spec, last_seen=self.last_seen)
+        torch = self._torch
+        with torch.no_grad():
+            x = torch.from_numpy(np.asarray(vector, dtype=np.float32)).unsqueeze(0)
+            logits = self.model(x)
+            idx = [int(row.argmax(dim=-1).item()) for row in logits]
+        chunk = [self.spec.actions[i] for i in idx]
         return PolicyOutput(chunk)
-
-    def _scores(self, vector: np.ndarray) -> np.ndarray:
-        return np.einsum("had,d->ha", self.weight, vector) + self.bias
-
-    def loss(self, vector: np.ndarray, labels: list[int]) -> float:
-        scores = self._scores(vector)
-        total = 0.0
-        for step, label in enumerate(labels[: self.horizon]):
-            shifted = scores[step] - scores[step].max()
-            probs = np.exp(shifted)
-            probs /= probs.sum()
-            total += -float(np.log(probs[int(label)] + 1e-8))
-        return total / max(len(labels[: self.horizon]), 1)
-
-    def train_step(self, vector: np.ndarray, labels: list[int], lr: float = 0.05) -> float:
-        before = self.loss(vector, labels)
-        scores = self._scores(vector)
-        for step, label in enumerate(labels[: self.horizon]):
-            shifted = scores[step] - scores[step].max()
-            probs = np.exp(shifted)
-            probs /= probs.sum()
-            grad = probs
-            grad[int(label)] -= 1.0
-            self.weight[step] -= lr * grad[:, None] * vector[None, :]
-            self.bias[step] -= lr * grad
-        return before

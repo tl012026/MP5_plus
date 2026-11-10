@@ -69,7 +69,7 @@ def measure() -> dict:
     pin = PolicyInput()
     report = {
         "fake_encoder": {"parameters": int(encoder.dim), **time_call(lambda: encoder(frame))},
-        "c2": {"parameters": int(policy.weight.size + policy.bias.size), **time_call(lambda: policy.act(pin))},
+        "c2": {"parameters": int(policy.n_parameters()), **time_call(lambda: policy.act(pin))},
         "gpu": None,
     }
     try:
