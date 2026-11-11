@@ -68,12 +68,11 @@ A frame becomes a scene state, the matcher checks the task conditions, and a pol
 
 Primary success (**SR-b**): the agent stops, the target is in view, distance is at most 3 blocks, and every condition holds. **SR-a** drops the distance check. A stop that fails SR-a is a false stop. SPL is `SR-b * d / max(L, d)` with straight-line `d`. Timeout is 3000 steps.
 
-Policies: **C0** random walk, **C1** rules, **C2** behavior cloning. **C3** is unimplemented. The comparisons in `configs/lfnav/matrix.yaml` are MineLLM+C0, DINOv2+C0/C1/C2, and ground-truth+C1/C2.
+Policies: **C0** random walk, **C1** rules, **joint** A+C2 on frozen DINOv2. **C3** is unimplemented. The comparisons in `configs/lfnav/matrix.yaml` are MineLLM+C0, DINOv2+C0/C1/C2, and ground-truth+C1/C2.
 
 ```bash
 python3 -m unittest discover -s lfnav/tests
-python3 lfnav/perception/train_perception.py --dry-run
-python3 lfnav/policy/train_c2.py --dry-run
+python3 lfnav/policy/train_joint.py --dry-run
 ```
 
 Those commands need no MineDojo and no GPU. Real collection, training, and eval are the Slurm scripts under `lfnav/slurm/`. Account and partition are blank; fill them locally. Data defaults to `/scratch/$USER/lfnav/`.

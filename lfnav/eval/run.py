@@ -35,6 +35,7 @@ from lfnav.obsutil import position_of, yaw_of
 from lfnav.perception.gt import GTPerception
 from lfnav.policy.c0 import RandomWalk
 from lfnav.policy.c1 import RuleBased
+from lfnav.policy.joint import belief_aligned_distance
 from lfnav.types import PolicyInput, TaskSpec
 
 
@@ -45,7 +46,18 @@ def git_hash() -> str | None:
         return None
 
 
+def _joint_agent(cfg: dict):
+    if cfg.get("_joint_agent") is None:
+        from lfnav.policy.joint import JointAgent
+
+        cfg["_joint_agent"] = JointAgent(cfg)
+    return cfg["_joint_agent"]
+
+
 def make_perception(cfg: dict):
+    if cfg.get("policy_name") == "joint" or cfg.get("perception_backend") == "joint":
+        cfg["perception_backend"] = "joint"
+        return _joint_agent(cfg)
     name = cfg.get("perception_backend", "gt")
     if name == "gt":
         return GTPerception(cfg)
@@ -60,6 +72,9 @@ def make_perception(cfg: dict):
 
 def make_policy(cfg: dict):
     name = cfg.get("policy_name", "c1")
+    if name == "joint":
+        cfg["perception_backend"] = "joint"
+        return _joint_agent(cfg)
     if name in ("c0", "random"):
         return RandomWalk(cfg)
     if name in ("c1", "rule"):
@@ -75,6 +90,12 @@ def make_policy(cfg: dict):
             "Original MP5 is not run from lfnav. Use eval/run_batch.py with the same task specs, seeds, and lfnav judge once an API key is available."
         )
     raise KeyError(name)
+
+
+def match_distance(perception, obs, cfg: dict, task, scene):
+    if getattr(perception, "name", None) == "joint":
+        return belief_aligned_distance(scene, task.target, cfg)
+    return aligned_target_distance(obs, cfg, task.target)
 
 
 def make_env(cfg: dict, task: TaskSpec, seed: int):
@@ -241,7 +262,7 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         t0 = time.perf_counter()
         scene = perception.perceive(obs)
         t1 = time.perf_counter()
-        match = matcher.match(task, scene, aligned_distance=aligned_target_distance(obs, cfg, task.target))
+        match = matcher.match(task, scene, aligned_distance=match_distance(perception, obs, cfg, task, scene))
         t2 = time.perf_counter()
         pos = position_of(obs, cfg)
         yaw = yaw_of(obs, cfg)

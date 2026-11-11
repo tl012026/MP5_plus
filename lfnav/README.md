@@ -18,7 +18,7 @@ rgb frame ──► A: perceive ──► SceneState ──► B: match ──�
 
 | Module | What it does | Replaces in MP5 |
 |---|---|---|
-| **A: perception** (`lfnav/perception`) | Image → per-object presence, direction (left/center/right), distance (near ≤3 / mid ≤10 / far), plus biome, time, weather and brightness. Backends: GT (rays), MineLLM with fixed templates, learned (frozen DINOv2 plus heads). | Percipient (MineLLM questioned by GPT) |
+| **A: perception** (`lfnav/perception`) | Image → per-object presence, direction (left/center/right), distance (near ≤3 / mid ≤10 / far), plus biome, time, weather and brightness. Evaluation default is the A head of the joint model (frozen DINOv2). GT rays and MineLLM remain available as backends. | Percipient (MineLLM questioned by GPT) |
 | **B: matcher** (`lfnav/matcher.py`) | Rule-based. Is the target found, are the conditions met, should the agent stop? Stops when the nearest target ray is within 3 blocks, the same test SR-b uses. | The "is it found" part of the percipient prompt |
 | **C: policy** (`lfnav/policy`) | Chooses the next action chunk from the scene, the match result and memory. | The scripted explore branch of the find action |
 | Controller (`lfnav/control`) | Executes actions. Jumps 1-block steps, avoids hazards, wades shallow water, detects stuck (displacement-based) and escapes. | `structured_actions.py` movement |
@@ -28,10 +28,10 @@ Policies, in build order:
 1. **C0, straight walk**: walk forward and turn when blocked. Lower bound, close to MP5's blind exploration.
 2. **C1, rules**: opening 360° scan, steer toward a visible target, approach at mid range in steps of at most 2, re-acquire a lost target, otherwise explore the least-visited of 8 sectors.
 3. **Expert = C1 + 360° wide lidar**: used only to generate demonstrations (Section 3).
-4. **C2, behaviour cloning**: an MLP trained on expert demos, predicting K = 4 action steps per decision. The first version reads the GT scene state (C2+GT); the next reads learned perception (C2+DINOv2).
+4. **Joint A+C2**: frozen DINOv2 features, one training run. The A head predicts `SceneState`; the C2 head predicts K = 4 actions from pooled features, A's output, task conditions, 8-sector counts, the last 4 actions, and `last_seen`. `run.py --policy joint` runs A then B then C2.
 5. **C3, diffusion policy** (reserved): samples short action chunks or waypoints. The interface exists in `lfnav/policy/c3.py`, and the controller already accepts `(dyaw_deg, forward_blocks)` waypoints.
 
-Order of work: GT perception + B + C0/C1 baselines → expert demos → C2+GT → learned A (DINOv2) → C2+DINOv2 → C3 → transfer.
+Order of work: GT perception + B + C0/C1 baselines → expert demos → extract DINOv2 features → joint A+C2 → C3 → transfer.
 
 ---
 
@@ -64,7 +64,7 @@ Order of work: GT perception + B + C0/C1 baselines → expert demos → C2+GT �
 |---|---|---|
 | Evaluation | `eval_seeds_baseline.txt`: 9, 19, 29, 39, 49 (all end in 9) | 16 × 3 × 5 = 240 episodes per policy |
 | Expert demos | `train_seeds_demo.txt`: 44 seeds in 1–48, none ending in 9 | 8 animal tasks × 3 difficulties plus 8 block tasks at easy = 32 cells × 44 ≈ 1,400 episodes. Only successful episodes are used for training. |
-| Perception (planned) | training seeds | Pilot of 1,000 frames, then 30k–50k frames with patch labels |
+| Joint features | same successful demos as training | Frozen DINOv2, one `.npy` per filtered episode under `$SCR/lfnav/features/<version>/` |
 
 ### Compared with MP5
 | | lfnav | MP5 |
@@ -122,8 +122,7 @@ Full report: `result/lfnav_basline/report.md`.
 | C0 + GT | | | | |
 | C1 + GT | | | | |
 | Expert (upper bound) | | | | |
-| C2 + GT | | | | |
-| C2 + DINOv2 | | | | |
+| Joint A+C2 | | | | |
 | C3 | | | | |
 
 ### 4.3 Robustness (planned)
@@ -143,7 +142,7 @@ Runs on HPC. Full guide: `Minedojo environment/` and the setup PDF.
 | MineDojo image | `$SCR/env/minedojo.sif` (Singularity; Minecraft 1.11.2 via Malmo) | Every episode |
 | Runtime | `$SCR/mp5_env.sh`. Must be sourced in every terminal: it sets `SCR`, `MP5`, `PYTHONPATH`, `GRADLE_USER_HOME` and the Slurm account. | Everything |
 | Gradle cache | `$SCR/.gradle` plus a local MixinGradle repo. Each job copies it to node-local `/tmp` (`lfnav/env/gradle_home.sh`). | Minecraft build at launch |
-| Training env | PyTorch 2.x (`~/lfnav_train_env.sh`) | C2 and perception training |
+| Training env | PyTorch 2.x (`~/lfnav_train_env.sh`) | Feature extract and joint A+C2 training |
 | MineLLM (optional) | Separate conda env plus models on A100 | MineLLM perception baseline only |
 
 Rules:

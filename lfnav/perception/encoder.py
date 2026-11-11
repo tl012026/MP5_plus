@@ -24,7 +24,8 @@ class FakeEncoder:
         gh, gw = self.grid
         tokens = np.zeros((gh, gw, self.dim), dtype=np.float32)
         tokens[..., 0] = mean / 255.0
-        return {"cls": cls, "tokens": tokens}
+        pooled = tokens.mean(axis=(0, 1))
+        return {"cls": cls, "tokens": tokens, "pooled": pooled}
 
 
 def load_encoder(name: str, cfg: dict | None = None):
@@ -49,15 +50,27 @@ def _dinov2(name: str):
 
     class _Wrap:
         name = name
+        patch = 14
+
+        def __init__(self):
+            self.model = model
+
+        def to(self, device):
+            self.model.to(device)
+            return self
 
         def __call__(self, rgb):
             tensor = _as_tensor(rgb)
+            device = next(self.model.parameters()).device
+            tensor = tensor.to(device)
             with torch.no_grad():
-                feats = model.forward_features(tensor)
-            cls = feats["x_norm_clstoken"][0].cpu().numpy()
-            tokens = feats["x_norm_patchtokens"][0].cpu().numpy()
-            side = int(tokens.shape[0] ** 0.5)
-            return {"cls": cls, "tokens": tokens.reshape(side, -1, tokens.shape[-1])}
+                feats = self.model.forward_features(tensor)
+            cls = feats["x_norm_clstoken"][0].detach().cpu().numpy()
+            tokens = feats["x_norm_patchtokens"][0].detach().cpu().numpy()
+            _, _, height, width = tensor.shape
+            grid = reshape_patch_tokens(tokens, height, width, self.patch)
+            pooled = grid.mean(axis=(0, 1))
+            return {"cls": cls, "tokens": grid, "pooled": pooled}
 
     return _Wrap()
 
@@ -68,6 +81,17 @@ def _mineclip(cfg: dict):
         f"MineCLIP weights were not wired. Expected a local checkout under {path}. "
         "The login-node tests use the fake encoder. Skipping MineCLIP is recorded in REPORT.md."
     )
+
+
+def reshape_patch_tokens(tokens, height: int, width: int, patch: int = 14):
+    """(N, D) patch tokens → (H/patch, W/patch, D). 224×364 / 14 is 16×26, not square."""
+    tokens = np.asarray(tokens)
+    n_h, n_w = int(height) // int(patch), int(width) // int(patch)
+    if tokens.ndim != 2:
+        raise ValueError(f"expected (N, D) tokens, got {tokens.shape}")
+    if tokens.shape[0] != n_h * n_w:
+        raise ValueError(f"token count {tokens.shape[0]} != {n_h}x{n_w} for {height}x{width} patch {patch}")
+    return tokens.reshape(n_h, n_w, tokens.shape[-1])
 
 
 def _as_tensor(rgb):

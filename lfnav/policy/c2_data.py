@@ -81,6 +81,33 @@ class FeatureSpec:
         )
 
     @property
+    def scene_dim(self) -> int:
+        per_obj = 1 + len(DIRECTIONS) + len(DISTANCES)
+        return (
+            len(self.objects) * per_obj
+            + len(self.biomes)
+            + len(self.times)
+            + len(self.weathers)
+            + len(self.brightness)
+        )
+
+    @property
+    def aux_dim(self) -> int:
+        return (
+            len(self.objects)
+            + len(self.objects)
+            + len(self.biomes)
+            + len(self.times)
+            + len(self.weathers)
+            + len(self.brightness)
+            + 8
+            + self.recent_k * len(self.actions)
+            + 1
+            + len(DIRECTIONS)
+            + len(DISTANCES)
+        )
+
+    @property
     def dim(self) -> int:
         per_obj = 1 + len(DIRECTIONS) + len(DISTANCES)
         return (
@@ -121,6 +148,44 @@ def encode_last_seen(last: dict | None, env_step: int) -> list[float]:
         + _one_hot(list(DIRECTIONS), last.get("direction"))
         + _one_hot(list(DISTANCES), last.get("distance"))
     )
+
+
+def encode_aux(
+    task: dict,
+    sector8,
+    recent_actions,
+    last_seen: dict | None,
+    env_step: int,
+    spec: FeatureSpec,
+) -> np.ndarray:
+    """C2 side features without the GT scene or matcher output."""
+    cond = (task or {}).get("conditions") or {}
+    parts: list[float] = []
+    parts.extend(_one_hot(spec.objects, (task or {}).get("target")))
+    near = [0.0] * len(spec.objects)
+    for name in list(cond.get("near") or []):
+        if name in spec.objects:
+            near[spec.objects.index(name)] = 1.0
+    parts.extend(near)
+    parts.extend(_one_hot(spec.biomes, cond.get("biome")))
+    parts.extend(_one_hot(spec.times, cond.get("time")))
+    parts.extend(_one_hot(spec.weathers, cond.get("weather")))
+    parts.extend(_one_hot(spec.brightness, cond.get("brightness")))
+    sectors = [float(x) for x in list(sector8 or [])[:8]]
+    sectors += [0.0] * (8 - len(sectors))
+    total = sum(sectors)
+    if total > 0:
+        sectors = [x / total for x in sectors]
+    parts.extend(sectors)
+    recent = list(recent_actions or [])[-spec.recent_k :]
+    recent = [None] * (spec.recent_k - len(recent)) + recent
+    for name in recent:
+        parts.extend(_one_hot(spec.actions, name))
+    parts.extend(encode_last_seen(last_seen, env_step))
+    vector = np.asarray(parts, dtype=np.float32)
+    if vector.shape[0] != spec.aux_dim:
+        raise RuntimeError(f"aux dim {vector.shape[0]} != spec {spec.aux_dim}")
+    return vector
 
 
 def encode_features(
