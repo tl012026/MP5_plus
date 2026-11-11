@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,7 +21,14 @@ from lfnav.env.minedojo_env import (
     task_mentions_grass,
     vegetation_fill_commands,
 )
-from lfnav.env.probe_commands import check_peaceful
+from lfnav.env.probe_commands import (
+    after_summon,
+    check_peaceful,
+    format_table,
+    raw_name_counts,
+    spin_scan,
+    summon_trial,
+)
 from lfnav.gt.initial import apply_spawn_offset_distance, initial_scene_metrics
 from lfnav.types import TaskSpec
 
@@ -315,10 +323,45 @@ class HostileCountTest(unittest.TestCase):
         cfg = load_config()
         cfg["image_hw"] = [14, 14]
         env = FakeMineDojoEnv(cfg, {})
-        detail = check_peaceful(env, cfg)
+        with tempfile.TemporaryDirectory() as tmp:
+            detail = check_peaceful(env, cfg, out=tmp)
         self.assertEqual(detail, "detector cannot see zombie")
         self.assertIn("/difficulty easy", env.chat_log)
         self.assertIn("/summon zombie ~ ~ ~4", env.chat_log)
+
+    def test_raw_counts_and_spin_see_pig(self):
+        cfg = load_config()
+        cfg["image_hw"] = [14, 14]
+        env = FakeMineDojoEnv(cfg, {"entities": [{"name": "pig", "x": 0.0, "z": 3.0}]})
+        obs = env.reset()
+        counts = raw_name_counts(obs, cfg)
+        self.assertGreater(counts.get("pig", 0), 0)
+        seen, _obs = spin_scan(env, cfg, "pig")
+        self.assertTrue(seen)
+        empty = FakeMineDojoEnv(cfg, {})
+        empty.reset()
+        missed, _obs = spin_scan(empty, cfg, "pig")
+        self.assertFalse(missed)
+
+    def test_after_summon_writes_jpgs_and_table(self):
+        cfg = load_config()
+        cfg["image_hw"] = [14, 14]
+        env = FakeMineDojoEnv(cfg, {"entities": [{"name": "pig", "x": 0.0, "z": 3.0}]})
+        env.reset()
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp)
+            seen = after_summon(env, cfg, "pig", "pig_send_chat", dest)
+            self.assertTrue(seen)
+            for tick in (5, 10, 15, 20):
+                self.assertTrue((dest / f"pig_send_chat_{tick}.jpg").is_file(), tick)
+            row = summon_trial(env, cfg, "pig", "send_chat", "/summon pig ~ ~1 ~3", "pig_send_chat", dest)
+            self.assertTrue(row["seen"])
+            exec_row = summon_trial(env, cfg, "pig", "execute_cmd", "/summon pig ~ ~1 ~3", "pig_execute_cmd", dest)
+            self.assertIsNotNone(exec_row["error"])
+            text = format_table([exec_row, row])
+            self.assertIn("execute_cmd", text)
+            self.assertIn("send_chat", text)
+            self.assertIn("pig", text)
 
 
 class WidePitchTest(unittest.TestCase):
