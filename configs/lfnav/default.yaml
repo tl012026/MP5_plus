@@ -79,6 +79,7 @@ joint:
   data_version: joint_v1
   checkpoint: null
   encoder: dinov2_vits14
+  token_pool: 2
 
 c2:
   checkpoint: null

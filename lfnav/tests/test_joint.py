@@ -12,7 +12,7 @@ from lfnav.config import load_config
 from lfnav.data.demo_format import write_episode
 from lfnav.eval.run import make_perception, make_policy, match_distance
 from lfnav.matcher import Matcher
-from lfnav.perception.encoder import FakeEncoder, reshape_patch_tokens
+from lfnav.perception.encoder import FakeEncoder, pool_patch_tokens, reshape_patch_tokens
 from lfnav.perception.extract_features import extract_demos, feature_path_for
 from lfnav.policy.c2_data import select_training_episodes
 from lfnav.policy.joint import JointAgent, belief_aligned_distance
@@ -63,8 +63,17 @@ class FeatureExtractTest(unittest.TestCase):
         grid = reshape_patch_tokens(tokens, 224, 364, 14)
         self.assertEqual(grid.shape, (16, 26, 8))
 
+    def test_pool_16x26_is_8x13(self):
+        grid = np.arange(16 * 26 * 3, dtype=np.float32).reshape(16, 26, 3)
+        pooled = pool_patch_tokens(grid, 2)
+        self.assertEqual(pooled.shape, (8, 13, 3))
+        block = grid[:2, :2].mean(axis=(0, 1))
+        np.testing.assert_allclose(pooled[0, 0], block)
+
     def test_npy_count_matches_filtered_decisions(self):
         cfg = load_config()
+        cfg["joint"] = dict(cfg.get("joint") or {})
+        cfg["joint"]["token_pool"] = 1
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "demos_main"
             a = _episode(root, "1-4", "easy", 1, [["forward"], ["turn_left_15"]], config_name="main", hostile_seen=0)
@@ -89,6 +98,30 @@ class FeatureExtractTest(unittest.TestCase):
             self.assertEqual(manifest["n_decisions"], n_decisions)
             self.assertEqual(total_t, n_decisions)
             self.assertEqual(feature_path_for(out, {"task_name": "1-4", "difficulty": "easy", "seed": 1}, a).is_file(), True)
+
+    def test_extract_and_agent_share_pooled_8x13(self):
+        cfg = load_config()
+        cfg["dry_run"] = True
+        cfg["joint"] = dict(cfg.get("joint") or {})
+        cfg["joint"].update(encoder="fake", fake_dim=4, fake_grid=[16, 26], token_pool=2)
+        encoder = FakeEncoder(dim=4, grid=(16, 26))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "demos_main"
+            _episode(root, "1-4", "easy", 1, [["forward"]], config_name="main", hostile_seen=0)
+            out = Path(tmp) / "feat"
+            extract_demos([root], out, encoder, cfg)
+            files = list(out.glob("*.npy"))
+            self.assertEqual(len(files), 1)
+            payload = np.load(files[0], allow_pickle=True).item()
+            self.assertEqual(payload["tokens"].shape[1:3], (8, 13))
+            raw = encoder(np.zeros((8, 8, 3), dtype=np.uint8))["tokens"]
+            expected = pool_patch_tokens(raw, 2)
+            np.testing.assert_allclose(payload["tokens"][0].astype(np.float32), expected)
+            agent = JointAgent(cfg)
+            encoded = agent.features(np.zeros((8, 8, 3), dtype=np.uint8))
+            self.assertEqual(encoded["tokens"].shape[:2], (8, 13))
+            np.testing.assert_allclose(encoded["tokens"], expected)
+            np.testing.assert_allclose(agent._tokens, expected)
 
 
 class MatcherUsesATest(unittest.TestCase):
@@ -159,6 +192,7 @@ class JointTrainTest(unittest.TestCase):
         cfg = load_config()
         cfg["joint"] = dict(cfg.get("joint") or {})
         cfg["joint"]["hidden"] = 16
+        cfg["joint"]["token_pool"] = 1
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "demos_main"
             for seed in (1, 2, 3, 4):

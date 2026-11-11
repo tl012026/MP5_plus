@@ -94,6 +94,26 @@ def reshape_patch_tokens(tokens, height: int, width: int, patch: int = 14):
     return tokens.reshape(n_h, n_w, tokens.shape[-1])
 
 
+def token_pool_size(cfg: dict | None = None) -> int:
+    return int(((cfg or {}).get("joint") or {}).get("token_pool") or 1)
+
+
+def pool_patch_tokens(tokens, pool: int = 2):
+    """Non-overlapping k×k mean pool. 16×26 with k=2 is 8×13."""
+    arr = np.asarray(tokens)
+    k = int(pool or 1)
+    if k <= 1:
+        return arr
+    if arr.ndim != 3:
+        raise ValueError(f"expected (H, W, D) tokens, got {arr.shape}")
+    h, w, d = arr.shape
+    n_h, n_w = h // k, w // k
+    if n_h == 0 or n_w == 0:
+        raise ValueError(f"cannot pool {h}x{w} by {k}")
+    cropped = arr[: n_h * k, : n_w * k]
+    return cropped.reshape(n_h, k, n_w, k, d).mean(axis=(1, 3))
+
+
 def _as_tensor(rgb):
     import torch
     image = np.asarray(rgb, dtype=np.float32)

@@ -19,7 +19,7 @@ if str(_ROOT) not in sys.path:
 
 from lfnav.config import load_config
 from lfnav.data.demo_format import read_episode
-from lfnav.perception.encoder import FakeEncoder, load_encoder
+from lfnav.perception.encoder import FakeEncoder, load_encoder, pool_patch_tokens, token_pool_size
 from lfnav.policy.c2_data import demo_roots, iter_success_episodes, select_training_episodes
 
 
@@ -81,7 +81,7 @@ def decision_frames(folder: Path, steps: list[dict]) -> list[tuple[int, Path]]:
     return rows
 
 
-def extract_episode(folder: Path, dst: Path, encoder) -> int:
+def extract_episode(folder: Path, dst: Path, encoder, pool: int = 1) -> int:
     packed = read_episode(folder)
     pairs = decision_frames(folder, packed["steps"])
     if not pairs:
@@ -93,12 +93,10 @@ def extract_episode(folder: Path, dst: Path, encoder) -> int:
     decisions = []
     for decision, frame in pairs:
         feats = encoder(_load_frame(frame))
-        tokens = np.asarray(feats["tokens"], dtype=np.float16)
-        pooled = np.asarray(feats.get("pooled"), dtype=np.float16)
-        if pooled.size == 0 or pooled.ndim == 0:
-            pooled = tokens.astype(np.float32).mean(axis=(0, 1)).astype(np.float16)
+        tokens = pool_patch_tokens(np.asarray(feats["tokens"], dtype=np.float32), pool)
+        pooled = tokens.mean(axis=(0, 1)).astype(np.float16)
         pooled_rows.append(pooled)
-        token_rows.append(tokens)
+        token_rows.append(tokens.astype(np.float16))
         decisions.append(decision)
     dst.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -125,10 +123,11 @@ def extract_demos(demos, out: Path, encoder, cfg: dict | None = None) -> dict:
     n_files = 0
     n_decisions = 0
     skipped_no_frame = 0
+    pool = token_pool_size(cfg)
     for folder in kept:
         packed = read_episode(folder)
         dst = feature_path_for(out, packed["record"], folder)
-        n = extract_episode(folder, dst, encoder)
+        n = extract_episode(folder, dst, encoder, pool=pool)
         if n == 0:
             skipped_no_frame += 1
             continue
@@ -140,6 +139,7 @@ def extract_demos(demos, out: Path, encoder, cfg: dict | None = None) -> dict:
         "skipped_no_frame": skipped_no_frame,
         "filter_stats": stats,
         "encoder": getattr(encoder, "name", None),
+        "token_pool": pool,
         "out": str(out),
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from lfnav.aggregate import argmax_name
+from lfnav.perception.encoder import pool_patch_tokens, token_pool_size
 from lfnav.policy.base import Policy
 from lfnav.policy.c2_data import DIRECTIONS, DISTANCES, FeatureSpec, encode_aux
 from lfnav.policy.c2 import _visible
@@ -308,12 +309,13 @@ class JointAgent(Policy):
             if rgb is None:
                 rgb = frame.get("rgb")
         encoded = self.encoder(rgb)
-        tokens = np.asarray(encoded["tokens"], dtype=np.float32)
-        pooled = np.asarray(encoded.get("pooled"), dtype=np.float32)
-        if pooled.ndim == 0 or pooled.size == 0:
-            pooled = tokens.mean(axis=(0, 1))
+        tokens = pool_patch_tokens(np.asarray(encoded["tokens"], dtype=np.float32), token_pool_size(self.cfg))
+        pooled = tokens.mean(axis=(0, 1))
         self._tokens = tokens
         self._pooled = pooled
+        encoded = dict(encoded)
+        encoded["tokens"] = tokens
+        encoded["pooled"] = pooled
         return encoded
 
     def perceive(self, frame) -> SceneState:
