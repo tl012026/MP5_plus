@@ -86,10 +86,9 @@ c2:
   hidden: 256
   # Main demos: keep if hostile_seen == 0. peaceful_sent is not the filter.
   exclude_tasks: ["4-3"]
-  legacy_tasks: ["1-1", "1-2", "1-3", "1-4", "2-1", "2-3", "3-3"]
+  legacy_tasks: []
   demo_dirs:
     - /scratch/${USER}/lfnav/data/demos_main
-    - /scratch/${USER}/lfnav/data/demos_dynamic
 
 policy:
   chunk: 4
