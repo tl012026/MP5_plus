@@ -76,9 +76,46 @@ class FakeMineDojoEnv:
         self.action_space = self
         self.chat_log: list[str] = []
         self.invalid_commands: set[str] = set()
+        self._env = self._wrap_sim(self._make_sim())
+
+    class MineDojoSim:
+        """Innermost chat actor; same class name _chat_actor looks for on a real client."""
+
+        def __init__(self, host):
+            self.host = host
+            self.action_space = self
+            self.last_chat = ""
+
+        def no_op(self):
+            return {"chat": ""}
+
+        def step(self, action):
+            if isinstance(action, dict):
+                self.last_chat = str(action.get("chat") or "")
+            return self.host.step(action)
+
+        def execute_cmd(self, cmd: str):
+            return self.host.execute_cmd(cmd)
+
+    class _VectorWrap:
+        def __init__(self, inner):
+            self.env = inner
+            self.action_space = self
+
+        def no_op(self):
+            return np.zeros(8, dtype=np.int64)
+
+        def step(self, action):
+            return self.env.step(action)
+
+    def _make_sim(self):
+        return FakeMineDojoEnv.MineDojoSim(self)
+
+    def _wrap_sim(self, sim):
+        return FakeMineDojoEnv._VectorWrap(FakeMineDojoEnv._VectorWrap(sim))
 
     def no_op(self):
-        return {"chat": ""}
+        return np.zeros(8, dtype=np.int64)
 
     def execute_cmd(self, cmd: str) -> None:
         token = str(cmd).split()[0] if cmd else ""
@@ -150,7 +187,7 @@ class FakeMineDojoEnv:
                 obs["chat"] = INVALID_CMD
             self.frames.after_step(obs)
             return obs, 0.0, False, info
-        if isinstance(action, dict):
+        if isinstance(action, dict) or isinstance(action, np.ndarray):
             action = "noop"
         name = self._action_name(action)
         before = (self.pos[0], self.pos[2])

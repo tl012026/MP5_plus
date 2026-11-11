@@ -479,13 +479,24 @@ def _sim(env):
 
 
 def _chat_actor(env):
-    sim = _sim(env)
-    if hasattr(sim, "action_space") and hasattr(sim, "step"):
-        return sim
-    inner = getattr(env, "_env", env)
-    if hasattr(inner, "action_space") and hasattr(inner, "step"):
-        return inner
-    return env
+    """Innermost MineDojoSim (or an object with _bridge_env). Walk env._env.env... at most 10 layers."""
+    names = []
+    cur = getattr(env, "_env", None)
+    if cur is None:
+        raise RuntimeError(
+            f"no chat actor: {type(env).__name__} has no _env (layers={names})"
+        )
+    for _ in range(10):
+        names.append(type(cur).__name__)
+        if type(cur).__name__ == "MineDojoSim" or hasattr(cur, "_bridge_env"):
+            return cur
+        nxt = getattr(cur, "env", None)
+        if nxt is None or nxt is cur:
+            break
+        cur = nxt
+    raise RuntimeError(
+        f"MineDojoSim not found in {len(names)} layers: {', '.join(names)}"
+    )
 
 
 def _invalid_cmd_seen(obs, info) -> bool:

@@ -44,7 +44,7 @@ def _stub(cfg, cmds, steps, invalid=None):
         def no_op(self):
             return {"chat": ""}
 
-    class Sim:
+    class MineDojoSim:
         def __init__(self):
             self.action_space = ChatSpace()
 
@@ -65,7 +65,7 @@ def _stub(cfg, cmds, steps, invalid=None):
     class Inner:
         def __init__(self):
             self.action_space = InnerSpace()
-            self.env = Sim()
+            self.env = MineDojoSim()
 
         def step(self, action):
             steps.append(action)
@@ -180,6 +180,38 @@ class SpawnOnceTest(unittest.TestCase):
         _send_chat = __import__("lfnav.env.minedojo_env", fromlist=["_send_chat"])._send_chat
         _send_chat(env, "/difficulty peaceful")
         self.assertEqual(env.chat_log[-1], "/difficulty peaceful")
+
+    def test_chat_actor_uses_inner_sim_dict_not_outer_numpy(self):
+        from lfnav.env.minedojo_env import _chat_actor, _send_chat
+
+        cfg = load_config()
+        env = FakeMineDojoEnv(cfg, {})
+        outer = env.action_space.no_op()
+        self.assertFalse(isinstance(outer, dict))
+        actor = _chat_actor(env)
+        self.assertEqual(type(actor).__name__, "MineDojoSim")
+        inner = actor.action_space.no_op()
+        self.assertIsInstance(inner, dict)
+        _send_chat(env, "/difficulty peaceful")
+        self.assertEqual(env.chat_log[-1], "/difficulty peaceful")
+        self.assertEqual(actor.last_chat, "/difficulty peaceful")
+        self.assertIn("chat", actor.action_space.no_op())
+
+    def test_chat_actor_lists_layers_when_missing(self):
+        from lfnav.env.minedojo_env import _chat_actor
+
+        class Leaf:
+            pass
+
+        class Mid:
+            def __init__(self):
+                self.env = Leaf()
+
+        wrapper = SimpleNamespace(_env=Mid())
+        with self.assertRaises(RuntimeError) as ctx:
+            _chat_actor(wrapper)
+        self.assertIn("Mid", str(ctx.exception))
+        self.assertIn("Leaf", str(ctx.exception))
 
     def test_grass_tasks_skip_vegetation_clear(self):
         cfg = self._cfg()
