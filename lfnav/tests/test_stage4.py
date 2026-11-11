@@ -5,11 +5,18 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 
 from lfnav.eval.eval_perception import score_scenes
-from lfnav.perception.encoder import FakeEncoder
+from lfnav.perception.encoder import FakeEncoder, load_encoder
+
+try:
+    import torch
+    HAS_TORCH = True
+except Exception:
+    HAS_TORCH = False
 from lfnav.perception.extract_features import extract_shard
 from lfnav.perception.minellm import parse_choice, parse_yes, scene_from_answers
 from lfnav.perception.preprocess import target_hw
@@ -62,6 +69,32 @@ class PerceptionTest(unittest.TestCase):
         self.assertGreater(report["present"]["f1"], 0.0)
         self.assertGreater(report["present"]["hallucination"], 0.0)
         self.assertEqual(report["direction_accuracy"], 1.0)
+
+    @unittest.skipUnless(HAS_TORCH, "torch not installed on this host")
+    def test_dinov2_wrap_from_hub_stub(self):
+        dim = 8
+
+        class FakeDino(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.dummy = torch.nn.Parameter(torch.zeros(1))
+
+            def forward_features(self, tensor):
+                batch, _, height, width = tensor.shape
+                n_h, n_w = height // 14, width // 14
+                return {
+                    "x_norm_clstoken": torch.zeros(batch, dim),
+                    "x_norm_patchtokens": torch.zeros(batch, n_h * n_w, dim),
+                }
+
+        with patch("torch.hub.load", return_value=FakeDino()) as hub:
+            encoder = load_encoder("dinov2_vits14")
+        hub.assert_called_once()
+        self.assertEqual(encoder.name, "dinov2_vits14")
+        out = encoder(np.zeros((224, 364, 3), dtype=np.uint8))
+        self.assertEqual(out["tokens"].shape, (16, 26, dim))
+        self.assertEqual(out["cls"].shape, (dim,))
+        self.assertEqual(out["pooled"].shape, (dim,))
 
     def test_ignore_patches_drop_out_of_loss(self):
         logits = np.array([10.0, -10.0])

@@ -48,8 +48,9 @@ def _dinov2(name: str):
     for param in model.parameters():
         param.requires_grad = False
 
+    encoder_name = name
+
     class _Wrap:
-        name = name
         patch = 14
 
         def __init__(self):
@@ -72,6 +73,7 @@ def _dinov2(name: str):
             pooled = grid.mean(axis=(0, 1))
             return {"cls": cls, "tokens": grid, "pooled": pooled}
 
+    _Wrap.name = encoder_name
     return _Wrap()
 
 
