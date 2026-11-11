@@ -2,6 +2,8 @@
 
 Account and partition are left blank in the scripts. Fill them in locally before submitting. Every script sets `--requeue`. Logs go to `/scratch/$USER/lfnav/logs/`. MineDojo jobs use `$SCR/env/minedojo.sif` and source `$SCR/mp5_env.sh` with absolute paths, because the container user is `user`.
 
+On this cluster, GPU jobs must request `#SBATCH --gres=gpu:1`. `#SBATCH --gpus=1` is rejected.
+
 MineDojo sbatch templates source `lfnav/env/gradle_home.sh`. That copies `$SCR/.gradle` onto `$SLURM_TMPDIR/gradle_$SLURM_JOB_ID` (or `/tmp/...`), skipping `daemon/` and `*.lock`, exports `GRADLE_USER_HOME` to the copy, and deletes the copy on EXIT. Jobs must not write the master. To build or refresh the master, run one job with `GRADLE_USE_MASTER=1` so it uses `$SCR/.gradle` directly. Several workers in one job share the copy and serialize `minedojo.make` (default). `GRADLE_WORKER_COPIES=1` gives each worker `gradle_<job>_w<k>` instead. `init.d/mixingradle-local.gradle` keeps its absolute `$SCR/env/m2` path.
 
 Create `/scratch/$USER/lfnav/logs` on the login node before the first `sbatch`. Slurm opens `--output` before the job script can `mkdir`.
