@@ -45,7 +45,7 @@ Source: `configs/lfnav/difficulty.yaml`. Spec files do not change with difficult
 
 Eval seeds: `configs/lfnav/eval_seeds_baseline.txt` — **9, 19, 29, 39, 49**. Training / demo seeds (`configs/lfnav/train_seeds_demo.txt`) are for lfnav C2 only; the MP5 group does not use them for this protocol.
 
-Sole env: `configs/lfnav/main.yaml` (inherits `default.yaml`). Animals walk, natural mobs stay, vegetation is not cleared, `/difficulty peaceful` is sent after reset. The only intentional difference from stock MP5 is peaceful difficulty. `initial_target_distance` and SPL use the nearest same-species opening ray.
+Sole env: `configs/lfnav/main.yaml` (inherits `default.yaml`). Animals walk, natural mobs stay, vegetation is not cleared, `/difficulty peaceful` is sent after reset. The only intentional difference from stock MP5 is peaceful difficulty. `peaceful_sent` (legacy `peaceful_ok`) means that chat command ran, not that it worked; `hostile_seen` is the ray count. `initial_target_distance` and SPL use the nearest same-species opening ray.
 
 ## Scene construction
 

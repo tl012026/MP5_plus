@@ -11,7 +11,7 @@ import numpy as np
 
 from lfnav.geom import aligned_subrays_n, patch_grid, ray_directions, subray_grid_from_cfg
 from lfnav.gt.scene_state import biome_id_for_name
-from lfnav.env.minedojo_env import CHAT_WHITELIST, INVALID_CMD
+from lfnav.env.minedojo_env import CHAT_WHITELIST, INVALID_CMD, ray_raw
 
 
 def _assign(obs: dict, path, value) -> None:
@@ -248,7 +248,10 @@ class FakeMineDojoEnv:
                 if hit is None:
                     continue
                 label, dist = hit
-                hits.append({"row": i, "col": j, "label": label, "distance": dist, "pitch": ry})
+                hits.append({
+                    "row": i, "col": j, "label": label, "distance": dist,
+                    "pitch": ry, "raw": ray_raw(label),
+                })
         return hits
 
     def _aligned_rays(self) -> list[dict]:
@@ -271,18 +274,22 @@ class FakeMineDojoEnv:
                     if hit is None:
                         continue
                     label, dist = hit
-                    if label not in by_obj or dist < by_obj[label]:
-                        by_obj[label] = dist
+                    raw = ray_raw(label)
+                    if label not in by_obj or dist < by_obj[label][0]:
+                        by_obj[label] = (dist, raw)
                     if closest is None or dist < closest[1]:
-                        closest = (label, dist)
+                        closest = (label, dist, raw)
                         pitch = ry
                 if not by_obj:
                     continue
-                primary, pdist = closest
-                hits.append({"row": i, "col": j, "label": primary, "distance": pdist, "pitch": pitch})
-                for name, dist in by_obj.items():
+                primary, pdist, praw = closest
+                hits.append({
+                    "row": i, "col": j, "label": primary, "distance": pdist,
+                    "pitch": pitch, "raw": praw,
+                })
+                for name, (dist, raw) in by_obj.items():
                     if name != primary:
-                        extras.append({"row": i, "col": j, "label": name, "distance": dist})
+                        extras.append({"row": i, "col": j, "label": name, "distance": dist, "raw": raw})
         hits.extend(extras)
         return hits
 
@@ -294,7 +301,7 @@ class FakeMineDojoEnv:
             if hit is None:
                 continue
             label, dist = hit
-            hits.append({"yaw_offset": deg, "label": label, "distance": dist})
+            hits.append({"yaw_offset": deg, "label": label, "distance": dist, "raw": ray_raw(label)})
         return hits
 
     def _march(self, dx, dz, limit):

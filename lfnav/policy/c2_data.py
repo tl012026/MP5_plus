@@ -287,9 +287,8 @@ def select_training_episodes(folders: list[Path], cfg: dict | None = None) -> tu
             continue
         main = _is_main_source(record, Path(folder))
         if main:
-            if not record.get("peaceful_ok"):
+            if not record.get("peaceful_sent", record.get("peaceful_ok", False)):
                 stats["main_not_peaceful"] += 1
-                continue
             if int(record.get("hostile_seen") or 0) != 0:
                 stats["main_hostile"] += 1
                 continue

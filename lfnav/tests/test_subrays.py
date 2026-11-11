@@ -59,8 +59,10 @@ class ConvertSubraysTest(unittest.TestCase):
         converted = convert_rays(rays, plan, load_config())
         self.assertEqual(len(converted["aligned"]), 2)
         self.assertEqual(converted["aligned"][0]["label"], "pig")
+        self.assertEqual(converted["aligned"][0]["raw"], "pig")
         self.assertEqual(converted["aligned"][0]["distance"], 4.0)
         self.assertIsNone(converted["aligned"][1]["label"])
+        self.assertIsNone(converted["aligned"][1]["raw"])
 
     def test_n3_marks_object_on_one_subcell_and_min_distance(self):
         cfg = load_config()

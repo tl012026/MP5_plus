@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from lfnav.env.minedojo_env import peaceful_command_sent
 from lfnav.gt.initial import (
     apply_spawn_offset_distance,
     distance_meets_min,
@@ -56,7 +57,8 @@ def _initial_metrics(env, obs, cfg: dict, task: TaskSpec, used: int, reroll_coun
         "vegetation_cleared": bool(spawn_meta.get("vegetation_cleared", False)),
         "spawn_target_distance": metrics.get("spawn_target_distance"),
         "natural_target_closer": bool(metrics.get("natural_target_closer", False)),
-        "peaceful_ok": bool(spawn_meta.get("peaceful_ok", False)),
+        "peaceful_sent": peaceful_command_sent(spawn_meta),
+        "peaceful_ok": peaceful_command_sent(spawn_meta),
     }
 
 

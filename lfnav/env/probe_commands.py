@@ -32,6 +32,26 @@ def _fail(name: str, detail: str) -> str:
     return name
 
 
+def check_peaceful(env, cfg: dict) -> str | None:
+    """Positive control (easy + zombie on rays), then peaceful must despawn it.
+
+    Returns a fail detail, or None on PASS. Prints ``detector cannot see zombie``
+    when the control never hits a zombie ray.
+    """
+    _send_chat(env, "/difficulty easy")
+    _send_chat(env, "/summon zombie ~ ~ ~4")
+    obs = _tick(env, 10)
+    if count_hostile_hits(obs, cfg) <= 0:
+        print("detector cannot see zombie")
+        return "detector cannot see zombie"
+    _send_chat(env, "/difficulty peaceful")
+    obs = _tick(env, 20)
+    hits = count_hostile_hits(obs, cfg)
+    if hits > 0:
+        return f"zombie still on rays after 20 ticks ({hits})"
+    return None
+
+
 def run_probes(cfg: dict) -> list[str]:
     failed = []
     task = TaskSpec(id="probe", source="", description="probe", target="pig", conditions={}, episode={
@@ -45,12 +65,9 @@ def run_probes(cfg: dict) -> list[str]:
         env.reset(task=task, seed=3)
         t0 = time.perf_counter()
         try:
-            _send_chat(env, "/difficulty peaceful")
-            _send_chat(env, "/summon zombie ~ ~ ~4")
-            obs = _tick(env, 20)
-            hits = count_hostile_hits(obs, cfg)
-            if hits > 0:
-                failed.append(_fail("peaceful", f"zombie still on rays after 20 ticks ({hits})"))
+            detail = check_peaceful(env, cfg)
+            if detail:
+                failed.append(_fail("peaceful", detail))
             else:
                 print("PASS peaceful")
         except Exception as exc:

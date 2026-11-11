@@ -85,7 +85,7 @@ Setup: C0 (random walk) and C1 (rule policy) with ground-truth perception on the
 
 ## 11. Freeze, resistance, and vegetation commands were silently dropped
 - **Evidence:** client logs showed `Invalid cmd` for `/effect` (slowness, resistance) and chunked `/fill` of tall grass. MineDojo's `execute_cmd` whitelist swallowed them; ticks did not advance and the world did not change. Earlier C0/C1 runs were therefore **not** frozen, **not** given resistance, and **not** vegetation-cleared, even when the config said so.
-- **Fix:** `_send_chat` writes the command onto `action_space.no_op()["chat"]` and `step`s it. Any `Invalid cmd` now raises. Resistance is NBT on `/summon`. The main scene (`main.yaml`) does not freeze or clear vegetation; it does send `/difficulty peaceful`.
+- **Fix:** `_send_chat` writes the command onto `action_space.no_op()["chat"]` and `step`s it. Any `Invalid cmd` now raises. Resistance is NBT on `/summon`. The main scene (`main.yaml`) does not freeze or clear vegetation; it does send `/difficulty peaceful`. Episode `peaceful_sent` (old `peaceful_ok`) only records that the command was sent. Hostiles on rays are `hostile_seen`.
 
 ## Known limitations (kept, reported)
 - **Tree and grass targets can't be made hard.** The target is everywhere, so medium and hard become `difficulty_unmet`. Report these tasks at easy only.

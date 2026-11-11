@@ -173,6 +173,24 @@ def first_hit(block_name, block_distance, entity_name, entity_distance, miss_nam
     return None, None
 
 
+def ray_raw(name) -> str | None:
+    """Lowercase block/entity id with the minecraft: prefix stripped. None on a miss."""
+    if name is None:
+        return None
+    text = str(name).strip().lower()
+    if text.startswith("minecraft:"):
+        text = text[len("minecraft:"):]
+    return text or None
+
+
+def peaceful_command_sent(meta: dict | None) -> bool:
+    """True if /difficulty peaceful was sent. Old records used peaceful_ok for this."""
+    meta = meta or {}
+    if "peaceful_sent" in meta:
+        return bool(meta.get("peaceful_sent"))
+    return bool(meta.get("peaceful_ok", False))
+
+
 def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
     """Turn MineDojo's parallel ray arrays into aligned and wide lfnav rays."""
     from lfnav.gt.scene_state import resolve_label
@@ -188,15 +206,16 @@ def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
     entity_dists = rays.get(fields.get("entity_distance", "entity_distance"))
 
     def one(index):
-        raw, dist = first_hit(
+        hit, dist = first_hit(
             _ray_at(block_names, index),
             _ray_at(block_dists, index),
             _ray_at(entity_names, index),
             _ray_at(entity_dists, index),
             miss_names,
         )
-        label = None if raw is None else resolve_label(raw, aliases, objects)
-        return label, dist
+        raw = ray_raw(hit)
+        label = None if hit is None else resolve_label(hit, aliases, objects)
+        return label, dist, raw
 
     aligned = []
     start, stop = plan["aligned"]
@@ -204,8 +223,8 @@ def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
     n_sub = max(1, int(plan.get("subrays") or 1))
     if n_sub <= 1:
         for offset, (row, col) in enumerate(cells):
-            label, dist = one(start + offset)
-            aligned.append({"row": row, "col": col, "label": label, "distance": dist})
+            label, dist, raw = one(start + offset)
+            aligned.append({"row": row, "col": col, "label": label, "distance": dist, "raw": raw})
         if stop != start + len(cells):
             raise RuntimeError("aligned ray span does not match the patch cells")
     else:
@@ -215,34 +234,49 @@ def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
         extras = []
         for cell_i, (row, col) in enumerate(cells):
             by_obj = {}
-            closest = (None, None)
+            closest = (None, None, None)
+            unlabeled = (None, None)
             for s in range(per):
-                label, dist = one(start + cell_i * per + s)
-                if label is None or dist is None:
+                label, dist, raw = one(start + cell_i * per + s)
+                if dist is None:
                     continue
-                if label not in by_obj or dist < by_obj[label]:
-                    by_obj[label] = dist
+                if label is None:
+                    if unlabeled[1] is None or dist < unlabeled[1]:
+                        unlabeled = (raw, dist)
+                    continue
+                prev = by_obj.get(label)
+                if prev is None or dist < prev[0]:
+                    by_obj[label] = (dist, raw)
                 if closest[1] is None or dist < closest[1]:
-                    closest = (label, dist)
+                    closest = (label, dist, raw)
             if not by_obj:
-                aligned.append({"row": row, "col": col, "label": None, "distance": None})
+                aligned.append({
+                    "row": row, "col": col,
+                    "label": None, "distance": unlabeled[1], "raw": unlabeled[0],
+                })
                 continue
-            primary, pdist = closest
-            aligned.append({"row": row, "col": col, "label": primary, "distance": pdist})
-            for name, dist in by_obj.items():
+            primary, pdist, praw = closest
+            aligned.append({"row": row, "col": col, "label": primary, "distance": pdist, "raw": praw})
+            for name, (dist, raw) in by_obj.items():
                 if name != primary:
-                    extras.append({"row": row, "col": col, "label": name, "distance": dist})
+                    extras.append({"row": row, "col": col, "label": name, "distance": dist, "raw": raw})
+            if unlabeled[0] is not None:
+                extras.append({
+                    "row": row, "col": col,
+                    "label": None, "distance": unlabeled[1], "raw": unlabeled[0],
+                })
         aligned.extend(extras)
     wide = []
     w0, _w1 = plan["wide"]
     for offset, (pitch, yaw) in enumerate(plan["wide_angles_deg"]):
-        label, dist = one(w0 + offset)
+        label, dist, raw = one(w0 + offset)
         wide.append({
             "pitch": pitch,
             "yaw": yaw,
             "yaw_offset": yaw,  # lfnav degrees: +yaw is right, already un-flipped in lidar_plan
             "label": label,
             "distance": dist,
+            "raw": raw,
         })
     return {"aligned": aligned, "wide": wide}
 
@@ -501,8 +535,8 @@ def count_hostile_hits(obs: dict, cfg: dict | None = None) -> int:
     n = 0
     for key in (keys.get("aligned_rays"), keys.get("wide_rays")):
         for ray in lookup(obs, key, []) or []:
-            label = str(ray.get("label") or "").lower().replace(" ", "_").replace("minecraft:", "")
-            if any(label == name or label.endswith(name) for name in HOSTILE_NAMES):
+            token = (ray_raw(ray.get("raw")) or "").replace(" ", "_")
+            if any(token == name or token.endswith(name) for name in HOSTILE_NAMES):
                 n += 1
     return n
 
@@ -587,6 +621,7 @@ def spawn_task_mobs(env, task, cfg: dict, seed: int) -> dict:
         "n_targets_spawned": 0,
         "natural_mobs_cleared": False,
         "vegetation_cleared": False,
+        "peaceful_sent": False,
         "peaceful_ok": False,
     }
     env.spawn_meta = meta
@@ -594,6 +629,7 @@ def spawn_task_mobs(env, task, cfg: dict, seed: int) -> dict:
         if env_cfg.get("peaceful", False):
             obs = _send_chat(env, "/difficulty peaceful") or obs
             meta["peaceful"] = True
+            meta["peaceful_sent"] = True
             meta["peaceful_ok"] = True
         if not names:
             return obs

@@ -37,7 +37,7 @@ class GradleCopyTest(unittest.TestCase):
             (master / "caches" / "ok.bin").write_text("ok")
             (master / "caches" / "busy.lock").write_text("lock")
             (master / "init.d").mkdir()
-            init = "allprojects { repositories { maven { url '/scratch/<user>/env/m2' } } }\n"
+            init = "allprojects { repositories { maven { url '/scratch/USERNAME/env/m2' } } }\n"
             (master / "init.d" / "mixingradle-local.gradle").write_text(init)
             dest = tmp / "copy"
             info = copy_gradle_home(master, dest)
@@ -56,7 +56,7 @@ class GradleCopyTest(unittest.TestCase):
             (master / "init.d").mkdir(parents=True)
             (master / "daemon" / "x").mkdir(parents=True)
             (master / "daemon" / "x" / "n.log").write_text("d")
-            (master / "init.d" / "mixingradle-local.gradle").write_text("url '/scratch/<user>/env/m2'\n")
+            (master / "init.d" / "mixingradle-local.gradle").write_text("url '/scratch/USERNAME/env/m2'\n")
             (master / "a.lock").write_text("l")
             (master / "keep.txt").write_text("k")
             node = tmp / "node"
@@ -76,7 +76,7 @@ class GradleCopyTest(unittest.TestCase):
                     f"'{marker}'; "
                     "test ! -d \"$GRADLE_USER_HOME/daemon\"; "
                     "test ! -f \"$GRADLE_USER_HOME/a.lock\"; "
-                    "grep -F /scratch/<user>/env/m2 \"$GRADLE_USER_HOME/init.d/mixingradle-local.gradle\"; "
+                    "grep -F '/scratch/USERNAME/env/m2' \"$GRADLE_USER_HOME/init.d/mixingradle-local.gradle\"; "
                     "test -d \"$GRADLE_USER_HOME\"",
                 ],
                 check=True,

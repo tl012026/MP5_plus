@@ -19,7 +19,7 @@ from lfnav.config import load_config
 from lfnav.control.controller import Controller
 from lfnav.env.fake import FakeMineDojoEnv
 from lfnav.data.demo_format import config_name
-from lfnav.env.minedojo_env import count_hostile_hits, mob_ring_box
+from lfnav.env.minedojo_env import count_hostile_hits, mob_ring_box, peaceful_command_sent
 from lfnav.env.scene import make_scene_env
 from lfnav.gt.initial import (
     apply_spawn_offset_distance,
@@ -322,7 +322,8 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         "spawn_target_distance": meta.get("spawn_target_distance"),
         "natural_target_closer": bool(meta.get("natural_target_closer", False)),
         "config_name": config_name(cfg),
-        "peaceful_ok": bool(meta.get("peaceful_ok", False)),
+        "peaceful_sent": peaceful_command_sent(meta),
+        "peaceful_ok": peaceful_command_sent(meta),
         "hostile_seen": int(hostile_seen),
     })
     return verdict, events

@@ -75,6 +75,7 @@ c2:
   checkpoint: null
   wide_weight: 0.5
   hidden: 256
+  # Main demos: keep if hostile_seen == 0. peaceful_sent is not the filter.
   exclude_tasks: ["4-3"]
   legacy_tasks: ["1-1", "1-2", "1-3", "1-4", "2-1", "2-3", "3-3"]
   demo_dirs:

@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from lfnav.config import load_config
 from lfnav.env.fake import FakeMineDojoEnv
 from lfnav.env.minedojo_env import (
+    convert_rays,
     count_hostile_hits,
     lidar_plan,
     sample_mob_offset,
@@ -19,6 +20,7 @@ from lfnav.env.minedojo_env import (
     task_mentions_grass,
     vegetation_fill_commands,
 )
+from lfnav.env.probe_commands import check_peaceful
 from lfnav.gt.initial import apply_spawn_offset_distance, initial_scene_metrics
 from lfnav.types import TaskSpec
 
@@ -150,6 +152,8 @@ class SpawnOnceTest(unittest.TestCase):
         spawn_task_mobs(wrapper, task, cfg, seed=3)
         self.assertEqual(cmds[0], "/difficulty peaceful")
         self.assertTrue(wrapper.spawn_meta.get("peaceful"))
+        self.assertTrue(wrapper.spawn_meta.get("peaceful_sent"))
+        self.assertTrue(wrapper.spawn_meta.get("peaceful_ok"))
         self.assertLess(cmds.index("/difficulty peaceful"), cmds.index("/kill @e[type=!player]"))
 
     def test_dynamic_configs_enable_peaceful(self):
@@ -249,6 +253,40 @@ class HostileCountTest(unittest.TestCase):
         self.assertGreater(n, 0)
         pig = FakeMineDojoEnv(cfg, {"entities": [{"name": "pig", "x": 0.0, "z": 3.0}]})
         self.assertEqual(count_hostile_hits(pig.reset(), cfg), 0)
+
+    def test_convert_rays_keeps_raw_and_unlabeled_zombie_counts(self):
+        cfg = load_config()
+        plan = {
+            "aligned": (0, 1),
+            "wide": (1, 1),
+            "rows_cols": [(0, 0)],
+            "wide_angles_deg": [],
+            "subrays": 1,
+        }
+        rays = {
+            "block_name": ["minecraft:air"],
+            "block_distance": [12.0],
+            "entity_name": ["minecraft:Zombie"],
+            "entity_distance": [4.0],
+        }
+        converted = convert_rays(rays, plan, cfg)
+        cell = converted["aligned"][0]
+        self.assertEqual(cell["raw"], "zombie")
+        self.assertIsNone(cell["label"])
+        obs = {"lfnav_rays": converted["aligned"], "lfnav_wide_rays": []}
+        self.assertGreater(count_hostile_hits(obs, cfg), 0)
+        unlabeled = {"lfnav_rays": [{"label": None, "raw": "minecraft:zombie", "distance": 3.0}], "lfnav_wide_rays": []}
+        self.assertGreater(count_hostile_hits(unlabeled, cfg), 0)
+        self.assertEqual(count_hostile_hits({"lfnav_rays": [{"label": "zombie", "distance": 3.0}], "lfnav_wide_rays": []}, cfg), 0)
+
+    def test_probe_fails_when_detector_cannot_see_zombie(self):
+        cfg = load_config()
+        cfg["image_hw"] = [14, 14]
+        env = FakeMineDojoEnv(cfg, {})
+        detail = check_peaceful(env, cfg)
+        self.assertEqual(detail, "detector cannot see zombie")
+        self.assertIn("/difficulty easy", env.chat_log)
+        self.assertIn("/summon zombie ~ ~ ~4", env.chat_log)
 
 
 class WidePitchTest(unittest.TestCase):

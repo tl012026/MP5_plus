@@ -79,12 +79,14 @@ class DatasetSplitTest(unittest.TestCase):
             _episode(old, "2-3", "easy", 2, [["forward"]], config_name="demo_dynamic")
             _episode(main, "4-3", "easy", 3, [["forward"]], config_name="main", peaceful_ok=True, hostile_seen=0)
             _episode(main, "1-3", "easy", 4, [["forward"]], config_name="main", peaceful_ok=True, hostile_seen=2)
+            _episode(main, "2-1", "easy", 5, [["forward"]], config_name="main", hostile_seen=0)
             folders = [p.parent for p in Path(tmp).glob("**/record.json")]
             kept, stats = select_training_episodes(folders, cfg)
             recs = [read_episode(f)["record"] for f in kept]
             keys = {(r["task_name"], int(r["seed"]), r.get("config_name")) for r in recs}
             self.assertIn(("1-4", 1, "main"), keys)
             self.assertIn(("2-3", 2, "demo_dynamic"), keys)
+            self.assertIn(("2-1", 5, "main"), keys)
             self.assertFalse(any(r["task_name"] == "4-3" for r in recs))
             self.assertFalse(any(r["task_name"] == "1-3" for r in recs))
             self.assertGreaterEqual(stats["duplicate"], 1)

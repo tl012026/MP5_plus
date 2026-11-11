@@ -2,6 +2,8 @@
 
 The expert is C1 plus ground-truth perception plus the 360° wide lidar (`lfnav/policy/expert.py`). It is not used at evaluation time. Dynamic-scene demos keep natural animals moving; they are the C2 training set.
 
+C2 keeps successful main-scene demos with `hostile_seen == 0` (and drops `exclude_tasks`, default 4-3). `peaceful_sent` (legacy record field `peaceful_ok`) only means `/difficulty peaceful` was sent; it is not the training filter.
+
 Wide lidar is a **search** cue only. The expert uses it when `match.satisfied.target` is false (the target is not on an aligned ray). If the target is already in the camera frame, C1 runs even when a condition still fails. The previous gate (`status != found`) also fired on missing `near` conditions, so the expert kept turning toward the wide hit and never looked for the other object.
 
 Tasks that need this: **2-2, 3-2, 4-2, 4-3, 4-4** (grass near pig, pig near grass, cow near water). Demos collected before this fix on those tasks should be recaptured.
