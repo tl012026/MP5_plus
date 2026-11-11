@@ -62,6 +62,14 @@ def position_of(obs: dict, cfg: dict):
     return [float(v) for v in pos]
 
 
+def can_see_sky_of(obs: dict) -> bool:
+    """location_stats.can_see_sky. Missing field is treated as surface (True)."""
+    loc = obs.get("location_stats") if isinstance(obs, dict) else None
+    if not isinstance(loc, dict) or "can_see_sky" not in loc:
+        return True
+    return bool(scalar(loc.get("can_see_sky")))
+
+
 def yaw_of(obs: dict, cfg: dict) -> float:
     keys = cfg.get("obs_keys") or {}
     yaw = scalar(lookup(obs, keys.get("yaw"), 0.0))

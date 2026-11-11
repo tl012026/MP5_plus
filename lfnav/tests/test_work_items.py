@@ -16,7 +16,7 @@ from lfnav.env.fake import FakeMineDojoEnv
 from lfnav.env.gradle_home import copy_dest, copy_gradle_home
 from lfnav.env.minedojo_env import mob_ring_box
 from lfnav.eval.baseline_index import all_cells, n_cells
-from lfnav.eval.run import EnvReuse, open_episode
+from lfnav.eval.run import EnvReuse, open_episode, run_episode
 from lfnav.gt.judge import judge_episode, spl_approx
 from lfnav.matcher import Matcher
 from lfnav.policy.c2 import featurize
@@ -162,6 +162,57 @@ class BlockRerollTest(unittest.TestCase):
         self.assertEqual(meta["world_seed"], 7 * 1000 + 2)
         self.assertEqual(meta["reroll_count"], 2)
         self.assertTrue(meta["difficulty_unmet"])
+        self.assertFalse(meta.get("spawn_underground"))
+
+
+class UndergroundRerollTest(unittest.TestCase):
+    def test_sky_false_rerolls_then_accepts(self):
+        cfg = load_config()
+        cfg["backend"] = "fake"
+        cfg["difficulty"] = "easy"
+        task = TaskSpec.from_dict(json.loads((SPECS / "1-4.json").read_text()))
+        calls = []
+
+        def make(cfg, task, seed):
+            calls.append(seed)
+            sky = seed != 7
+            env = FakeMineDojoEnv(cfg, {"entities": [{"name": "pig", "x": 0.0, "z": 6.0}], "can_see_sky": sky})
+            return env
+
+        with patch("lfnav.eval.run.make_env", make):
+            session = EnvReuse(cfg)
+            _env, _obs, meta = open_episode(session, task, cfg, 7)
+            session.close()
+        self.assertEqual(calls, [7, 7 * 1000 + 1])
+        self.assertEqual(meta["world_seed"], 7 * 1000 + 1)
+        self.assertEqual(meta["underground_rerolls"], 1)
+        self.assertFalse(meta["spawn_underground"])
+
+    def test_all_underground_is_marked_and_not_run(self):
+        cfg = load_config()
+        cfg["backend"] = "fake"
+        cfg["difficulty"] = "easy"
+        cfg["difficulty_table"] = dict(cfg["difficulty_table"])
+        cfg["difficulty_table"]["easy"] = dict(cfg["difficulty_table"]["easy"], max_reroll=2)
+        task = TaskSpec.from_dict(json.loads((SPECS / "1-4.json").read_text()))
+        calls = []
+
+        def make(cfg, task, seed):
+            calls.append(seed)
+            return FakeMineDojoEnv(cfg, {"can_see_sky": False})
+
+        with patch("lfnav.eval.run.make_env", make):
+            session = EnvReuse(cfg)
+            env, obs, meta = open_episode(session, task, cfg, 7)
+            rec, events = run_episode(env, task, cfg, seed=7, obs=obs, episode_meta=meta)
+            session.close()
+        self.assertEqual(calls, [7, 7 * 1000 + 1, 7 * 1000 + 2])
+        self.assertTrue(meta["spawn_underground"])
+        self.assertEqual(meta["underground_rerolls"], 2)
+        self.assertEqual(rec["outcome"], "spawn_underground")
+        self.assertFalse(rec["success"])
+        self.assertEqual(rec["steps"], 0)
+        self.assertEqual(events, [])
 
 
 class MobRingBoxTest(unittest.TestCase):

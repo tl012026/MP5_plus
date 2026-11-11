@@ -55,7 +55,7 @@ Order of work: GT perception + B + C0/C1 baselines → expert demos → C2+GT �
 
 ### Scenes
 - Real Minecraft terrain from the world seed. `specified_biome` gives a single-biome world, checked with `check_biome_world`.
-- lfnav summons animals itself after `reset()`, because MineDojo's `initial_mobs` reset hook does not actually spawn them. Commands go through `_send_chat` (whitelist bypass); `Invalid cmd` raises.
+- lfnav summons animals itself after `reset()`, because MineDojo's `initial_mobs` reset hook does not actually spawn them. Commands go through `_send_chat` (whitelist bypass); `Invalid cmd` raises. If `location_stats.can_see_sky` is false, the world seed is remade (`seed*1000+k`, up to `max_reroll`). Exhausted remakes are `spawn_underground` and the episode is not run.
 - **Sole setting (`configs/lfnav/main.yaml`)**: animals move; natural animals stay; vegetation is not cleared; `/difficulty peaceful` is the first spawn command; resistance is NBT on `/summon`. The only intended difference from stock MP5 is peaceful difficulty. Episode field `peaceful_sent` (old name `peaceful_ok`) means that command was sent, not that it worked. Whether hostiles were actually gone is `hostile_seen == 0`.
 - Initial distance (and SPL) is the nearest same-species ray at the start.
 

@@ -65,6 +65,7 @@ class FakeMineDojoEnv:
         self.time_name = layout.get("time", "day")
         self.weather = layout.get("weather", "clear")
         self.brightness = layout.get("brightness", "sufficient")
+        self.can_see_sky = bool(layout.get("can_see_sky", True))
         self._stuck_count = 0
         self.n_h, self.n_w = patch_grid(self.image_hw[0], self.image_hw[1], self.patch)
         self._cam_rays = ray_directions(self.n_h, self.n_w, self.fov_deg, self.fov_axis)
@@ -157,6 +158,7 @@ class FakeMineDojoEnv:
             loc["sun_brightness"] = 1.0 if str(self.time_name).lower() == "day" else 0.0
             loc["sky_light_level"] = loc["sun_brightness"]
             loc["light_level"] = 15.0 if str(self.brightness).lower() == "sufficient" else 3.0
+            loc["can_see_sky"] = bool(self.can_see_sky)
             if self.numpy_location_stats:
                 obs["location_stats"] = self._numpy_location_stats(loc)
         return obs

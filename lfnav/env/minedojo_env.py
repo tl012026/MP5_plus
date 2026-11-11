@@ -448,6 +448,19 @@ def spawn_rng_seed(seed, task_id, index: int) -> int:
     return int.from_bytes(hashlib.sha256(payload).digest()[:8], "big")
 
 
+def summon_ahead_offset(yaw_deg, dist: float = 3, y: int = 1) -> tuple[int, int, int]:
+    """World ~dx ~dy ~dz for a summon in front of the agent. Same yaw as sample_mob_offset."""
+    bearing = math.radians(float(yaw_deg))
+    dx = int(round(-float(dist) * math.sin(bearing)))
+    dz = int(round(float(dist) * math.cos(bearing)))
+    return dx, int(y), dz
+
+
+def summon_ahead_cmd(name: str, yaw_deg, dist: float = 3, y: int = 1) -> str:
+    dx, dy, dz = summon_ahead_offset(yaw_deg, dist, y)
+    return f"/summon {name} ~{dx} ~{dy} ~{dz}"
+
+
 def sample_mob_offset(min_d, max_d, yaw_deg, seed: int, index: int, behind: bool = False, y: int = 1, task_id: str = ""):
     """World offset for /summon. yaw=0 faces +z; forward is (-sin yaw, cos yaw)."""
     import random
@@ -725,6 +738,8 @@ def python_location_stats(loc: dict) -> dict:
 
 
 class MineDojoEnv:
+    spawn_after_reset = True
+
     def __init__(self, cfg: dict, task=None, seed: int = 0):
         import minedojo
         self.cfg = cfg
@@ -757,9 +772,14 @@ class MineDojoEnv:
         obs = self._adopt(self._env.reset())
         task = kwargs.get("task", self.task)
         seed = int(kwargs.get("seed", self.seed))
+        spawn = kwargs.get("spawn", True)
         self.task = task
         self.seed = seed
-        if task is not None and not (self.cfg.get("minedojo") or {}).get("spawn_via_reset_hook", False):
+        if (
+            spawn
+            and task is not None
+            and not (self.cfg.get("minedojo") or {}).get("spawn_via_reset_hook", False)
+        ):
             obs = spawn_task_mobs(self, task, self.cfg, seed)
         return obs
 

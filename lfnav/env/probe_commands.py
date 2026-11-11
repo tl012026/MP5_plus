@@ -22,12 +22,11 @@ from lfnav.env.minedojo_env import (
     _send_chat,
     count_hostile_hits,
     ray_raw,
+    summon_ahead_cmd,
 )
-from lfnav.obsutil import lookup, position_of, yaw_of
+from lfnav.gt.initial import world_seed_attempt
+from lfnav.obsutil import can_see_sky_of, lookup, position_of, yaw_of
 from lfnav.types import TaskSpec
-
-PIG_CMD = "/summon pig ~ ~1 ~3"
-ZOMBIE_CMD = "/summon zombie ~ ~ ~4"
 
 
 def probe_dir(root=None) -> Path:
@@ -51,7 +50,10 @@ def loc_pos(obs: dict):
 
 
 def note_obs(obs: dict, cfg: dict, source: str) -> None:
-    print(f"obs_source={source} location_stats.pos={loc_pos(obs)} pos={position_of(obs, cfg)}")
+    print(
+        f"obs_source={source} location_stats.pos={loc_pos(obs)} "
+        f"pos={position_of(obs, cfg)} can_see_sky={can_see_sky_of(obs)}"
+    )
 
 
 def raw_name_counts(obs: dict, cfg: dict | None = None) -> Counter:
@@ -155,14 +157,19 @@ def summon_send_chat(env, cfg: dict, cmd: str) -> dict:
 
 def summon_trial(env, cfg: dict, mob: str, method: str, cmd: str, tag: str, out: Path) -> dict:
     """Run one summon, wait 20 ticks, spin. method is execute_cmd or send_chat."""
-    row = {"method": method, "mob": mob, "cmd": cmd, "tag": tag, "seen": False, "error": None}
+    sky = can_see_sky_of(env.observation() if hasattr(env, "observation") else {})
+    row = {
+        "method": method, "mob": mob, "cmd": cmd, "tag": tag,
+        "seen": False, "error": None, "can_see_sky": sky,
+    }
     try:
         if method == "execute_cmd":
-            summon_execute_cmd(env, cfg, cmd)
+            obs = summon_execute_cmd(env, cfg, cmd)
         elif method == "send_chat":
-            summon_send_chat(env, cfg, cmd)
+            obs = summon_send_chat(env, cfg, cmd)
         else:
             raise ValueError(f"unknown summon method {method}")
+        row["can_see_sky"] = can_see_sky_of(obs)
         row["seen"] = after_summon(env, cfg, mob, tag, out)
     except Exception as exc:
         row["error"] = str(exc)
@@ -171,11 +178,12 @@ def summon_trial(env, cfg: dict, mob: str, method: str, cmd: str, tag: str, out:
 
 
 def format_table(rows: list[dict]) -> str:
-    lines = ["summon_method  mob     seen  error", "-" * 48]
+    lines = ["summon_method  mob     seen      can_see_sky  error", "-" * 64]
     for row in rows:
         seen = "error" if row.get("error") else ("seen" if row.get("seen") else "not_seen")
+        sky = "true" if row.get("can_see_sky") else "false"
         err = (row.get("error") or "")[:40]
-        lines.append(f"{row['method']:<14} {row['mob']:<7} {seen:<9} {err}")
+        lines.append(f"{row['method']:<14} {row['mob']:<7} {seen:<9} {sky:<12} {err}")
     return "\n".join(lines)
 
 
@@ -200,7 +208,9 @@ def check_peaceful(env, cfg: dict, out=None) -> str | None:
     dest = probe_dir(out)
     obs = _send_chat(env, "/difficulty easy")
     note_obs(obs, cfg, "_send_chat")
-    obs = _send_chat(env, ZOMBIE_CMD)
+    yaw = yaw_of(obs if obs is not None else env.observation(), cfg)
+    zombie_cmd = summon_ahead_cmd("zombie", yaw)
+    obs = _send_chat(env, zombie_cmd)
     note_obs(obs, cfg, "_send_chat")
     wait_ticks(env, cfg, "peaceful_zombie", dest, n=20, every=5)
     seen, obs = spin_scan(env, cfg, "zombie")
@@ -228,9 +238,26 @@ def run_probes(cfg: dict, out=None) -> list[str]:
         "initial_weather": "clear",
         "spawn": [],
     })
-    env = MineDojoEnv(cfg, task, seed=3)
+    env = None
     try:
-        env.reset(task=task, seed=3)
+        table = (cfg.get("difficulty_table") or {}).get(cfg.get("difficulty", "easy"), {}) or {}
+        max_reroll = int(table.get("max_reroll") or 0)
+        obs = None
+        used = 3
+        for attempt in range(max_reroll + 1):
+            if env is not None:
+                env.close()
+            used = world_seed_attempt(3, attempt)
+            env = MineDojoEnv(cfg, task, seed=used)
+            obs = env.reset(task=task, seed=used, spawn=False)
+            sky = can_see_sky_of(obs)
+            print(f"can_see_sky={sky} world_seed={used} attempt={attempt}")
+            note_obs(obs, cfg, "env.reset")
+            if sky:
+                break
+        else:
+            failed.append(_fail("surface", "spawn_underground"))
+            return failed
         t0 = time.perf_counter()
         try:
             detail = check_peaceful(env, cfg, out=dest)
@@ -241,10 +268,13 @@ def run_probes(cfg: dict, out=None) -> list[str]:
         except Exception as exc:
             failed.append(_fail("peaceful", str(exc)))
 
-        rows.append(summon_trial(env, cfg, "pig", "execute_cmd", PIG_CMD, "pig_execute_cmd", dest))
-        rows.append(summon_trial(env, cfg, "pig", "send_chat", PIG_CMD, "pig_send_chat", dest))
-        rows.append(summon_trial(env, cfg, "zombie", "send_chat", ZOMBIE_CMD, "zombie_send_chat", dest))
-        rows.append(summon_trial(env, cfg, "pig", "send_chat", PIG_CMD, "pig_send_chat_vs_exec", dest))
+        yaw = yaw_of(env.observation(), cfg)
+        pig_cmd = summon_ahead_cmd("pig", yaw)
+        zombie_cmd = summon_ahead_cmd("zombie", yaw)
+        rows.append(summon_trial(env, cfg, "pig", "execute_cmd", pig_cmd, "pig_execute_cmd", dest))
+        rows.append(summon_trial(env, cfg, "pig", "send_chat", pig_cmd, "pig_send_chat", dest))
+        rows.append(summon_trial(env, cfg, "zombie", "send_chat", zombie_cmd, "zombie_send_chat", dest))
+        rows.append(summon_trial(env, cfg, "pig", "send_chat", pig_cmd, "pig_send_chat_vs_exec", dest))
 
         for row in rows:
             if row["method"] == "execute_cmd" and row["mob"] == "pig" and not row["seen"]:

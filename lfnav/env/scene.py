@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from lfnav.env.minedojo_env import peaceful_command_sent
+from lfnav.env.minedojo_env import peaceful_command_sent, spawn_task_mobs
 from lfnav.gt.initial import (
     apply_spawn_offset_distance,
     distance_meets_min,
@@ -21,6 +21,7 @@ from lfnav.gt.initial import (
     spawn_has_blocks,
     world_seed_attempt,
 )
+from lfnav.obsutil import can_see_sky_of
 from lfnav.types import TaskSpec
 
 
@@ -59,6 +60,9 @@ def _initial_metrics(env, obs, cfg: dict, task: TaskSpec, used: int, reroll_coun
         "natural_target_closer": bool(metrics.get("natural_target_closer", False)),
         "peaceful_sent": peaceful_command_sent(spawn_meta),
         "peaceful_ok": peaceful_command_sent(spawn_meta),
+        "spawn_underground": bool(spawn_meta.get("spawn_underground", False)),
+        "underground_rerolls": int(spawn_meta.get("underground_rerolls", 0)),
+        "can_see_sky": can_see_sky_of(obs),
     }
 
 
@@ -83,34 +87,54 @@ def make_scene_env(task_spec, difficulty, seed, cfg, session=None):
     table = (cfg.get("difficulty_table") or {}).get(cfg.get("difficulty", "easy"), {}) or {}
     min_d = float(table.get("min_initial_distance") or 0)
     max_reroll = int(table.get("max_reroll") or 0)
-    reroll = spawn_has_blocks(task) and min_d > 0
-    attempts = max_reroll + 1 if reroll else 1
+    distance_reroll = spawn_has_blocks(task) and min_d > 0
+    attempts = max_reroll + 1
     env = None
     obs = None
     used = int(seed)
     unmet = False
     reroll_count = 0
+    underground_rerolls = 0
+    spawn_underground = False
     try:
         for attempt in range(attempts):
             used = world_seed_attempt(seed, attempt)
-            if reroll:
+            if attempt > 0:
                 session.release()
             env = session.acquire(task, used)
-            obs = env.reset(seed=used, task=task)
+            obs = env.reset(seed=used, task=task, spawn=False)
+            if not can_see_sky_of(obs):
+                underground_rerolls += 1
+                spawn_underground = True
+                continue
+            spawn_underground = False
             metrics = apply_spawn_offset_distance(
                 initial_scene_metrics(obs, env, cfg, task),
                 getattr(env, "spawn_meta", None),
                 cfg,
             )
-            if not reroll or distance_meets_min(metrics, min_d):
+            if not distance_reroll or distance_meets_min(metrics, min_d):
                 reroll_count = attempt
                 unmet = False
                 break
             reroll_count = attempt + 1
         else:
-            unmet = bool(reroll)
-            reroll_count = max_reroll
+            if spawn_underground:
+                underground_rerolls = max_reroll
+                reroll_count = max_reroll
+                unmet = False
+            else:
+                unmet = bool(distance_reroll)
+                reroll_count = max_reroll
+        if not spawn_underground and getattr(env, "spawn_after_reset", False):
+            obs = spawn_task_mobs(env, task, cfg, used)
+        spawn_meta = dict(getattr(env, "spawn_meta", None) or {})
+        spawn_meta["spawn_underground"] = spawn_underground
+        spawn_meta["underground_rerolls"] = underground_rerolls
+        env.spawn_meta = spawn_meta
         public = _initial_metrics(env, obs, cfg, task, used, reroll_count, unmet)
+        public["spawn_underground"] = spawn_underground
+        public["underground_rerolls"] = underground_rerolls
         if own:
             session.env = None
             session.key = None

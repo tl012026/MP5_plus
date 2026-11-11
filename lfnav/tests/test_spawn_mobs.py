@@ -18,6 +18,7 @@ from lfnav.env.minedojo_env import (
     sample_mob_offset,
     spawn_rng_seed,
     spawn_task_mobs,
+    summon_ahead_cmd,
     task_mentions_grass,
     vegetation_fill_commands,
 )
@@ -112,6 +113,11 @@ class SampleRingTest(unittest.TestCase):
         self.assertEqual((a["dx"], a["dz"]), (b["dx"], b["dz"]))
         self.assertNotEqual((a["dx"], a["dz"]), (c["dx"], c["dz"]))
         self.assertNotEqual(spawn_rng_seed(9, "1-4", 0), spawn_rng_seed(9, "2-4", 0))
+
+    def test_summon_ahead_is_in_front_of_yaw(self):
+        self.assertEqual(summon_ahead_cmd("pig", 0.0), "/summon pig ~0 ~1 ~3")
+        self.assertIn("~-3", summon_ahead_cmd("pig", 90.0))
+        self.assertIn("pig", summon_ahead_cmd("pig", 90.0))
 
 
 class SpawnOnceTest(unittest.TestCase):
@@ -327,7 +333,8 @@ class HostileCountTest(unittest.TestCase):
             detail = check_peaceful(env, cfg, out=tmp)
         self.assertEqual(detail, "detector cannot see zombie")
         self.assertIn("/difficulty easy", env.chat_log)
-        self.assertIn("/summon zombie ~ ~ ~4", env.chat_log)
+        self.assertTrue(any(c.startswith("/summon zombie") for c in env.chat_log), env.chat_log)
+        self.assertIn("/summon zombie ~0 ~1 ~3", env.chat_log)
 
     def test_raw_counts_and_spin_see_pig(self):
         cfg = load_config()
@@ -362,6 +369,7 @@ class HostileCountTest(unittest.TestCase):
             self.assertIn("execute_cmd", text)
             self.assertIn("send_chat", text)
             self.assertIn("pig", text)
+            self.assertIn("can_see_sky", text)
 
 
 class WidePitchTest(unittest.TestCase):

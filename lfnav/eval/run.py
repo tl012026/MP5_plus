@@ -115,6 +115,7 @@ def layout_for(task: TaskSpec, cfg: dict, seed: int) -> dict:
         "time": task.episode.get("start_time") or "day",
         "weather": task.episode.get("initial_weather") or "clear",
         "brightness": "sufficient",
+        "can_see_sky": True,
     }
 
 
@@ -158,6 +159,55 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
     if rec is not None:
         rec.capture(obs, tag="start", keyframe=True)
     meta = dict(episode_meta or {})
+    if meta.get("spawn_underground"):
+        pos = position_of(obs, cfg) if obs is not None else None
+        verdict = {
+            "sr_a": False,
+            "sr_b": False,
+            "false_stop": False,
+            "timeout": False,
+            "missing": ["spawn_underground"],
+            "reason": "spawn_underground",
+            "distance_blocks": None,
+            "path_length": 0.0,
+            "straight": 0.0,
+            "spl": None,
+            "outcome": "spawn_underground",
+            "success": False,
+            "steps": 0,
+            "start": pos,
+            "stop": pos,
+            "task_name": task.id,
+            "task_kind": "lfnav",
+            "seed": seed,
+            "elapsed_s": 0.0,
+            "frames_s": 0.0,
+            "frames_overhead": 0.0,
+            "failure_category": "spawn_underground",
+            "self_reported_steps": 0,
+            "perception_backend": cfg.get("perception_backend", "gt"),
+            "policy_name": cfg.get("policy_name", "c1"),
+            "difficulty": cfg.get("difficulty"),
+            "stop_mode": (cfg.get("match") or {}).get("stop_mode", "sr_b"),
+            "gt_at_stop": None,
+            "perception_at_stop": None,
+            "world_seed": meta.get("world_seed", seed),
+            "reroll_count": meta.get("reroll_count", 0),
+            "difficulty_unmet": False,
+            "initial_target_distance": meta.get("initial_target_distance"),
+            "initial_target_visible": meta.get("initial_target_visible"),
+            "task": task.id,
+            "policy": cfg.get("policy_name", "c1"),
+            "target_never_seen": True,
+            "config_name": config_name(cfg),
+            "spawn_underground": True,
+            "underground_rerolls": int(meta.get("underground_rerolls") or 0),
+            "can_see_sky": False,
+            "hostile_seen": 0,
+            "peaceful_sent": peaceful_command_sent(meta),
+            "peaceful_ok": peaceful_command_sent(meta),
+        }
+        return verdict, []
     if "initial_target_distance" not in meta:
         metrics = apply_spawn_offset_distance(
             initial_scene_metrics(obs, env, cfg, task),
@@ -325,6 +375,9 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         "peaceful_sent": peaceful_command_sent(meta),
         "peaceful_ok": peaceful_command_sent(meta),
         "hostile_seen": int(hostile_seen),
+        "spawn_underground": bool(meta.get("spawn_underground", False)),
+        "underground_rerolls": int(meta.get("underground_rerolls") or 0),
+        "can_see_sky": bool(meta.get("can_see_sky", True)),
     })
     return verdict, events
 

@@ -53,7 +53,9 @@ Public entry: `lfnav.env.scene.make_scene_env(task_spec, difficulty, seed, cfg) 
 
 Do **not** rely on MineDojo `initial_mobs`. HarvestMeta issues `/summon` from a reset hook, and that command does not actually spawn (observed 2026-11). lfnav summons **after** `reset()`.
 
-Sequence inside `MineDojoEnv.reset` → `spawn_task_mobs` for **main.yaml**:
+Sequence for **main.yaml**: check `can_see_sky` (reroll underground spawns), then block-target distance reroll, then `spawn_task_mobs`. `MineDojoEnv.reset` still summons when `spawn=True` (default).
+
+Sequence inside `spawn_task_mobs` for **main.yaml**:
 
 1. `_send_chat("/difficulty peaceful")` (bypass MineDojo's chat whitelist; `Invalid cmd` raises).
 2. Settle with real no-op ticks.
