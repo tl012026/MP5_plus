@@ -55,9 +55,9 @@ Order of work: GT perception + B + C0/C1 baselines → expert demos → C2+GT �
 
 ### Scenes
 - Real Minecraft terrain from the world seed. `specified_biome` gives a single-biome world, checked with `check_biome_world`.
-- lfnav summons animals itself after `reset()`, because MineDojo's `initial_mobs` reset hook does not actually spawn them.
-- **Main setting (dynamic, `eval_dynamic.yaml`)**: animals move; natural animals stay; tall grass is cleared (it blocks GT rays). Initial distance is the nearest same-species ray at the start.
-- **Static control (`baseline_eval.yaml`)**: natural animals removed, summoned animals frozen, tall grass cleared. Initial distance comes from the spawn offset.
+- lfnav summons animals itself after `reset()`, because MineDojo's `initial_mobs` reset hook does not actually spawn them. Commands go through `_send_chat` (whitelist bypass); `Invalid cmd` raises.
+- **Sole setting (`configs/lfnav/main.yaml`)**: animals move; natural animals stay; vegetation is not cleared; `/difficulty peaceful` is the first spawn command; resistance is NBT on `/summon`. The only intended difference from stock MP5 is peaceful difficulty.
+- Initial distance (and SPL) is the nearest same-species ray at the start.
 
 ### Amounts
 | Set | Seeds | Size |
@@ -70,7 +70,7 @@ Order of work: GT perception + B + C0/C1 baselines → expert demos → C2+GT �
 | | lfnav | MP5 |
 |---|---|---|
 | Task text | Same 16 tasks | Same |
-| Scene setup | Controlled spawn distance and direction by difficulty; reproducible by seed | Random; relies on natural spawns |
+| Scene setup | Controlled spawn distance and direction by difficulty; reproducible by seed; **peaceful** | Random; relies on natural spawns; default difficulty |
 | Success | SR-b (automatic, from GT rays) and SR-a | SR-a |
 | `near X` | X and the target appear in the same frame | Decided by the LLM from the image |
 | Episodes | Fixed seed lists; C0, C1 and C2 run on the same seeds | Not specified |
@@ -79,10 +79,10 @@ Order of work: GT perception + B + C0/C1 baselines → expert demos → C2+GT �
 
 ## 3. GT generation: the expert
 
-The expert is C1 with ground-truth perception plus a **360° wide lidar** (horizontal ring, 5° steps, pitches 0°, −3° and −8°, 32-block range). When the wide lidar sees the target and the camera does not, the expert turns toward it directly. Otherwise it behaves exactly like C1.
+The expert is C1 with ground-truth perception plus a **360° wide lidar** (horizontal ring, 5° steps, pitches 0°, −3° and −8°, 32-block range). Wide lidar is used only when aligned rays do **not** see the target (`match.satisfied.target` is false). If the target is in view but a `near` condition fails, C1 handles it.
 
-- Each decision records the GT scene, the match result, memory (8-sector visits, recent actions), the expert's action chunk, the 224×364 frame, and `used_wide`, which marks a decision driven by information C2 cannot see.
-- Demos are collected in the dynamic setting (`demo_dynamic.yaml`) and stored on scratch under `demos_dynamic/{success,failure}/<task>/<difficulty>/<seed>/`. Format: `lfnav/data/demo_format.py`.
+- Each decision records the GT scene, the match result, memory (8-sector visits, recent actions), the expert's action chunk, the 224×364 frame, and `used_wide`.
+- Demos are collected with `configs/lfnav/main.yaml` into `$SCR/lfnav/data/demos_main`. Failures store `record.json` and `steps.jsonl` only (no frames). Old `demos_dynamic` files are kept and may be used as C2 legacy data.
 - The expert is never used as an evaluation policy, except in the explicit upper-bound run (`expert_eval`, requires `allow_privileged_eval`).
 
 **Expert results (dynamic demos)**: *to be filled from `lfnav/data/demo_stats.py`*

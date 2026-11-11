@@ -2,6 +2,10 @@
 
 The expert is C1 plus ground-truth perception plus the 360° wide lidar (`lfnav/policy/expert.py`). It is not used at evaluation time. Dynamic-scene demos keep natural animals moving; they are the C2 training set.
 
+Wide lidar is a **search** cue only. The expert uses it when `match.satisfied.target` is false (the target is not on an aligned ray). If the target is already in the camera frame, C1 runs even when a condition still fails. The previous gate (`status != found`) also fired on missing `near` conditions, so the expert kept turning toward the wide hit and never looked for the other object.
+
+Tasks that need this: **2-2, 3-2, 4-2, 4-3, 4-4** (grass near pig, pig near grass, cow near water). Demos collected before this fix on those tasks should be recaptured.
+
 ## Why vegetation is still cleared
 
 `minedojo.clear_entities: false` leaves natural mobs in the world. Tall grass is different: a pig is about 0.9 blocks tall and plains tall grass is about 0.8, so eye-height GT rays miss the animal. Training labels would then be worse than the RGB. `demo_dynamic.yaml` therefore keeps `clear_vegetation: true` and only skips the fill on grass tasks (same rule as evaluation).
@@ -25,7 +29,7 @@ mkdir -p $SCR/lfnav/logs
 sbatch -A "$SBATCH_ACCOUNT" -p n2c48m24 --export=ALL lfnav/slurm/collect_demos_array.sbatch
 ```
 
-Overrides: `CFG`, `SEEDS`, `OUT` (defaults: `configs/lfnav/demo_dynamic.yaml`, `configs/lfnav/train_seeds_demo.txt`, `$SCR/lfnav/data/demos_dynamic`). Frozen-mob demos use `CFG=$MP5/configs/lfnav/demo_collect.yaml`.
+Overrides: `CFG`, `SEEDS`, `OUT` (defaults: `configs/lfnav/main.yaml`, `configs/lfnav/train_seeds_demo.txt`, `$SCR/lfnav/data/demos_main`). Failures keep `record.json` and `steps.jsonl` only. Legacy dynamic demos stay under `demos_dynamic`.
 
 Seeds are 1–48 except those ending in 9 (44 seeds). Finished `record.json` files are skipped.
 
@@ -45,4 +49,4 @@ python3 -m lfnav.data.demo_stats --in $SCR/lfnav/data/demos_dynamic --out result
 | `steps.jsonl` | One decision per line: `decision`, `env_step`, `match`, `scene` (GT), 8-sector visit counts, `recent_actions`, expert `action_chunk`, `used_wide` |
 | `frames/NNNNN.jpg` | RGB at that decision, resized to 224×364, JPEG quality 90 |
 
-`used_wide` is true when the expert steered from the wide lidar because the matcher had not yet found the target.
+`used_wide` is true when the expert steered from the wide lidar because aligned rays did not yet see the target.

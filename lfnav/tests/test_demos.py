@@ -13,6 +13,7 @@ from lfnav.data.demo_format import find_episode, read_episode, save_decision_fra
 from lfnav.env.fake import FakeMineDojoEnv
 from lfnav.gt.initial import apply_spawn_offset_distance, initial_scene_metrics
 from lfnav.gt.judge import aligned_target_distance
+from lfnav.policy.c1 import RuleBased
 from lfnav.policy.expert import Expert, wide_target
 from lfnav.types import PolicyInput, TaskSpec
 
@@ -64,11 +65,44 @@ class UsedWideTest(unittest.TestCase):
         obs = env.reset()
         wide = wide_target(obs, "pig", cfg)
         self.assertTrue(wide.get("visible"))
-        missed = {"status": "not_found", "satisfied": {}, "missing": []}
+        missed = {"status": "not_found", "satisfied": {"target": False}, "missing": ["target"]}
         found = {"status": "found", "satisfied": {"target": True}}
         self.assertTrue(used_wide_for_decision(wide, missed))
         self.assertFalse(used_wide_for_decision(wide, found))
         out = Expert(cfg).act(PolicyInput(match=missed, memory={"wide_target": wide, "local_grid": [[0.0]]}))
+        self.assertEqual(out.action_chunk[0], "turn_right_15")
+
+    def test_visible_target_missing_near_matches_c1(self):
+        cfg = load_config()
+        match = {
+            "status": "not_found",
+            "satisfied": {"target": True, "near:grass": False},
+            "missing": ["near:grass"],
+            "target_direction": "center",
+            "target_distance": "near",
+        }
+        wide = {"visible": True, "direction": "right", "distance": 8.0}
+        mem = {"wide_target": wide, "local_grid": [[0.0]], "env_steps": 0}
+        pin = PolicyInput(match=match, memory=mem)
+        expert = Expert(cfg).act(pin)
+        c1 = RuleBased(cfg).act(PolicyInput(match=match, memory={"local_grid": [[0.0]], "env_steps": 0}))
+        self.assertEqual(expert.action_chunk, c1.action_chunk)
+        self.assertFalse(used_wide_for_decision(wide, match))
+
+    def test_unseen_target_turns_with_wide_lidar(self):
+        cfg = load_config()
+        cfg["image_hw"] = [14, 14]
+        env = FakeMineDojoEnv(cfg, {"entities": [{"name": "pig", "x": 4.0, "z": 0.3}]})
+        obs = env.reset()
+        wide = wide_target(obs, "pig", cfg)
+        self.assertTrue(wide.get("visible"))
+        match = {
+            "status": "not_found",
+            "satisfied": {"target": False},
+            "missing": ["target"],
+            "target_direction": None,
+        }
+        out = Expert(cfg).act(PolicyInput(match=match, memory={"wide_target": wide, "local_grid": [[0.0]]}))
         self.assertEqual(out.action_chunk[0], "turn_right_15")
 
 

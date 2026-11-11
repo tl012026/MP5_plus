@@ -13,7 +13,6 @@
 set -euo pipefail
 SCR=${SCR:-/scratch/$USER}
 MP5=${MP5:-$HOME/MP5_plus}
-DEMOS=${DEMOS:-$SCR/lfnav/data/demos_dynamic}
 OUT=${OUT:-$SCR/lfnav/ckpt/c2_gt_v1}
 mkdir -p "$SCR/lfnav/logs" "$OUT"
 if [ -f "$HOME/lfnav_train_env.sh" ]; then
@@ -21,4 +20,4 @@ if [ -f "$HOME/lfnav_train_env.sh" ]; then
   source "$HOME/lfnav_train_env.sh"
 fi
 cd "$MP5"
-python lfnav/policy/train_c2.py --demos "$DEMOS" --out "$OUT" ${DAGGER:+--dagger}
+python lfnav/policy/train_c2.py --out "$OUT" ${DAGGER:+--dagger}

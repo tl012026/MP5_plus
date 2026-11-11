@@ -18,7 +18,8 @@ from pathlib import Path
 from lfnav.config import load_config
 from lfnav.control.controller import Controller
 from lfnav.env.fake import FakeMineDojoEnv
-from lfnav.env.minedojo_env import mob_ring_box
+from lfnav.data.demo_format import config_name
+from lfnav.env.minedojo_env import count_hostile_hits, mob_ring_box
 from lfnav.env.scene import make_scene_env
 from lfnav.gt.initial import (
     apply_spawn_offset_distance,
@@ -176,6 +177,7 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
             "natural_target_closer": bool(metrics.get("natural_target_closer", False)),
         })
     seen_gt = privileged_ray_distance(obs, cfg, task.target) is not None
+    hostile_seen = count_hostile_hits(obs, cfg)
     obs = _hide_wide(obs, cfg)
     start = position_of(obs, cfg)
     prev = start
@@ -233,6 +235,7 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
             result = controller.execute(action, budget=remain)
             if privileged_ray_distance(result.obs, cfg, task.target) is not None:
                 seen_gt = True
+            hostile_seen += count_hostile_hits(result.obs, cfg)
             result.obs = _hide_wide(result.obs, cfg)
             env_steps += result.env_steps
             new_pos = position_of(result.obs, cfg)
@@ -318,6 +321,9 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         "stuck_steps_total": int(getattr(controller, "stuck_steps_total", 0)),
         "spawn_target_distance": meta.get("spawn_target_distance"),
         "natural_target_closer": bool(meta.get("natural_target_closer", False)),
+        "config_name": config_name(cfg),
+        "peaceful_ok": bool(meta.get("peaceful_ok", False)),
+        "hostile_seen": int(hostile_seen),
     })
     return verdict, events
 

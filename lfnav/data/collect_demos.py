@@ -21,7 +21,7 @@ from lfnav.data.demo_format import (
 from lfnav.eval.run import EnvReuse, open_episode, run_episode
 from lfnav.io import atomic_write_json
 from lfnav.perception.gt import GTPerception
-from lfnav.policy.expert import Expert, wide_target
+from lfnav.policy.expert import Expert, uses_wide_hint, wide_target
 from lfnav.types import TaskSpec
 
 BLOCK_DEMO_TARGETS = ("tree", "grass")
@@ -40,8 +40,8 @@ def skip_demo_cell(task: TaskSpec, difficulty: str) -> bool:
 
 
 def used_wide_for_decision(wide: dict, match: dict | None) -> bool:
-    """Same gate as Expert.act: wide hint only when the matcher has not found the target."""
-    return bool((wide or {}).get("visible") and (match or {}).get("status") != "found")
+    """Same gate as Expert.act: wide hint only when aligned rays miss the target."""
+    return uses_wide_hint(wide, match)
 
 
 class _ExpertLoop:
@@ -119,7 +119,7 @@ def collect(cfg, tasks, seeds, out: Path, backend: str = "fake") -> dict:
                             wide_i += 1
                         rows.append(step_row(event, int(memory.get("env_steps") or 0), memory, used))
                     dest = write_episode(out, bucket, task.id, difficulty, seed, rec, rows)
-                    if save_frames:
+                    if save_frames and bucket == "success":
                         for event, decision_obs, _memory in pending:
                             save_decision_frame(dest, event.get("decision") or 0, decision_obs, cfg)
                     if cfg.get("demo_legacy_json"):

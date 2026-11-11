@@ -72,6 +72,17 @@ class ResultSchemaTest(unittest.TestCase):
 
 
 class DynamicEvalConfigTest(unittest.TestCase):
+    def test_main_yaml_is_the_scene_standard(self):
+        cfg = load_config(ROOT / "configs/lfnav/main.yaml")
+        md = cfg["minedojo"]
+        self.assertFalse(md["freeze_mobs"])
+        self.assertFalse(md["clear_entities"])
+        self.assertFalse(md["clear_vegetation"])
+        self.assertTrue(md["peaceful"])
+        self.assertEqual(int(cfg.get("aligned_subrays")), 3)
+        self.assertEqual(int(cfg["judge"]["max_steps"]), 3000)
+        self.assertEqual(int(cfg["frames"]["every"]), 10)
+
     def test_eval_dynamic_unfreezes_and_keeps_natural_mobs(self):
         dyn = load_config(ROOT / "configs/lfnav/eval_dynamic.yaml")
         self.assertFalse(dyn["minedojo"]["freeze_mobs"])

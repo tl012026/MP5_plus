@@ -1,10 +1,10 @@
-# creative16-v2
+# creative16-v3
 
 Shared evaluation protocol for the 16 MP5 creative find-tasks. lfnav and the MP5 group use the same specs, seeds, scene builder, judge, and episode JSON fields.
 
 This directory is an index. Task JSON, difficulty, seeds, labels, and the judge stay at the paths in [`manifest.yaml`](manifest.yaml). Do not copy those files.
 
-Any change that alters the scene, the success rule, or the seed lists must bump the version (`creative16-v3`, …), retag, and add a changelog entry below.
+Any change that alters the scene, the success rule, or the seed lists must bump the version (`creative16-v4`, …), retag, and add a changelog entry below.
 
 ## 16 tasks
 
@@ -45,7 +45,7 @@ Source: `configs/lfnav/difficulty.yaml`. Spec files do not change with difficult
 
 Eval seeds: `configs/lfnav/eval_seeds_baseline.txt` — **9, 19, 29, 39, 49**. Training / demo seeds (`configs/lfnav/train_seeds_demo.txt`) are for lfnav C2 only; the MP5 group does not use them for this protocol.
 
-Main env: `configs/lfnav/eval_dynamic.yaml` (inherits `baseline_eval.yaml` → `default.yaml`). Animals walk and natural mobs are kept. Static robustness: `configs/lfnav/baseline_eval.yaml` (`freeze_mobs` / `clear_entities` still true).
+Sole env: `configs/lfnav/main.yaml` (inherits `default.yaml`). Animals walk, natural mobs stay, vegetation is not cleared, `/difficulty peaceful` is sent after reset. The only intentional difference from stock MP5 is peaceful difficulty. `initial_target_distance` and SPL use the nearest same-species opening ray.
 
 ## Scene construction
 
@@ -53,16 +53,14 @@ Public entry: `lfnav.env.scene.make_scene_env(task_spec, difficulty, seed, cfg) 
 
 Do **not** rely on MineDojo `initial_mobs`. HarvestMeta issues `/summon` from a reset hook, and that command does not actually spawn (observed 2026-11). lfnav summons **after** `reset()`.
 
-Sequence inside `MineDojoEnv.reset` → `spawn_task_mobs` (flags from the loaded config):
+Sequence inside `MineDojoEnv.reset` → `spawn_task_mobs` for **main.yaml**:
 
-1. Settle with real no-op ticks.
-2. Clear field: `/kill @e[type=!player]` only if `clear_entities` is true. **v2 main eval leaves this off.**
-3. Clear tall grass / double plants with chunked `/fill` (`clear_vegetation`), unless the task mentions grass.
-4. One `/summon` per required mob (and distractors) on the difficulty ring, dropped from `spawn_drop_height`.
-5. Freeze (slowness, gravity kept) only if `freeze_mobs` is true. **v2 main eval leaves this off**, so animals walk.
-6. Settle after spawn.
+1. `_send_chat("/difficulty peaceful")` (bypass MineDojo's chat whitelist; `Invalid cmd` raises).
+2. Settle with real no-op ticks.
+3. One `/summon` per required mob (and distractors) on the difficulty ring, with resistance in NBT. No `/kill`, no vegetation `/fill`, no freeze `/effect`.
+4. Settle after spawn.
 
-When `clear_entities` is false, `initial_target_distance` (and SPL) is the nearest aligned/wide ray on that species. Eval and demo collection both call `apply_spawn_offset_distance` for this. The summon offset is still logged as `spawn_target_distance`. Static robustness still uses the offset as `initial_target_distance`.
+`initial_target_distance` and SPL are the nearest aligned/wide ray on that species (`apply_spawn_offset_distance` when `clear_entities` is false). The summon offset is `spawn_target_distance`.
 
 Block targets (tree, grass, water) are not summoned. If a block target is closer than `min_initial_distance`, the world is remade with seed `seed*1000+k` up to `max_reroll` times. If the band still fails, the episode is `difficulty_unmet` and still recorded.
 
@@ -88,13 +86,19 @@ Episode JSON must include the fields in [`result_schema.json`](result_schema.jso
 
 Do not duplicate spawn commands. In this version, do not edit `MP5_agent`; later, point `env_wrapper` at the same function.
 
-1. Load a spec from `lfnav/tasks/specs/` and `configs/lfnav/eval_dynamic.yaml` (or `baseline_eval.yaml` for the static control).
+1. Load a spec from `lfnav/tasks/specs/` and `configs/lfnav/main.yaml`.
 2. `env, obs, initial_metrics = make_scene_env(task_spec, difficulty, seed, cfg)`.
 3. Run your agent on that `env`.
 4. Score the stop with `lfnav.gt.judge.judge_episode` (or `judge_stop`).
 5. Write one JSON per episode with every required key in `result_schema.json` (include `initial_metrics["initial_target_distance"]` and `difficulty_unmet`).
 
 ## Changelog
+
+### creative16-v3
+
+- Sole scene: `configs/lfnav/main.yaml`. Peaceful difficulty; no freeze, no entity clear, no vegetation clear. Chat commands go through `_send_chat`.
+- Only intended difference from stock MP5: `/difficulty peaceful`.
+- Legacy configs (`baseline_eval.yaml`, `eval_dynamic.yaml`, `demo_dynamic.yaml`) are kept but not the protocol default.
 
 ### creative16-v2
 

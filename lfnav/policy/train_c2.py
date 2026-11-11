@@ -174,7 +174,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--dagger", action="store_true")
-    parser.add_argument("--demos", default=None)
+    parser.add_argument("--demos", nargs="*", default=None)
     parser.add_argument("--out", default=None)
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--batch", type=int, default=512)
@@ -192,7 +192,8 @@ def main():
     cfg["c2"] = dict(cfg.get("c2") or {})
     if args.wide_weight is not None:
         cfg["c2"]["wide_weight"] = float(args.wide_weight)
-    split = load_c2_split(args.demos, cfg, rng_seed=args.seed)
+    demo_arg = args.demos if args.demos else None
+    split = load_c2_split(demo_arg, cfg, rng_seed=args.seed)
     out = Path(args.out)
     ckpt = train_loop(split, out, cfg, args.epochs, args.batch, args.lr, args.seed)
     atomic_write_json(out / "meta.json", {
@@ -200,12 +201,13 @@ def main():
         "actions": split.spec.actions,
         "horizon": split.spec.horizon,
         "config": {k: cfg.get(k) for k in ("c2", "policy", "seed") if k in cfg},
-        "demos": str(Path(args.demos).resolve()),
+        "demos": demo_arg or ((cfg.get("c2") or {}).get("demo_dirs")),
         "git_commit": git_hash(),
         "n_train": len(split.train),
         "n_val": len(split.val),
         "used_wide_frac": split.used_wide_frac,
         "val_seeds": split.val_seeds,
+        "filter_stats": split.filter_stats,
         "checkpoint": str(ckpt),
         "epochs": args.epochs,
         "batch": args.batch,

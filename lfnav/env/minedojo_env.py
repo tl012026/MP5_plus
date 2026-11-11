@@ -11,7 +11,16 @@ import math
 
 from lfnav.geom import aligned_subrays_n, patch_grid, rays_from_cfg, subray_grid_from_cfg
 from lfnav.gt.fov import ray_angles_deg
-from lfnav.obsutil import scalar
+from lfnav.obsutil import lookup, scalar
+
+HOSTILE_NAMES = (
+    "zombie", "skeleton", "creeper", "spider", "enderman",
+    "witch", "slime", "husk", "stray", "zombie_villager",
+)
+RESISTANCE_NBT = "{ActiveEffects:[{Id:11,Amplifier:4,Duration:200}]}"
+INVALID_CMD = "Invalid cmd"
+# Commands MineDojo execute_cmd is known to accept. Everything else must use _send_chat.
+CHAT_WHITELIST = set()
 
 
 def to_minedojo_lidar(direction, reach: float) -> tuple[float, float, float]:
@@ -431,16 +440,71 @@ def _noop_tick(env) -> dict:
 
 
 def _sim(env):
-    inner = env._env
+    inner = getattr(env, "_env", env)
     return getattr(inner, "env", inner)
 
 
+def _chat_actor(env):
+    sim = _sim(env)
+    if hasattr(sim, "action_space") and hasattr(sim, "step"):
+        return sim
+    inner = getattr(env, "_env", env)
+    if hasattr(inner, "action_space") and hasattr(inner, "step"):
+        return inner
+    return env
+
+
+def _invalid_cmd_seen(obs, info) -> bool:
+    parts = [info]
+    if isinstance(obs, dict):
+        parts.extend([obs.get("chat"), obs.get("error"), (obs.get("info") or {}) if isinstance(obs.get("info"), dict) else None])
+    text = " ".join(str(p) for p in parts if p is not None)
+    return INVALID_CMD in text
+
+
+def _send_chat(env, cmd: str):
+    """Bypass MineDojo's execute_cmd whitelist. Raise if the client prints Invalid cmd."""
+    sim = _chat_actor(env)
+    act = sim.action_space.no_op()
+    if isinstance(act, dict):
+        act = dict(act)
+    else:
+        try:
+            act = dict(act)
+        except Exception as exc:
+            raise RuntimeError(f"action_space.no_op() is not a mapping, cannot set chat: {type(act)}") from exc
+    act["chat"] = cmd
+    result = sim.step(act)
+    obs = result[0] if isinstance(result, tuple) else result
+    info = result[3] if isinstance(result, tuple) and len(result) > 3 else {}
+    if _invalid_cmd_seen(obs, info):
+        raise RuntimeError(f"{INVALID_CMD}: {cmd}")
+    adopt = getattr(env, "_adopt", None)
+    obs = adopt(obs) if callable(adopt) else obs
+    if hasattr(env, "_obs"):
+        env._obs = obs
+    return obs
+
+
 def _execute_cmd(env, cmd: str) -> None:
-    _sim(env).execute_cmd(cmd)
+    """Legacy name. All lfnav commands go through _send_chat."""
+    _send_chat(env, cmd)
 
 
-def _execute_summon(env, name: str, dx: int, dy: int, dz: int) -> None:
-    _execute_cmd(env, f"/summon {name} ~{dx} ~{dy} ~{dz}")
+def _execute_summon(env, name: str, dx: int, dy: int, dz: int, nbt: str | None = None) -> None:
+    extra = f" {nbt}" if nbt else ""
+    _send_chat(env, f"/summon {name} ~{dx} ~{dy} ~{dz}{extra}")
+
+
+def count_hostile_hits(obs: dict, cfg: dict | None = None) -> int:
+    keys = (cfg or {}).get("obs_keys") or {}
+    n = 0
+    for key in (keys.get("aligned_rays"), keys.get("wide_rays")):
+        for ray in lookup(obs, key, []) or []:
+            label = str(ray.get("label") or "").lower().replace(" ", "_").replace("minecraft:", "")
+            if any(label == name or label.endswith(name) for name in HOSTILE_NAMES):
+                n += 1
+    return n
 
 
 MC_FILL_LIMIT = 32768
@@ -523,22 +587,27 @@ def spawn_task_mobs(env, task, cfg: dict, seed: int) -> dict:
         "n_targets_spawned": 0,
         "natural_mobs_cleared": False,
         "vegetation_cleared": False,
+        "peaceful_ok": False,
     }
     env.spawn_meta = meta
-    if not names:
-        return obs
     try:
+        if env_cfg.get("peaceful", False):
+            obs = _send_chat(env, "/difficulty peaceful") or obs
+            meta["peaceful"] = True
+            meta["peaceful_ok"] = True
+        if not names:
+            return obs
         for _ in range(max(settle, 0)):
             obs = _noop_tick(env)
         if env_cfg.get("clear_entities", True):
-            _execute_cmd(env, "/kill @e[type=!player]")
+            obs = _send_chat(env, "/kill @e[type=!player]") or obs
             meta["natural_mobs_cleared"] = True
             for _ in range(2):
                 obs = _noop_tick(env)
         skip_plants = task_mentions_grass(task)
         if env_cfg.get("clear_vegetation", True) and not skip_plants:
             for cmd in vegetation_fill_commands():
-                _execute_cmd(env, cmd)
+                obs = _send_chat(env, cmd) or obs
                 obs = _noop_tick(env)
             meta["vegetation_cleared"] = True
         yaw = yaw_of(obs, cfg)
@@ -552,11 +621,9 @@ def spawn_task_mobs(env, task, cfg: dict, seed: int) -> dict:
             offset = sample_mob_offset(min_d, max_d, yaw, seed, index, behind=behind, y=y, task_id=task_id)
             offset = dict(offset)
             offset["name"] = name
-            _execute_summon(env, name, offset["dx"], offset["dy"], offset["dz"])
+            nbt = RESISTANCE_NBT if env_cfg.get("spawn_resistance", True) else None
+            _execute_summon(env, name, offset["dx"], offset["dy"], offset["dz"], nbt=nbt)
             tick = _noop_tick(env)
-            if env_cfg.get("spawn_resistance", True):
-                _execute_cmd(env, f"/effect @e[type={name}] resistance 10 4")
-                tick = _noop_tick(env)
             meta["spawn_offsets"].append(offset)
             if name == target:
                 meta["n_targets_spawned"] = int(meta["n_targets_spawned"]) + 1
@@ -572,7 +639,7 @@ def spawn_task_mobs(env, task, cfg: dict, seed: int) -> dict:
                 if name in seen:
                     continue
                 seen.append(name)
-                _execute_cmd(env, f"/effect @e[type={name}] slowness 1000000 10 true")
+                obs = _send_chat(env, f"/effect @e[type={name}] slowness 1000000 10 true") or obs
                 obs = _noop_tick(env)
         if env_cfg.get("spawn_verify_retry", False) and target and any(n == target for n in names):
             for _ in range(max(verify, 0)):
@@ -586,7 +653,9 @@ def spawn_task_mobs(env, task, cfg: dict, seed: int) -> dict:
             meta["spawn_attempts"] = 1 if meta["n_targets_spawned"] else 0
         env.spawn_meta = meta
         return obs
-    except Exception:
+    except Exception as exc:
+        if INVALID_CMD in str(exc):
+            raise
         meta["spawn_failed"] = True
         env.spawn_meta = meta
         return obs

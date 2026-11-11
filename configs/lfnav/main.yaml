@@ -1,0 +1,22 @@
+inherit: default.yaml
+
+# Sole scene standard. The only intentional difference from stock MP5 is /difficulty peaceful.
+wide_lidar: true
+policy_sees_wide_lidar: false
+wide_yaw_step: 5
+backend: minedojo
+perception_backend: gt
+policy_name: c1
+difficulty: easy
+aligned_subrays: 3
+save_decision_frames: true
+judge:
+  max_steps: 3000
+  radius: 3.0
+frames:
+  every: 10
+minedojo:
+  freeze_mobs: false
+  clear_entities: false
+  clear_vegetation: false
+  peaceful: true

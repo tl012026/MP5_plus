@@ -56,6 +56,7 @@ def _initial_metrics(env, obs, cfg: dict, task: TaskSpec, used: int, reroll_coun
         "vegetation_cleared": bool(spawn_meta.get("vegetation_cleared", False)),
         "spawn_target_distance": metrics.get("spawn_target_distance"),
         "natural_target_closer": bool(metrics.get("natural_target_closer", False)),
+        "peaceful_ok": bool(spawn_meta.get("peaceful_ok", False)),
     }
 
 

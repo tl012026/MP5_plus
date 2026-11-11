@@ -9,7 +9,7 @@ from pathlib import Path
 from lfnav.config import load_config
 from lfnav.data.demo_format import write_episode
 from lfnav.policy.c2 import BehaviorCloning
-from lfnav.policy.c2_data import FeatureSpec, load_c2_split, pad_chunk
+from lfnav.policy.c2_data import FeatureSpec, load_c2_split, pad_chunk, select_training_episodes
 from lfnav.types import PolicyInput
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,8 +21,9 @@ except Exception:
     HAS_TORCH = False
 
 
-def _episode(folder_root, task, difficulty, seed, chunks, used_wide=False):
+def _episode(folder_root, task, difficulty, seed, chunks, used_wide=False, **record_extra):
     record = {"task_name": task, "seed": seed, "difficulty": difficulty, "success": True}
+    record.update(record_extra)
     rows = []
     for i, chunk in enumerate(chunks):
         rows.append({
@@ -65,6 +66,30 @@ class DatasetSplitTest(unittest.TestCase):
             for row in split.train + split.val:
                 self.assertEqual(row.x.shape[0], spec.dim)
                 self.assertEqual(len(row.y), spec.horizon)
+
+    def test_filter_main_legacy_and_exclude(self):
+        from lfnav.data.demo_format import read_episode
+
+        cfg = load_config()
+        with tempfile.TemporaryDirectory() as tmp:
+            main = Path(tmp) / "demos_main"
+            old = Path(tmp) / "demos_dynamic"
+            _episode(main, "1-4", "easy", 1, [["forward"]], config_name="main", peaceful_ok=True, hostile_seen=0)
+            _episode(old, "1-4", "easy", 1, [["turn_left_15"]], config_name="demo_dynamic")
+            _episode(old, "2-3", "easy", 2, [["forward"]], config_name="demo_dynamic")
+            _episode(main, "4-3", "easy", 3, [["forward"]], config_name="main", peaceful_ok=True, hostile_seen=0)
+            _episode(main, "1-3", "easy", 4, [["forward"]], config_name="main", peaceful_ok=True, hostile_seen=2)
+            folders = [p.parent for p in Path(tmp).glob("**/record.json")]
+            kept, stats = select_training_episodes(folders, cfg)
+            recs = [read_episode(f)["record"] for f in kept]
+            keys = {(r["task_name"], int(r["seed"]), r.get("config_name")) for r in recs}
+            self.assertIn(("1-4", 1, "main"), keys)
+            self.assertIn(("2-3", 2, "demo_dynamic"), keys)
+            self.assertFalse(any(r["task_name"] == "4-3" for r in recs))
+            self.assertFalse(any(r["task_name"] == "1-3" for r in recs))
+            self.assertGreaterEqual(stats["duplicate"], 1)
+            self.assertGreaterEqual(stats["exclude_tasks"], 1)
+            self.assertGreaterEqual(stats["main_hostile"], 1)
 
     def test_short_chunk_pads_with_noop(self):
         spec = FeatureSpec.from_cfg(load_config())

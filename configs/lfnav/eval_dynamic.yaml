@@ -1,7 +1,8 @@
 inherit: baseline_eval.yaml
 
-# Main evaluation: animals walk; natural mobs stay. Tall grass is still cleared so GT rays can see them.
+# Legacy dynamic eval. The sole scene standard is configs/lfnav/main.yaml.
 minedojo:
   freeze_mobs: false
   clear_entities: false
   clear_vegetation: true
+  peaceful: true

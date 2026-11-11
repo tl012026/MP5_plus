@@ -1,4 +1,4 @@
-# Static robustness setting. Main eval is configs/lfnav/eval_dynamic.yaml.
+# Legacy static robustness setting. The sole scene standard is configs/lfnav/main.yaml.
 inherit: default.yaml
 
 # Wide lidar is for privileged initial-difficulty metrics only.

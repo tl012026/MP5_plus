@@ -219,6 +219,109 @@ def iter_success_episodes(demos) -> list[Path]:
     return sorted(p.parent for p in root.glob("**/record.json"))
 
 
+def _config_stem(name) -> str | None:
+    if not name:
+        return None
+    return Path(str(name)).stem
+
+
+def _episode_key(record: dict, folder: Path) -> tuple[str, str, int]:
+    task_id = str(record.get("task_name") or record.get("task") or folder.parts[-3])
+    difficulty = str(record.get("difficulty") or folder.parts[-2])
+    seed = int(record.get("seed") if record.get("seed") is not None else folder.name)
+    return task_id, difficulty, seed
+
+
+def _is_main_source(record: dict, folder: Path) -> bool:
+    stem = _config_stem(record.get("config_name"))
+    if stem == "main":
+        return True
+    return "demos_main" in Path(folder).parts
+
+
+def _is_legacy_source(record: dict) -> bool:
+    stem = _config_stem(record.get("config_name"))
+    return stem is None or stem == "demo_dynamic"
+
+
+def demo_roots(demos, cfg: dict | None = None) -> list[Path]:
+    if demos is None:
+        return [Path(p) for p in ((cfg or {}).get("c2") or {}).get("demo_dirs") or []]
+    if isinstance(demos, (list, tuple)):
+        return [Path(p) for p in demos]
+    return [Path(demos)]
+
+
+def select_training_episodes(folders: list[Path], cfg: dict | None = None) -> tuple[list[Path], dict]:
+    """Keep demos that match the C2 training filter. Does not delete files."""
+    c2 = (cfg or {}).get("c2") or {}
+    exclude = {str(t) for t in (c2.get("exclude_tasks") or ["4-3"])}
+    legacy_tasks = {str(t) for t in (c2.get("legacy_tasks") or [])}
+    stats = {
+        "seen": 0,
+        "not_success": 0,
+        "difficulty_unmet": 0,
+        "exclude_tasks": 0,
+        "main_not_peaceful": 0,
+        "main_hostile": 0,
+        "legacy_not_allowed": 0,
+        "duplicate": 0,
+        "kept_main": 0,
+        "kept_legacy": 0,
+        "kept": 0,
+    }
+    ranked: dict[tuple[str, str, int], tuple[int, Path]] = {}
+    for folder in folders:
+        packed = read_episode(folder)
+        record = packed["record"]
+        stats["seen"] += 1
+        task_id, difficulty, seed = _episode_key(record, Path(folder))
+        if not record.get("success"):
+            stats["not_success"] += 1
+            continue
+        if record.get("difficulty_unmet"):
+            stats["difficulty_unmet"] += 1
+            continue
+        if task_id in exclude:
+            stats["exclude_tasks"] += 1
+            continue
+        main = _is_main_source(record, Path(folder))
+        if main:
+            if not record.get("peaceful_ok"):
+                stats["main_not_peaceful"] += 1
+                continue
+            if int(record.get("hostile_seen") or 0) != 0:
+                stats["main_hostile"] += 1
+                continue
+            rank = 1
+        elif _is_legacy_source(record):
+            if task_id not in legacy_tasks:
+                stats["legacy_not_allowed"] += 1
+                continue
+            rank = 0
+        else:
+            stats["legacy_not_allowed"] += 1
+            continue
+        key = (task_id, difficulty, seed)
+        prev = ranked.get(key)
+        if prev is not None:
+            stats["duplicate"] += 1
+            if prev[0] >= rank:
+                continue
+        ranked[key] = (rank, Path(folder))
+    kept = []
+    for rank, folder in ranked.values():
+        kept.append(folder)
+        if rank == 1:
+            stats["kept_main"] += 1
+        else:
+            stats["kept_legacy"] += 1
+    stats["kept"] = len(kept)
+    for key, n in stats.items():
+        print(f"c2 filter {key}={n}")
+    return kept, stats
+
+
 def load_task(record: dict, folder: Path, cfg: dict | None = None) -> dict:
     if record.get("task") and isinstance(record["task"], dict) and record["task"].get("target"):
         return dict(record["task"])
@@ -249,6 +352,7 @@ class C2Split:
     used_wide_frac: float
     n_episodes: int
     val_seeds: list[int]
+    filter_stats: dict = None
 
 
 def samples_from_episode(folder, spec: FeatureSpec, wide_weight: float = 1.0) -> list[Sample]:
@@ -319,7 +423,10 @@ def load_c2_split(demos, cfg: dict | None = None, val_frac: float = VAL_FRAC, rn
     cfg = cfg or {}
     spec = FeatureSpec.from_cfg(cfg)
     wide_weight = float((cfg.get("c2") or {}).get("wide_weight", 1.0))
-    episodes = iter_success_episodes(demos)
+    folders = []
+    for root in demo_roots(demos, cfg):
+        folders.extend(iter_success_episodes(root))
+    episodes, filter_stats = select_training_episodes(folders, cfg)
     train_eps, val_eps, val_seeds = split_by_seed(episodes, val_frac=val_frac, rng_seed=rng_seed)
     train, val = [], []
     for folder in train_eps:
@@ -330,7 +437,7 @@ def load_c2_split(demos, cfg: dict | None = None, val_frac: float = VAL_FRAC, rn
     n_wide = sum(1 for row in all_rows if row.used_wide)
     frac = n_wide / len(all_rows) if all_rows else 0.0
     print(f"used_wide {n_wide}/{len(all_rows)} = {frac:.4f}  episodes={len(episodes)} train={len(train)} val={len(val)}")
-    return C2Split(train, val, spec, frac, len(episodes), val_seeds)
+    return C2Split(train, val, spec, frac, len(episodes), val_seeds, filter_stats)
 
 
 def class_weights(samples: list[Sample], n_actions: int) -> np.ndarray:

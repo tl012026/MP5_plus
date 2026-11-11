@@ -11,6 +11,7 @@ import numpy as np
 
 from lfnav.geom import aligned_subrays_n, patch_grid, ray_directions, subray_grid_from_cfg
 from lfnav.gt.scene_state import biome_id_for_name
+from lfnav.env.minedojo_env import CHAT_WHITELIST, INVALID_CMD
 
 
 def _assign(obs: dict, path, value) -> None:
@@ -72,6 +73,19 @@ class FakeMineDojoEnv:
         self.numpy_location_stats = bool(cfg.get("numpy_location_stats", True))
         from lfnav.env.frames import FrameRecorder
         self.frames = FrameRecorder(cfg)
+        self.action_space = self
+        self.chat_log: list[str] = []
+        self.invalid_commands: set[str] = set()
+
+    def no_op(self):
+        return {"chat": ""}
+
+    def execute_cmd(self, cmd: str) -> None:
+        token = str(cmd).split()[0] if cmd else ""
+        if cmd in CHAT_WHITELIST or token in CHAT_WHITELIST:
+            self.chat_log.append(cmd)
+            return
+        raise RuntimeError(f"command not sent via _send_chat and not on whitelist: {cmd}")
 
     def reset(self, **_kwargs):
         self._stuck_count = 0
@@ -125,6 +139,19 @@ class FakeMineDojoEnv:
         return packed
 
     def step(self, action):
+        if isinstance(action, dict) and action.get("chat"):
+            cmd = str(action["chat"])
+            self.chat_log.append(cmd)
+            obs = self.observation()
+            info = {"action": "chat"}
+            if cmd in self.invalid_commands or INVALID_CMD in cmd:
+                info["chat"] = INVALID_CMD
+                obs = dict(obs)
+                obs["chat"] = INVALID_CMD
+            self.frames.after_step(obs)
+            return obs, 0.0, False, info
+        if isinstance(action, dict):
+            action = "noop"
         name = self._action_name(action)
         before = (self.pos[0], self.pos[2])
         jumped = False

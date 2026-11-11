@@ -9,7 +9,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from lfnav.config import load_config
+from lfnav.env.fake import FakeMineDojoEnv
 from lfnav.env.minedojo_env import (
+    count_hostile_hits,
     lidar_plan,
     sample_mob_offset,
     spawn_rng_seed,
@@ -24,27 +26,48 @@ ROOT = Path(__file__).resolve().parents[2]
 SPECS = ROOT / "lfnav" / "tasks" / "specs"
 
 
-def _stub(cfg, cmds, steps):
-    class Space:
+def _stub(cfg, cmds, steps, invalid=None):
+    invalid = set(invalid or [])
+    obs = {
+        "location_stats": {"yaw": 0.0, "pos": [0.0, 64.0, 0.0]},
+        "lfnav_rays": [],
+        "lfnav_wide_rays": [],
+    }
+
+    class InnerSpace:
         def no_op(self):
             return "NOOP"
 
+    class ChatSpace:
+        def no_op(self):
+            return {"chat": ""}
+
     class Sim:
+        def __init__(self):
+            self.action_space = ChatSpace()
+
         def execute_cmd(self, cmd):
-            cmds.append(cmd)
+            raise RuntimeError(f"command not sent via _send_chat and not on whitelist: {cmd}")
+
+        def step(self, action):
+            chat = action.get("chat") if isinstance(action, dict) else None
+            out = dict(obs)
+            info = {}
+            if chat:
+                cmds.append(chat)
+                if chat in invalid:
+                    info["chat"] = "Invalid cmd"
+                    out["chat"] = "Invalid cmd"
+            return out, 0.0, False, info
 
     class Inner:
         def __init__(self):
-            self.action_space = Space()
+            self.action_space = InnerSpace()
             self.env = Sim()
 
         def step(self, action):
             steps.append(action)
-            return {
-                "location_stats": {"yaw": 0.0, "pos": [0.0, 64.0, 0.0]},
-                "lfnav_rays": [],
-                "lfnav_wide_rays": [],
-            }, 0.0, False, {}
+            return dict(obs), 0.0, False, {}
 
     wrapper = SimpleNamespace(_env=Inner(), _obs=None, cfg=cfg, spawn_meta={})
     wrapper._adopt = lambda obs: obs
@@ -102,6 +125,7 @@ class SpawnOnceTest(unittest.TestCase):
         spawn_task_mobs(wrapper, task, cfg, seed=3)
         self.assertTrue(all(a == "NOOP" for a in steps))
         self.assertEqual(cmds[0], "/kill @e[type=!player]")
+        self.assertNotIn("/difficulty peaceful", cmds)
         summons = [c for c in cmds if c.startswith("/summon ")]
         self.assertEqual(len(summons), 1)
         self.assertTrue(summons[0].startswith("/summon pig"))
@@ -113,9 +137,45 @@ class SpawnOnceTest(unittest.TestCase):
         fills = [c for c in cmds if c.startswith("/fill ")]
         self.assertTrue(fills)
         self.assertTrue(wrapper.spawn_meta["vegetation_cleared"])
-        self.assertTrue(any("resistance 10 4" in c for c in cmds))
+        self.assertTrue(any("ActiveEffects" in c and "Id:11" in c for c in cmds))
+        self.assertFalse(any("/effect" in c and "resistance" in c for c in cmds))
         self.assertTrue(any("slowness 1000000 10 true" in c for c in cmds))
         self.assertLess(cmds.index(fills[0]), next(i for i, c in enumerate(cmds) if c.startswith("/summon")))
+
+    def test_peaceful_is_first_command(self):
+        cfg = self._cfg(peaceful=True)
+        task = TaskSpec.from_dict(json.loads((SPECS / "1-4.json").read_text()))
+        cmds, steps = [], []
+        wrapper = _stub(cfg, cmds, steps)
+        spawn_task_mobs(wrapper, task, cfg, seed=3)
+        self.assertEqual(cmds[0], "/difficulty peaceful")
+        self.assertTrue(wrapper.spawn_meta.get("peaceful"))
+        self.assertLess(cmds.index("/difficulty peaceful"), cmds.index("/kill @e[type=!player]"))
+
+    def test_dynamic_configs_enable_peaceful(self):
+        for rel in ("configs/lfnav/eval_dynamic.yaml", "configs/lfnav/demo_dynamic.yaml", "configs/lfnav/main.yaml"):
+            cfg = load_config(ROOT / rel)
+            self.assertTrue(cfg["minedojo"]["peaceful"], rel)
+        self.assertFalse(load_config()["minedojo"]["peaceful"])
+
+    def test_send_chat_raises_on_invalid_cmd(self):
+        from lfnav.env.minedojo_env import _send_chat
+        cfg = self._cfg()
+        cmds, steps = [], []
+        wrapper = _stub(cfg, cmds, steps, invalid={"/nope"})
+        with self.assertRaises(RuntimeError) as ctx:
+            _send_chat(wrapper, "/nope")
+        self.assertIn("Invalid cmd", str(ctx.exception))
+
+    def test_execute_cmd_without_send_chat_is_rejected_on_fake(self):
+        cfg = load_config()
+        env = FakeMineDojoEnv(cfg, {})
+        with self.assertRaises(RuntimeError) as ctx:
+            env.execute_cmd("/kill @e[type=!player]")
+        self.assertIn("_send_chat", str(ctx.exception))
+        _send_chat = __import__("lfnav.env.minedojo_env", fromlist=["_send_chat"])._send_chat
+        _send_chat(env, "/difficulty peaceful")
+        self.assertEqual(env.chat_log[-1], "/difficulty peaceful")
 
     def test_grass_tasks_skip_vegetation_clear(self):
         cfg = self._cfg()
@@ -178,6 +238,17 @@ class SpawnOnceTest(unittest.TestCase):
         self.assertEqual(len(summons), 3)
         self.assertEqual(wrapper.spawn_meta["spawn_attempts"], 3)
         self.assertFalse(wrapper.spawn_meta["spawn_failed"])
+
+
+class HostileCountTest(unittest.TestCase):
+    def test_zombie_rays_are_counted(self):
+        cfg = load_config()
+        cfg["image_hw"] = [14, 14]
+        env = FakeMineDojoEnv(cfg, {"entities": [{"name": "zombie", "x": 0.0, "z": 3.0}]})
+        n = count_hostile_hits(env.reset(), cfg)
+        self.assertGreater(n, 0)
+        pig = FakeMineDojoEnv(cfg, {"entities": [{"name": "pig", "x": 0.0, "z": 3.0}]})
+        self.assertEqual(count_hostile_hits(pig.reset(), cfg), 0)
 
 
 class WidePitchTest(unittest.TestCase):

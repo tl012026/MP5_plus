@@ -83,6 +83,10 @@ Setup: C0 (random walk) and C1 (rule policy) with ground-truth perception on the
 - **Spawn RNG:** seeded with `sha256(seed, task_id, index)`. Before this, every task had the same layout for a given seed.
 - **Biome check:** `check_biome_world` confirmed that `specified_biome` worlds are a single biome (forest, so far), so `leave_biome` stays off.
 
+## 11. Freeze, resistance, and vegetation commands were silently dropped
+- **Evidence:** client logs showed `Invalid cmd` for `/effect` (slowness, resistance) and chunked `/fill` of tall grass. MineDojo's `execute_cmd` whitelist swallowed them; ticks did not advance and the world did not change. Earlier C0/C1 runs were therefore **not** frozen, **not** given resistance, and **not** vegetation-cleared, even when the config said so.
+- **Fix:** `_send_chat` writes the command onto `action_space.no_op()["chat"]` and `step`s it. Any `Invalid cmd` now raises. Resistance is NBT on `/summon`. The main scene (`main.yaml`) does not freeze or clear vegetation; it does send `/difficulty peaceful`.
+
 ## Known limitations (kept, reported)
 - **Tree and grass targets can't be made hard.** The target is everywhere, so medium and hard become `difficulty_unmet`. Report these tasks at easy only.
 - **Biome, time and weather conditions are set at reset.** They hold for the whole episode, so the only condition that requires search is `near X`.

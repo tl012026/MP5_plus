@@ -19,9 +19,9 @@ ENVSH=${ENVSH:-$SCR/mp5_env.sh}
 SIF=${SIF:-$SCR/env/minedojo.sif}
 POLICY=${POLICY:-c1}
 PERCEPTION=${PERCEPTION:-gt}
-CFG=${CFG:-$MP5/configs/lfnav/eval_dynamic.yaml}
+CFG=${CFG:-$MP5/configs/lfnav/main.yaml}
 SEEDS=${SEEDS:-$MP5/configs/lfnav/eval_seeds_baseline.txt}
-ROOT_OUT=${ROOT_OUT:-$SCR/lfnav/runs/baseline_dynamic}
+ROOT_OUT=${ROOT_OUT:-$SCR/lfnav/runs/main}
 mkdir -p "$SCR/lfnav/logs"
 # shellcheck disable=SC1091
 source "$MP5/lfnav/env/gradle_home.sh"

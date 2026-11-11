@@ -1,7 +1,7 @@
-# creative16-v2. Paths only — do not copy these files.
+# creative16-v3. Paths only — do not copy these files.
 # Primary data lives at the listed repo paths. This file is an index.
-version: creative16-v2
-git_commit: 4111d65ddfd8ed15b3d4ed6c8d01921a931763a8
+version: creative16-v3
+git_commit: 9a9b6bb6a1900d9e89439762045358a548f82ea6
 
 tasks:
   role: primary
@@ -54,11 +54,13 @@ seeds:
   train_note: Demo / C2 training seeds. The MP5 group does not use these for this protocol.
 
 env:
-  file: configs/lfnav/eval_dynamic.yaml
+  file: configs/lfnav/main.yaml
   inherits:
-    - configs/lfnav/baseline_eval.yaml
     - configs/lfnav/default.yaml
-  static_robustness: configs/lfnav/baseline_eval.yaml
+  legacy:
+    - configs/lfnav/baseline_eval.yaml
+    - configs/lfnav/eval_dynamic.yaml
+    - configs/lfnav/demo_dynamic.yaml
 
 judge: lfnav/gt/judge.py
 

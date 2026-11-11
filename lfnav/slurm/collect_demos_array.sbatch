@@ -16,9 +16,9 @@ SCR=${SCR:-/scratch/$USER}
 MP5=${MP5:-$HOME/MP5_plus}
 ENVSH=${ENVSH:-$SCR/mp5_env.sh}
 SIF=${SIF:-$SCR/env/minedojo.sif}
-CFG=${CFG:-$MP5/configs/lfnav/demo_dynamic.yaml}
+CFG=${CFG:-$MP5/configs/lfnav/main.yaml}
 SEEDS=${SEEDS:-$MP5/configs/lfnav/train_seeds_demo.txt}
-OUT=${OUT:-$SCR/lfnav/data/demos_dynamic}
+OUT=${OUT:-$SCR/lfnav/data/demos_main}
 mkdir -p "$SCR/lfnav/logs" "$OUT"
 idx=${SLURM_ARRAY_TASK_ID}
 PAIR=$(cd "$MP5" && python3 -c "from lfnav.eval.baseline_index import cell; t,d=cell($idx); print(t, d)")

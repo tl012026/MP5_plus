@@ -29,7 +29,7 @@ def config_name(cfg: dict | None) -> str | None:
     if not cfg:
         return None
     path = cfg.get("_path")
-    return Path(path).name if path else None
+    return Path(path).stem if path else None
 
 
 def step_row(event: dict, env_step: int, memory: dict | None, used_wide: bool) -> dict:
