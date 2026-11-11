@@ -85,15 +85,19 @@ The expert is C1 with ground-truth perception plus a **360° wide lidar** (horiz
 - Demos are collected with `configs/lfnav/main.yaml` into `$SCR/lfnav/data/demos_main`. Failures store `record.json` and `steps.jsonl` only (no frames). Old `demos_dynamic` files are kept and may be used as C2 legacy data.
 - The expert is never used as an evaluation policy, except in the explicit upper-bound run (`expert_eval`, requires `allow_privileged_eval`).
 
-**Expert results (dynamic demos)**: *to be filled from `lfnav/data/demo_stats.py`*
+**Expert results (demos, `main.yaml`, 44 training seeds per cell, 4-3 excluded)**
 
 | Subset | Episodes | Success rate | SPL | Median steps | `used_wide` share |
 |---|---|---|---|---|---|
-| Animal, easy | | | | | |
-| Animal, medium | | | | | |
-| Animal, hard | | | | | |
-| Animal + `near X` | | | | | |
-| Tree / grass, easy | | | | | |
+| Animal, easy | 264 | 0.95 | 0.73 | 40 (20–72) | 0.03 |
+| Animal, medium | 264 | 0.90 | 0.82 | 100 (53–171) | 0.02 |
+| Animal, hard | 264 | 0.74 | 0.75 | 263 (125–446) | 0.01 |
+| Animal + `near X` (4-4, all difficulties) | 132 | 0.78 | 0.73 | 118 (56–589) | 0.03 |
+| Tree / grass, easy | 352 | 0.97 | 0.60 | 0 (0–10) | 0.01 |
+
+- Animal = 1-3, 1-4, 2-3, 2-4, 3-3, 3-4 (no `near X`). Tree / grass = 1-1, 1-2, 2-1, 2-2, 3-1, 3-2, 4-1, 4-2.
+- Success rate is pooled over episodes. SPL and `used_wide` share are means of the per-task values. Median steps is the median of the per-task medians, with the range of per-task medians in parentheses.
+- Training seeds, not the evaluation seeds. Per-cell numbers: `stats_demos_v2.md`.
 
 ---
 
