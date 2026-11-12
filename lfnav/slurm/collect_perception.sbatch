@@ -1,7 +1,5 @@
 #!/bin/bash
 #SBATCH --job-name=lfnav-collect
-#SBATCH --account=
-#SBATCH --partition=
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
 #SBATCH --time=08:00:00

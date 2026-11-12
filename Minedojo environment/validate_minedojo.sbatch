@@ -1,6 +1,4 @@
 #!/bin/bash
-#SBATCH --account=
-#SBATCH --partition=
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=20G
 #SBATCH --time=02:00:00

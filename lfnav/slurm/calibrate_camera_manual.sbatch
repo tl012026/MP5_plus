@@ -1,7 +1,5 @@
 #!/bin/bash
 #SBATCH --job-name=lfnav-fov
-#SBATCH --account=
-#SBATCH --partition=
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8G
 #SBATCH --time=00:30:00

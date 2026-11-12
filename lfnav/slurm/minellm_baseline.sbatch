@@ -1,7 +1,5 @@
 #!/bin/bash
 #SBATCH --job-name=lfnav-mllm
-#SBATCH --account=
-#SBATCH --partition=
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G

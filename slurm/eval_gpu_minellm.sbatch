@@ -1,7 +1,5 @@
 #!/bin/bash
 #SBATCH --job-name=mp5-gpu
-#SBATCH --account=
-#SBATCH --partition=
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=80G
