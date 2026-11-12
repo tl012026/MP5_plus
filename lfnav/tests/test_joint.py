@@ -22,9 +22,11 @@ from lfnav.policy.joint import (
     assert_checkpoint_flags,
     belief_aligned_distance,
     c2_input_dim,
+    infer_policy_uses_pooled,
     joint_policy_flags,
     joint_spec,
 )
+from lfnav.policy.train_joint import apply_joint_cli, checkpoint_record
 from lfnav.types import ObjectBelief, SceneState, TaskSpec
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -319,16 +321,54 @@ class PolicyHeadInterfaceTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             assert_checkpoint_flags({"policy_uses_pooled": False, "detach_scene": False}, cfg)
 
-    def test_old_checkpoint_missing_flags_uses_v1_defaults(self):
-        v1 = {"joint": {"policy_uses_pooled": True, "detach_scene": False}}
+    def test_missing_policy_uses_pooled_inferred_from_p1(self):
+        spec = joint_spec(load_config())
+        dim = 8
         v2 = {"joint": {"policy_uses_pooled": False, "detach_scene": True}}
-        old = {"model": {}}
+        v1 = {"joint": {"policy_uses_pooled": True, "detach_scene": False}}
+        no_pool = {
+            "dim": dim,
+            "model": {"p1.weight": np.zeros((16, c2_input_dim(spec, dim, False)), dtype=np.float32)},
+        }
+        with_pool = {
+            "dim": dim,
+            "model": {"p1.weight": np.zeros((16, c2_input_dim(spec, dim, True)), dtype=np.float32)},
+        }
+        self.assertFalse(infer_policy_uses_pooled(no_pool, spec))
+        self.assertTrue(infer_policy_uses_pooled(with_pool, spec))
         with self.assertLogs("lfnav.policy.joint", level="WARNING") as logs:
-            assert_checkpoint_flags(old, v1)
-        self.assertTrue(any("joint_v1" in row for row in logs.output))
+            assert_checkpoint_flags(no_pool, v2, spec=spec)
+        self.assertTrue(any("inferred" in row for row in logs.output))
+        self.assertTrue(any("detach_scene" in row for row in logs.output))
+        with self.assertLogs("lfnav.policy.joint", level="WARNING"):
+            assert_checkpoint_flags(with_pool, v1, spec=spec)
         with self.assertLogs("lfnav.policy.joint", level="WARNING"):
             with self.assertRaises(RuntimeError):
-                assert_checkpoint_flags(old, v2)
+                assert_checkpoint_flags(with_pool, v2, spec=spec)
+
+    def test_cli_flags_reach_joint_policy_flags(self):
+        class Args:
+            policy_uses_pooled = True
+            detach_scene = False
+
+        cfg = apply_joint_cli({"joint": {}}, Args())
+        flags = joint_policy_flags(cfg)
+        self.assertTrue(flags["policy_uses_pooled"])
+        self.assertFalse(flags["detach_scene"])
+
+    def test_checkpoint_record_save_load_flags(self):
+        flags = {"policy_uses_pooled": False, "detach_scene": True}
+        rec = checkpoint_record(flags, "joint_v2", model={})
+        self.assertIn("policy_uses_pooled", rec)
+        self.assertIn("detach_scene", rec)
+        self.assertIn("version", rec)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "ckpt.npy"
+            np.save(path, rec)
+            loaded = np.load(path, allow_pickle=True).item()
+            self.assertEqual(loaded["policy_uses_pooled"], False)
+            self.assertEqual(loaded["detach_scene"], True)
+            self.assertEqual(loaded["version"], "joint_v2")
 
 
 @unittest.skipUnless(HAS_TORCH, "torch not installed on this host")
@@ -387,6 +427,7 @@ class JointTrainTest(unittest.TestCase):
                 JointAgent(cfg)
 
     def test_train_on_extracted_features(self):
+        import torch
         from lfnav.policy.train_joint import load_joint_split, train_loop
 
         cfg = load_config()
@@ -403,8 +444,25 @@ class JointTrainTest(unittest.TestCase):
             split = load_joint_split([root], feat, cfg, val_frac=0.25, rng_seed=0)
             self.assertTrue(split.train)
             self.assertTrue(split.val)
-            ckpt = train_loop(split, Path(tmp) / "ckpt", cfg, epochs=1, batch=4, lr=1e-2, seed=0, lam=1.0)
+            ckpt = train_loop(split, Path(tmp) / "ckpt", cfg, epochs=1, batch=4, lr=1e-2, seed=0, lam=1.0, version="joint_v2")
             self.assertTrue(ckpt.is_file())
+            payload = torch.load(ckpt, map_location="cpu")
+            self.assertIn("policy_uses_pooled", payload)
+            self.assertIn("detach_scene", payload)
+            self.assertEqual(payload["version"], "joint_v2")
+
+    def test_torch_save_load_checkpoint_flags(self):
+        import torch
+
+        flags = joint_policy_flags(load_config())
+        rec = checkpoint_record(flags, "joint_v2", model={})
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "joint_v2.pt"
+            torch.save(rec, path)
+            loaded = torch.load(path, map_location="cpu")
+            self.assertEqual(loaded["policy_uses_pooled"], flags["policy_uses_pooled"])
+            self.assertEqual(loaded["detach_scene"], flags["detach_scene"])
+            self.assertEqual(loaded["version"], "joint_v2")
 
 
 if __name__ == "__main__":

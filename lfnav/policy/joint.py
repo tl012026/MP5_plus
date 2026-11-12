@@ -15,7 +15,6 @@ from lfnav.types import ObjectBelief, PolicyInput, PolicyOutput, SceneState
 
 IGNORE = -100
 log = logging.getLogger("lfnav.policy.joint")
-V1_POLICY_FLAGS = {"policy_uses_pooled": True, "detach_scene": False}
 
 
 def joint_spec(cfg: dict | None = None) -> FeatureSpec:
@@ -110,24 +109,57 @@ def c2_input_dim(spec: FeatureSpec, dim: int, policy_uses_pooled: bool) -> int:
     return n
 
 
-def assert_checkpoint_flags(payload: dict, cfg: dict | None = None) -> None:
+def _state_dict(payload: dict) -> dict:
+    if isinstance(payload, dict) and isinstance(payload.get("model"), dict):
+        return payload["model"]
+    return payload if isinstance(payload, dict) else {}
+
+
+def infer_policy_uses_pooled(payload: dict, spec: FeatureSpec, dim: int | None = None) -> bool:
+    """Whether C2's first linear layer includes the pooled DINOv2 width."""
+    state = _state_dict(payload)
+    weight = state.get("p1.weight")
+    if weight is None:
+        raise RuntimeError("cannot infer policy_uses_pooled: missing p1.weight")
+    in_dim = int(weight.shape[1])
+    if dim is None:
+        dim = payload.get("dim") if isinstance(payload, dict) else None
+        conv = state.get("conv.weight")
+        if dim is None and conv is not None:
+            dim = int(conv.shape[1])
+    if dim is None:
+        raise RuntimeError("cannot infer policy_uses_pooled: missing feature dim")
+    dim = int(dim)
+    with_pool = c2_input_dim(spec, dim, True)
+    without = c2_input_dim(spec, dim, False)
+    if in_dim == with_pool:
+        return True
+    if in_dim == without:
+        return False
+    raise RuntimeError(
+        f"cannot infer policy_uses_pooled from p1 in_dim={in_dim} (expected {without} or {with_pool})"
+    )
+
+
+def assert_checkpoint_flags(payload: dict, cfg: dict | None = None, spec: FeatureSpec | None = None, dim: int | None = None) -> None:
     flags = joint_policy_flags(cfg)
     if not isinstance(payload, dict):
         raise RuntimeError("joint checkpoint must be a dict")
-    missing = [key for key in V1_POLICY_FLAGS if key not in payload]
-    resolved = dict(payload)
-    if missing:
-        resolved.update({key: V1_POLICY_FLAGS[key] for key in missing})
-        log.warning(
-            "checkpoint missing %s; using joint_v1 defaults policy_uses_pooled=%s detach_scene=%s",
-            ", ".join(missing),
-            V1_POLICY_FLAGS["policy_uses_pooled"],
-            V1_POLICY_FLAGS["detach_scene"],
-        )
-    for key, want in flags.items():
-        got = bool(resolved[key])
-        if got != want:
-            raise RuntimeError(f"checkpoint {key}={got} != config {key}={want}")
+    if "policy_uses_pooled" in payload:
+        got_pooled = bool(payload["policy_uses_pooled"])
+    else:
+        if spec is None:
+            spec = joint_spec(cfg)
+        got_pooled = infer_policy_uses_pooled(payload, spec, dim=dim if dim is not None else payload.get("dim"))
+        log.warning("checkpoint missing policy_uses_pooled; inferred %s from C2 p1 in_dim", got_pooled)
+    if got_pooled != flags["policy_uses_pooled"]:
+        raise RuntimeError(f"checkpoint policy_uses_pooled={got_pooled} != config {flags['policy_uses_pooled']}")
+    if "detach_scene" in payload:
+        got_detach = bool(payload["detach_scene"])
+        if got_detach != flags["detach_scene"]:
+            raise RuntimeError(f"checkpoint detach_scene={got_detach} != config {flags['detach_scene']}")
+    else:
+        log.warning("checkpoint missing detach_scene; ignored at eval (train-only flag)")
 
 
 def scene_vector_np(present_p, dir_p, dist_p, biome_p, time_p, weather_p, bright_p) -> np.ndarray:
@@ -347,8 +379,8 @@ class JointAgent(Policy):
             if ckpt:
                 payload = torch.load(ckpt, map_location="cpu")
                 if not isinstance(payload, dict) or "model" not in payload:
-                    raise RuntimeError("joint checkpoint must be a dict with model and policy flags")
-                assert_checkpoint_flags(payload, self.cfg)
+                    raise RuntimeError("joint checkpoint must be a dict with a model state")
+                assert_checkpoint_flags(payload, self.cfg, spec=self.spec, dim=self.dim)
                 self.model.load_state_dict(payload["model"])
             self.model.eval()
         self.reset()

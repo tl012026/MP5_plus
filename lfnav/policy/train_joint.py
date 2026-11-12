@@ -41,6 +41,35 @@ from lfnav.policy.joint import (
 )
 
 
+def parse_bool(value: str) -> bool:
+    text = str(value).strip().lower()
+    if text in ("1", "true", "yes", "y"):
+        return True
+    if text in ("0", "false", "no", "n"):
+        return False
+    raise argparse.ArgumentTypeError(f"expected bool, got {value!r}")
+
+
+def apply_joint_cli(cfg: dict, args) -> dict:
+    cfg["joint"] = dict(cfg.get("joint") or {})
+    if getattr(args, "policy_uses_pooled", None) is not None:
+        cfg["joint"]["policy_uses_pooled"] = bool(args.policy_uses_pooled)
+    if getattr(args, "detach_scene", None) is not None:
+        cfg["joint"]["detach_scene"] = bool(args.detach_scene)
+    return cfg
+
+
+def checkpoint_record(flags: dict, version: str, **extra) -> dict:
+    payload = dict(extra)
+    payload["version"] = str(version)
+    payload["policy_uses_pooled"] = bool(flags["policy_uses_pooled"])
+    payload["detach_scene"] = bool(flags["detach_scene"])
+    for key in ("policy_uses_pooled", "detach_scene", "version"):
+        if key not in payload:
+            raise RuntimeError(f"checkpoint must include {key}")
+    return payload
+
+
 def git_hash() -> str | None:
     try:
         return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=_ROOT, text=True).strip()
@@ -245,7 +274,7 @@ def dry_run() -> float:
         return 0.0
 
 
-def train_loop(split: JointSplit, out: Path, cfg: dict, epochs: int, batch: int, lr: float, seed: int, lam: float) -> Path:
+def train_loop(split: JointSplit, out: Path, cfg: dict, epochs: int, batch: int, lr: float, seed: int, lam: float, version: str = "joint_v2") -> Path:
     import torch
 
     torch.manual_seed(int(seed))
@@ -266,7 +295,7 @@ def train_loop(split: JointSplit, out: Path, cfg: dict, epochs: int, batch: int,
     opt = torch.optim.Adam(model.parameters(), lr=float(lr))
     cw = torch.from_numpy(class_weights(split.train, len(split.spec.actions))).to(device)
     best = None
-    best_path = out / "joint_v2.pt"
+    best_path = out / f"{version}.pt"
     if not split.train:
         raise RuntimeError("no training samples")
     tokens_mm, _, _ = load_memmaps(split.feat_dir)
@@ -330,18 +359,16 @@ def train_loop(split: JointSplit, out: Path, cfg: dict, epochs: int, batch: int,
         )
         if best is None or val_loss < best:
             best = val_loss
-            payload = {
-                "model": model.state_dict(),
-                "dim": split.dim,
-                "grid": split.grid,
-                "actions": split.spec.actions,
-                "horizon": split.spec.horizon,
-                "recent_k": split.spec.recent_k,
-                "policy_uses_pooled": bool(flags["policy_uses_pooled"]),
-                "detach_scene": bool(flags["detach_scene"]),
-            }
-            if "policy_uses_pooled" not in payload or "detach_scene" not in payload:
-                raise RuntimeError("joint_v2 checkpoint must record policy_uses_pooled and detach_scene")
+            payload = checkpoint_record(
+                flags,
+                version,
+                model=model.state_dict(),
+                dim=split.dim,
+                grid=split.grid,
+                actions=split.spec.actions,
+                horizon=split.spec.horizon,
+                recent_k=split.spec.recent_k,
+            )
             torch.save(payload, best_path)
     return best_path
 
@@ -359,12 +386,14 @@ def main():
     parser.add_argument("--lambda-c2", type=float, default=None)
     parser.add_argument("--config", default=None)
     parser.add_argument("--version", default=None)
+    parser.add_argument("--policy-uses-pooled", type=parse_bool, default=None)
+    parser.add_argument("--detach-scene", type=parse_bool, default=None)
     args = parser.parse_args()
     if args.dry_run or (not args.out and not args.features):
         dry_run()
         return
     cfg = load_config(args.config) if args.config else load_config()
-    cfg["joint"] = dict(cfg.get("joint") or {})
+    apply_joint_cli(cfg, args)
     lam = float(args.lambda_c2 if args.lambda_c2 is not None else cfg["joint"].get("lambda_c2", 1.0))
     version = args.version or cfg["joint"].get("data_version") or "joint_v2"
     feat_ver = cfg["joint"].get("features_version") or "joint_v1"
@@ -372,13 +401,11 @@ def main():
     split = load_joint_split(args.demos, feat, cfg, rng_seed=args.seed)
     out = Path(args.out)
     flags = joint_policy_flags(cfg)
-    ckpt = train_loop(split, out, cfg, args.epochs, args.batch, args.lr, args.seed, lam)
-    atomic_write_json(out / "meta.json", {
+    ckpt = train_loop(split, out, cfg, args.epochs, args.batch, args.lr, args.seed, lam, version=version)
+    atomic_write_json(out / "meta.json", checkpoint_record(flags, version, **{
         "data_version": version,
         "features_version": feat_ver,
         "features": str(feat),
-        "policy_uses_pooled": flags["policy_uses_pooled"],
-        "detach_scene": flags["detach_scene"],
         "git_commit": git_hash(),
         "filter_stats": split.filter_stats,
         "n_train": len(split.train),
@@ -395,7 +422,7 @@ def main():
         "lr": args.lr,
         "actions": split.spec.actions,
         "horizon": split.spec.horizon,
-    })
+    }))
     print(f"wrote {ckpt}", flush=True)
 
 
