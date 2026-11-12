@@ -76,6 +76,7 @@ joint:
   hidden: 256
   chunk: 4
   recent_k: 4
+  memory_size: 15
   data_version: joint_v2
   features_version: joint_v1
   checkpoint: null

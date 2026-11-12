@@ -7,7 +7,6 @@ import logging
 import numpy as np
 
 from lfnav.aggregate import argmax_name
-from lfnav.perception.encoder import pool_patch_tokens, token_pool_size
 from lfnav.policy.base import Policy
 from lfnav.policy.c2_data import DIRECTIONS, DISTANCES, FeatureSpec, encode_aux
 from lfnav.policy.c2 import _visible
@@ -17,10 +16,35 @@ IGNORE = -100
 log = logging.getLogger("lfnav.policy.joint")
 
 
-def joint_spec(cfg: dict | None = None) -> FeatureSpec:
+CKPT_RUNTIME_KEYS = ("recent_k", "memory_size", "token_pool")
+
+
+def joint_runtime_from_cfg(cfg: dict | None = None) -> dict:
+    """Eval/train runtime from cfg.joint only — never policy.recent_k / policy.memory_size."""
+    joint = (cfg or {}).get("joint") or {}
+    return {
+        "recent_k": int(joint["recent_k"] if joint.get("recent_k") is not None else 4),
+        "memory_size": int(joint["memory_size"] if joint.get("memory_size") is not None else 15),
+        "token_pool": int(joint["token_pool"] if joint.get("token_pool") is not None else 1),
+    }
+
+
+def checkpoint_runtime(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        raise RuntimeError("joint checkpoint must be a dict")
+    missing = [key for key in CKPT_RUNTIME_KEYS if key not in payload]
+    if missing:
+        raise RuntimeError(
+            "checkpoint missing " + ", ".join(missing) + "; eval will not fall back to policy.*"
+        )
+    return {key: int(payload[key]) for key in CKPT_RUNTIME_KEYS}
+
+
+def joint_spec(cfg: dict | None = None, runtime: dict | None = None) -> FeatureSpec:
     spec = FeatureSpec.from_cfg(cfg)
-    spec.recent_k = int(((cfg or {}).get("joint") or {}).get("recent_k") or 4)
     spec.horizon = int(((cfg or {}).get("joint") or {}).get("chunk") or spec.horizon)
+    rt = runtime if runtime is not None else joint_runtime_from_cfg(cfg)
+    spec.recent_k = int(rt["recent_k"])
     return spec
 
 
@@ -338,7 +362,6 @@ class JointAgent(Policy):
     def __init__(self, cfg: dict | None = None):
         self.cfg = cfg or {}
         joint = self.cfg.get("joint") or {}
-        self.spec = joint_spec(self.cfg)
         self.hidden = int(joint.get("hidden") or 256)
         self.lambda_c2 = float(joint.get("lambda_c2", 1.0))
         self.flags = joint_policy_flags(self.cfg)
@@ -349,11 +372,25 @@ class JointAgent(Policy):
         self._tokens = None
         self._pooled = None
         self._scene = SceneState()
+        runtime = joint_runtime_from_cfg(self.cfg)
+        payload = None
         try:
             import torch
         except ImportError:
             torch = None
         self._torch = torch
+        ckpt = joint.get("checkpoint")
+        if ckpt:
+            if torch is None:
+                raise RuntimeError("joint checkpoint requires torch")
+            payload = torch.load(ckpt, map_location="cpu")
+            if not isinstance(payload, dict) or "model" not in payload:
+                raise RuntimeError("joint checkpoint must be a dict with a model state")
+            runtime = checkpoint_runtime(payload)
+        self.runtime = runtime
+        self.spec = joint_spec(self.cfg, runtime=runtime)
+        self.memory_size = int(runtime["memory_size"])
+        self.token_pool = int(runtime["token_pool"])
         from lfnav.perception.encoder import FakeEncoder, load_encoder
 
         enc_name = joint.get("encoder") or ((self.cfg.get("perception") or {}).get("encoder") or "fake")
@@ -375,11 +412,7 @@ class JointAgent(Policy):
                 policy_uses_pooled=self.flags["policy_uses_pooled"],
                 detach_scene=self.flags["detach_scene"],
             )
-            ckpt = joint.get("checkpoint")
-            if ckpt:
-                payload = torch.load(ckpt, map_location="cpu")
-                if not isinstance(payload, dict) or "model" not in payload:
-                    raise RuntimeError("joint checkpoint must be a dict with a model state")
+            if payload is not None:
                 assert_checkpoint_flags(payload, self.cfg, spec=self.spec, dim=self.dim)
                 self.model.load_state_dict(payload["model"])
             self.model.eval()
@@ -396,26 +429,50 @@ class JointAgent(Policy):
             return 0
         return int(sum(p.numel() for p in self.model.parameters()))
 
-    def features(self, frame) -> dict:
-        from lfnav.data.demo_format import preprocess_frame
+    def features(self, frame, *, saved_jpeg: bool = False) -> dict:
+        from lfnav.data.demo_format import _hwc_uint8, preprocess_frame
+        from lfnav.perception.joint_features import encode_joint_tokens
 
         rgb = frame
-        if isinstance(frame, dict):
+        live = isinstance(frame, dict)
+        if live:
             from lfnav.env.frames import rgb_hwc
 
             rgb = rgb_hwc(frame, self.cfg)
             if rgb is None:
                 rgb = frame.get("rgb")
-        rgb = preprocess_frame(rgb)
-        encoded = self.encoder(rgb)
-        tokens = pool_patch_tokens(np.asarray(encoded["tokens"], dtype=np.float32), token_pool_size(self.cfg))
-        pooled = tokens.mean(axis=(0, 1))
-        self._tokens = tokens
-        self._pooled = pooled
-        encoded = dict(encoded)
-        encoded["tokens"] = tokens
-        encoded["pooled"] = pooled
+        if live or not saved_jpeg:
+            rgb = preprocess_frame(rgb)
+        else:
+            rgb = _hwc_uint8(rgb)
+        encoded = encode_joint_tokens(rgb, self.encoder, self.token_pool)
+        self._tokens = encoded["tokens"]
+        self._pooled = encoded["pooled"]
         return encoded
+
+    def aux_from_input(self, policy_input: PolicyInput) -> np.ndarray:
+        match = policy_input.match or {}
+        env_step = int((policy_input.memory or {}).get("env_steps") or 0)
+        if _visible(match):
+            self.last_seen = {
+                "step": env_step,
+                "direction": match.get("target_direction"),
+                "distance": match.get("target_distance"),
+            }
+        mem = policy_input.memory or {}
+        sectors = mem.get("sector8")
+        if sectors is None:
+            from lfnav.policy.c1 import sector8_counts
+
+            sectors = sector8_counts(mem.get("local_grid") or [])
+        return encode_aux(
+            policy_input.task or {},
+            sectors,
+            policy_input.recent_actions or mem.get("recent_actions") or [],
+            self.last_seen if self.last_seen is not None else mem.get("last_seen"),
+            env_step,
+            self.spec,
+        )
 
     def perceive(self, frame) -> SceneState:
         self.features(frame)
@@ -439,28 +496,7 @@ class JointAgent(Policy):
         return self._scene
 
     def act(self, policy_input: PolicyInput) -> PolicyOutput:
-        match = policy_input.match or {}
-        env_step = int((policy_input.memory or {}).get("env_steps") or 0)
-        if _visible(match):
-            self.last_seen = {
-                "step": env_step,
-                "direction": match.get("target_direction"),
-                "distance": match.get("target_distance"),
-            }
-        mem = policy_input.memory or {}
-        sectors = mem.get("sector8")
-        if sectors is None:
-            from lfnav.policy.c1 import sector8_counts
-
-            sectors = sector8_counts(mem.get("local_grid") or [])
-        aux = encode_aux(
-            policy_input.task or {},
-            sectors,
-            policy_input.recent_actions or mem.get("recent_actions") or [],
-            self.last_seen if self.last_seen is not None else mem.get("last_seen"),
-            env_step,
-            self.spec,
-        )
+        aux = self.aux_from_input(policy_input)
         if self.model is None or self._torch is None or self._tokens is None:
             return PolicyOutput(["noop"] * self.spec.horizon)
         torch = self._torch

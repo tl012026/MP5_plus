@@ -169,7 +169,10 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
     controller = Controller(env, cfg)
     matcher = Matcher(cfg)
     pol = cfg.get("policy") or {}
-    memory = Memory(pol.get("memory_size", 15), pol.get("recent_k", 8))
+    if getattr(perception, "name", None) == "joint":
+        memory = Memory(int(perception.memory_size), int(perception.spec.recent_k))
+    else:
+        memory = Memory(pol.get("memory_size", 15), pol.get("recent_k", 8))
     judge_cfg = cfg.get("judge") or {}
     max_steps = int(judge_cfg.get("max_steps", 3000))
     radius = float(judge_cfg.get("radius", 3))

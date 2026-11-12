@@ -68,8 +68,12 @@ class Memory:
         return grid
 
     def to_dict(self, pos, yaw: float) -> dict:
+        from lfnav.policy.c1 import sector8_counts
+
+        grid = self.local_grid(pos, yaw)
         return {
-            "local_grid": self.local_grid(pos, yaw),
+            "local_grid": grid,
+            "sector8": sector8_counts(grid),
             "recent_actions": list(self.recent_actions),
             "recent_matches": list(self.recent_matches),
             "visits": {f"{x},{z}": n for (x, z), n in self.visits.items()},

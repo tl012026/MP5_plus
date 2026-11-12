@@ -19,7 +19,8 @@ if str(_ROOT) not in sys.path:
 
 from lfnav.config import load_config
 from lfnav.data.demo_format import read_episode
-from lfnav.perception.encoder import FakeEncoder, load_encoder, pool_patch_tokens, token_pool_size
+from lfnav.perception.encoder import FakeEncoder, load_encoder, token_pool_size
+from lfnav.perception.joint_features import encode_joint_tokens
 from lfnav.policy.c2_data import demo_roots, iter_success_episodes, select_training_episodes
 
 
@@ -92,11 +93,10 @@ def extract_episode(folder: Path, dst: Path, encoder, pool: int = 1) -> int:
     token_rows = []
     decisions = []
     for decision, frame in pairs:
-        feats = encoder(_load_frame(frame))
-        tokens = pool_patch_tokens(np.asarray(feats["tokens"], dtype=np.float32), pool)
-        pooled = tokens.mean(axis=(0, 1)).astype(np.float16)
-        pooled_rows.append(pooled)
-        token_rows.append(tokens.astype(np.float16))
+        # On-disk JPEG already went through preprocess_frame at collect; do not re-JPEG.
+        feats = encode_joint_tokens(_load_frame(frame), encoder, pool)
+        pooled_rows.append(np.asarray(feats["pooled"], dtype=np.float16))
+        token_rows.append(np.asarray(feats["tokens"], dtype=np.float16))
         decisions.append(decision)
     dst.parent.mkdir(parents=True, exist_ok=True)
     payload = {

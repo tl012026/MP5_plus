@@ -35,6 +35,7 @@ from lfnav.policy.joint import (
     JointNet,
     joint_loss,
     joint_policy_flags,
+    joint_runtime_from_cfg,
     joint_spec,
     joint_val_acc,
     scene_targets,
@@ -64,7 +65,7 @@ def checkpoint_record(flags: dict, version: str, **extra) -> dict:
     payload["version"] = str(version)
     payload["policy_uses_pooled"] = bool(flags["policy_uses_pooled"])
     payload["detach_scene"] = bool(flags["detach_scene"])
-    for key in ("policy_uses_pooled", "detach_scene", "version"):
+    for key in ("policy_uses_pooled", "detach_scene", "version", "recent_k", "memory_size", "token_pool"):
         if key not in payload:
             raise RuntimeError(f"checkpoint must include {key}")
     return payload
@@ -283,6 +284,7 @@ def train_loop(split: JointSplit, out: Path, cfg: dict, epochs: int, batch: int,
     print(f"device={device}", flush=True)
     out.mkdir(parents=True, exist_ok=True)
     flags = joint_policy_flags(cfg)
+    runtime = joint_runtime_from_cfg(cfg)
     model = JointNet(
         split.dim,
         split.spec,
@@ -367,7 +369,9 @@ def train_loop(split: JointSplit, out: Path, cfg: dict, epochs: int, batch: int,
                 grid=split.grid,
                 actions=split.spec.actions,
                 horizon=split.spec.horizon,
-                recent_k=split.spec.recent_k,
+                recent_k=int(runtime["recent_k"]),
+                memory_size=int(runtime["memory_size"]),
+                token_pool=int(runtime["token_pool"]),
             )
             torch.save(payload, best_path)
     return best_path
@@ -402,10 +406,14 @@ def main():
     out = Path(args.out)
     flags = joint_policy_flags(cfg)
     ckpt = train_loop(split, out, cfg, args.epochs, args.batch, args.lr, args.seed, lam, version=version)
+    runtime = joint_runtime_from_cfg(cfg)
     atomic_write_json(out / "meta.json", checkpoint_record(flags, version, **{
         "data_version": version,
         "features_version": feat_ver,
         "features": str(feat),
+        "recent_k": int(runtime["recent_k"]),
+        "memory_size": int(runtime["memory_size"]),
+        "token_pool": int(runtime["token_pool"]),
         "git_commit": git_hash(),
         "filter_stats": split.filter_stats,
         "n_train": len(split.train),
