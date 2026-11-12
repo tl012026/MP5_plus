@@ -15,9 +15,9 @@ set -euo pipefail
 export PYTHONUNBUFFERED=1
 SCR=${SCR:-/scratch/$USER}
 MP5=${MP5:-$HOME/MP5_plus}
-VER=${VER:-joint_v1}
-FEAT=${FEAT:-$SCR/lfnav/features/$VER}
-OUT=${OUT:-$SCR/lfnav/ckpt/joint_v1}
+VER=${VER:-joint_v2}
+FEAT=${FEAT:-$SCR/lfnav/features/joint_v1}
+OUT=${OUT:-$SCR/lfnav/ckpt/joint_v2}
 mkdir -p "$SCR/lfnav/logs" "$OUT"
 if [ -f "$HOME/lfnav_train_env.sh" ]; then
   # shellcheck disable=SC1090

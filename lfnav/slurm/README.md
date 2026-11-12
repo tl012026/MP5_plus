@@ -20,7 +20,7 @@ Do not submit these from the login node until the checkpoint below is done.
    Until those are filled, time and brightness conditions are unknown, not silent misses.
 3. `sbatch lfnav/slurm/collect_demos.sbatch` with `configs/lfnav/train_seeds.txt`. Main-scene demos: `sbatch lfnav/slurm/collect_demos_array.sbatch` (`configs/lfnav/main.yaml` → `$SCR/lfnav/data/demos_main`; see [`../docs/DEMOS.md`](../docs/DEMOS.md)).
 4. `sbatch lfnav/slurm/extract_features.sbatch` on a GPU partition (sources `~/lfnav_train_env.sh`). Frozen DINOv2 on filtered demo frames; writes `$SCR/lfnav/features/joint_v1`. Then pack memmaps: `python lfnav/perception/convert_features.py --version joint_v1`.
-5. `sbatch lfnav/slurm/train_joint.sbatch` on a GPU partition. Joint A+C2 reads `tokens.npy` with mmap; `OUT=$SCR/lfnav/ckpt/joint_v1`.
+5. `sbatch lfnav/slurm/train_joint.sbatch` on a GPU partition. Joint A+C2 (`joint_v2`) reads `$SCR/lfnav/features/joint_v1/tokens.npy` with mmap; `OUT=$SCR/lfnav/ckpt/joint_v2`.
 6. `sbatch lfnav/slurm/eval.sbatch` with `configs/lfnav/eval_seeds.txt`. For the learned stack: `POLICY=joint`.
    Frames are on by default (every 20 env steps). `FRAMES_EVERY=0` is not used; pass `--no-frames` or `--frames-every N` on the python command. After a run: `python3 lfnav/eval/make_contact_sheet.py --in $OUT`.
    Baseline C0/C1 × GT: `POLICY=c1 sbatch lfnav/slurm/baseline_array.sbatch` then `POLICY=c0 sbatch ...` (array 0–47 = 16 tasks × 3 difficulties, 5 seeds ending in 9). Default config is `configs/lfnav/main.yaml`, output `$SCR/lfnav/runs/main`. Summarize with `python3 -m lfnav.aggregate --baseline /scratch/$USER/lfnav/runs/main`.

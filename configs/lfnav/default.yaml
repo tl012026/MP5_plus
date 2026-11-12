@@ -76,10 +76,13 @@ joint:
   hidden: 256
   chunk: 4
   recent_k: 4
-  data_version: joint_v1
+  data_version: joint_v2
+  features_version: joint_v1
   checkpoint: null
   encoder: dinov2_vits14
   token_pool: 2
+  policy_uses_pooled: false
+  detach_scene: true
 
 c2:
   checkpoint: null

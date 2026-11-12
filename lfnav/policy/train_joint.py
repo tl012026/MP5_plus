@@ -30,7 +30,15 @@ from lfnav.policy.c2_data import (
     split_by_seed,
     _visible,
 )
-from lfnav.policy.joint import IGNORE, JointNet, joint_loss, joint_spec, joint_val_acc, scene_targets
+from lfnav.policy.joint import (
+    IGNORE,
+    JointNet,
+    joint_loss,
+    joint_policy_flags,
+    joint_spec,
+    joint_val_acc,
+    scene_targets,
+)
 
 
 def git_hash() -> str | None:
@@ -191,7 +199,12 @@ def dry_run_torch() -> float:
     b, h, w, d = 8, 4, 6, 16
     tokens = torch.randn(b, h, w, d)
     aux = torch.randn(b, spec.aux_dim)
-    model = JointNet(d, spec, hidden=32, horizon=spec.horizon)
+    flags = joint_policy_flags(cfg)
+    model = JointNet(
+        d, spec, hidden=32, horizon=spec.horizon,
+        policy_uses_pooled=flags["policy_uses_pooled"],
+        detach_scene=flags["detach_scene"],
+    )
     y = torch.zeros(b, spec.horizon, dtype=torch.long)
     present = torch.zeros(b, len(spec.objects), dtype=torch.long)
     present[:, 0] = 1
@@ -240,12 +253,20 @@ def train_loop(split: JointSplit, out: Path, cfg: dict, epochs: int, batch: int,
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"device={device}", flush=True)
     out.mkdir(parents=True, exist_ok=True)
-    model = JointNet(split.dim, split.spec, int((cfg.get("joint") or {}).get("hidden") or 256), split.spec.horizon)
+    flags = joint_policy_flags(cfg)
+    model = JointNet(
+        split.dim,
+        split.spec,
+        int((cfg.get("joint") or {}).get("hidden") or 256),
+        split.spec.horizon,
+        policy_uses_pooled=flags["policy_uses_pooled"],
+        detach_scene=flags["detach_scene"],
+    )
     model.to(device)
     opt = torch.optim.Adam(model.parameters(), lr=float(lr))
     cw = torch.from_numpy(class_weights(split.train, len(split.spec.actions))).to(device)
     best = None
-    best_path = out / "joint_v1.pt"
+    best_path = out / "joint_v2.pt"
     if not split.train:
         raise RuntimeError("no training samples")
     tokens_mm, _, _ = load_memmaps(split.feat_dir)
@@ -316,6 +337,8 @@ def train_loop(split: JointSplit, out: Path, cfg: dict, epochs: int, batch: int,
                 "actions": split.spec.actions,
                 "horizon": split.spec.horizon,
                 "recent_k": split.spec.recent_k,
+                "policy_uses_pooled": flags["policy_uses_pooled"],
+                "detach_scene": flags["detach_scene"],
             }, best_path)
     return best_path
 
@@ -340,14 +363,19 @@ def main():
     cfg = load_config(args.config) if args.config else load_config()
     cfg["joint"] = dict(cfg.get("joint") or {})
     lam = float(args.lambda_c2 if args.lambda_c2 is not None else cfg["joint"].get("lambda_c2", 1.0))
-    version = args.version or cfg["joint"].get("data_version") or "joint_v1"
-    feat = Path(args.features) if args.features else Path(cfg["paths"]["features"]) / version
+    version = args.version or cfg["joint"].get("data_version") or "joint_v2"
+    feat_ver = cfg["joint"].get("features_version") or "joint_v1"
+    feat = Path(args.features) if args.features else Path(cfg["paths"]["features"]) / feat_ver
     split = load_joint_split(args.demos, feat, cfg, rng_seed=args.seed)
     out = Path(args.out)
+    flags = joint_policy_flags(cfg)
     ckpt = train_loop(split, out, cfg, args.epochs, args.batch, args.lr, args.seed, lam)
     atomic_write_json(out / "meta.json", {
         "data_version": version,
+        "features_version": feat_ver,
         "features": str(feat),
+        "policy_uses_pooled": flags["policy_uses_pooled"],
+        "detach_scene": flags["detach_scene"],
         "git_commit": git_hash(),
         "filter_stats": split.filter_stats,
         "n_train": len(split.train),

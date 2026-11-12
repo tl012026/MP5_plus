@@ -17,7 +17,14 @@ from lfnav.perception.encoder import FakeEncoder, pool_patch_tokens, reshape_pat
 from lfnav.perception.convert_features import convert_dir, load_memmaps, rows_float32
 from lfnav.perception.extract_features import extract_demos, feature_path_for
 from lfnav.policy.c2_data import select_training_episodes
-from lfnav.policy.joint import JointAgent, belief_aligned_distance
+from lfnav.policy.joint import (
+    JointAgent,
+    assert_checkpoint_flags,
+    belief_aligned_distance,
+    c2_input_dim,
+    joint_policy_flags,
+    joint_spec,
+)
 from lfnav.types import ObjectBelief, SceneState, TaskSpec
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -293,6 +300,28 @@ class MatcherUsesATest(unittest.TestCase):
         self.assertEqual(len(out.action_chunk), 4)
 
 
+class PolicyHeadInterfaceTest(unittest.TestCase):
+    def test_c2_input_dim_omits_pooled(self):
+        cfg = load_config()
+        spec = joint_spec(cfg)
+        flags = joint_policy_flags(cfg)
+        self.assertFalse(flags["policy_uses_pooled"])
+        self.assertTrue(flags["detach_scene"])
+        dim = 384
+        self.assertEqual(c2_input_dim(spec, dim, False), spec.scene_dim + spec.aux_dim)
+        self.assertEqual(c2_input_dim(spec, dim, True), spec.scene_dim + spec.aux_dim + dim)
+
+    def test_checkpoint_flag_mismatch_raises(self):
+        cfg = {"joint": {"policy_uses_pooled": False, "detach_scene": True}}
+        assert_checkpoint_flags({"policy_uses_pooled": False, "detach_scene": True}, cfg)
+        with self.assertRaises(RuntimeError):
+            assert_checkpoint_flags({"policy_uses_pooled": True, "detach_scene": True}, cfg)
+        with self.assertRaises(RuntimeError):
+            assert_checkpoint_flags({"policy_uses_pooled": False, "detach_scene": False}, cfg)
+        with self.assertRaises(RuntimeError):
+            assert_checkpoint_flags({"model": {}}, cfg)
+
+
 @unittest.skipUnless(HAS_TORCH, "torch not installed on this host")
 class JointTrainTest(unittest.TestCase):
     def test_forward_backward(self):
@@ -300,6 +329,53 @@ class JointTrainTest(unittest.TestCase):
 
         after = dry_run_torch()
         self.assertLess(after, 1e9)
+
+    def test_c2_loss_does_not_train_a_when_detached(self):
+        import torch
+        from torch.nn import functional as F
+
+        from lfnav.policy.joint import JointNet
+
+        cfg = load_config()
+        spec = joint_spec(cfg)
+        dim = 8
+        model = JointNet(dim, spec, hidden=16, horizon=spec.horizon, policy_uses_pooled=False, detach_scene=True)
+        self.assertEqual(model.c2_in_dim, spec.scene_dim + spec.aux_dim)
+        tokens = torch.randn(4, 4, 6, dim, requires_grad=True)
+        aux = torch.randn(4, spec.aux_dim)
+        y = torch.zeros(4, spec.horizon, dtype=torch.long)
+        out = model(tokens, aux)
+        loss = sum(F.cross_entropy(head, y[:, k]) for k, head in enumerate(out["action"]))
+        loss.backward()
+        a_names = ("conv", "fc", "present", "direction", "distance", "biome", "time", "weather", "brightness")
+        for name, param in model.named_parameters():
+            stem = name.split(".", 1)[0]
+            if stem in a_names:
+                self.assertTrue(param.grad is None or float(param.grad.abs().sum()) == 0.0, name)
+            elif stem in ("p1", "p2", "heads"):
+                self.assertIsNotNone(param.grad)
+                self.assertGreater(float(param.grad.abs().sum()), 0.0)
+
+    def test_joint_agent_rejects_mismatched_checkpoint(self):
+        import torch
+        from lfnav.policy.joint import JointNet
+
+        cfg = load_config()
+        cfg["dry_run"] = True
+        cfg["joint"] = dict(cfg.get("joint") or {})
+        cfg["joint"].update(encoder="fake", fake_dim=8, fake_grid=[2, 3], policy_uses_pooled=False, detach_scene=True)
+        spec = joint_spec(cfg)
+        model = JointNet(8, spec, hidden=8, horizon=spec.horizon, policy_uses_pooled=True, detach_scene=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            ckpt = Path(tmp) / "bad.pt"
+            torch.save({
+                "model": model.state_dict(),
+                "policy_uses_pooled": True,
+                "detach_scene": True,
+            }, ckpt)
+            cfg["joint"]["checkpoint"] = str(ckpt)
+            with self.assertRaises(RuntimeError):
+                JointAgent(cfg)
 
     def test_train_on_extracted_features(self):
         from lfnav.policy.train_joint import load_joint_split, train_loop

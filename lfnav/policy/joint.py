@@ -91,6 +91,33 @@ def belief_aligned_distance(scene: SceneState, target: str, cfg: dict | None = N
     return None
 
 
+def joint_policy_flags(cfg: dict | None = None) -> dict:
+    joint = (cfg or {}).get("joint") or {}
+    return {
+        "policy_uses_pooled": bool(joint.get("policy_uses_pooled", False)),
+        "detach_scene": bool(joint.get("detach_scene", True)),
+    }
+
+
+def c2_input_dim(spec: FeatureSpec, dim: int, policy_uses_pooled: bool) -> int:
+    n = spec.scene_dim + spec.aux_dim
+    if policy_uses_pooled:
+        n += int(dim)
+    return n
+
+
+def assert_checkpoint_flags(payload: dict, cfg: dict | None = None) -> None:
+    flags = joint_policy_flags(cfg)
+    if not isinstance(payload, dict):
+        raise RuntimeError("checkpoint is missing policy_uses_pooled / detach_scene")
+    for key, want in flags.items():
+        if key not in payload:
+            raise RuntimeError(f"checkpoint missing {key} (config {key}={want})")
+        got = bool(payload[key])
+        if got != want:
+            raise RuntimeError(f"checkpoint {key}={got} != config {key}={want}")
+
+
 def scene_vector_np(present_p, dir_p, dist_p, biome_p, time_p, weather_p, bright_p) -> np.ndarray:
     parts = [np.asarray(present_p, dtype=np.float32).reshape(-1)]
     parts.append(np.asarray(dir_p, dtype=np.float32).reshape(-1))
@@ -100,15 +127,23 @@ def scene_vector_np(present_p, dir_p, dist_p, biome_p, time_p, weather_p, bright
     return np.concatenate(parts, axis=0)
 
 
-def JointNet(dim: int, spec: FeatureSpec, hidden: int = 256, horizon: int | None = None):
+def JointNet(
+    dim: int,
+    spec: FeatureSpec,
+    hidden: int = 256,
+    horizon: int | None = None,
+    policy_uses_pooled: bool = False,
+    detach_scene: bool = True,
+):
     import torch
     from torch import nn
 
     n_obj = len(spec.objects)
     n_act = len(spec.actions)
     k = int(horizon or spec.horizon)
-    scene_dim = spec.scene_dim
-    in_dim = int(dim) + scene_dim + spec.aux_dim
+    uses_pooled = bool(policy_uses_pooled)
+    detach = bool(detach_scene)
+    in_dim = c2_input_dim(spec, dim, uses_pooled)
 
     class _Joint(nn.Module):
         def __init__(self):
@@ -127,6 +162,9 @@ def JointNet(dim: int, spec: FeatureSpec, hidden: int = 256, horizon: int | None
             self.time = nn.Linear(int(hidden), len(spec.times))
             self.weather = nn.Linear(int(hidden), len(spec.weathers))
             self.brightness = nn.Linear(int(hidden), len(spec.brightness))
+            self.policy_uses_pooled = uses_pooled
+            self.detach_scene = detach
+            self.c2_in_dim = in_dim
             self.p1 = nn.Linear(in_dim, int(hidden))
             self.p2 = nn.Linear(int(hidden), int(hidden))
             self.heads = nn.ModuleList(nn.Linear(int(hidden), n_act) for _ in range(k))
@@ -183,7 +221,11 @@ def JointNet(dim: int, spec: FeatureSpec, hidden: int = 256, horizon: int | None
             }
 
         def policy(self, pooled, scene_vec, aux):
-            x = torch.cat([pooled, scene_vec, aux], dim=-1)
+            vec = scene_vec.detach() if self.detach_scene else scene_vec
+            parts = [vec, aux]
+            if self.policy_uses_pooled:
+                parts = [pooled, vec, aux]
+            x = torch.cat(parts, dim=-1)
             h = nn.functional.relu(self.p1(x))
             h = nn.functional.relu(self.p2(h))
             return [head(h) for head in self.heads]
@@ -255,6 +297,7 @@ class JointAgent(Policy):
         self.spec = joint_spec(self.cfg)
         self.hidden = int(joint.get("hidden") or 256)
         self.lambda_c2 = float(joint.get("lambda_c2", 1.0))
+        self.flags = joint_policy_flags(self.cfg)
         self._torch = None
         self.model = None
         self.encoder = None
@@ -280,12 +323,21 @@ class JointAgent(Policy):
         feats = self.encoder(np.zeros((int(hw[0]), int(hw[1]), 3), dtype=np.uint8))
         self.dim = int(np.asarray(feats["tokens"]).shape[-1])
         if torch is not None:
-            self.model = JointNet(self.dim, self.spec, self.hidden, self.spec.horizon)
+            self.model = JointNet(
+                self.dim,
+                self.spec,
+                self.hidden,
+                self.spec.horizon,
+                policy_uses_pooled=self.flags["policy_uses_pooled"],
+                detach_scene=self.flags["detach_scene"],
+            )
             ckpt = joint.get("checkpoint")
             if ckpt:
                 payload = torch.load(ckpt, map_location="cpu")
-                state = payload["model"] if isinstance(payload, dict) and "model" in payload else payload
-                self.model.load_state_dict(state)
+                if not isinstance(payload, dict) or "model" not in payload:
+                    raise RuntimeError("joint checkpoint must be a dict with model and policy flags")
+                assert_checkpoint_flags(payload, self.cfg)
+                self.model.load_state_dict(payload["model"])
             self.model.eval()
         self.reset()
 
