@@ -318,8 +318,17 @@ class PolicyHeadInterfaceTest(unittest.TestCase):
             assert_checkpoint_flags({"policy_uses_pooled": True, "detach_scene": True}, cfg)
         with self.assertRaises(RuntimeError):
             assert_checkpoint_flags({"policy_uses_pooled": False, "detach_scene": False}, cfg)
-        with self.assertRaises(RuntimeError):
-            assert_checkpoint_flags({"model": {}}, cfg)
+
+    def test_old_checkpoint_missing_flags_uses_v1_defaults(self):
+        v1 = {"joint": {"policy_uses_pooled": True, "detach_scene": False}}
+        v2 = {"joint": {"policy_uses_pooled": False, "detach_scene": True}}
+        old = {"model": {}}
+        with self.assertLogs("lfnav.policy.joint", level="WARNING") as logs:
+            assert_checkpoint_flags(old, v1)
+        self.assertTrue(any("joint_v1" in row for row in logs.output))
+        with self.assertLogs("lfnav.policy.joint", level="WARNING"):
+            with self.assertRaises(RuntimeError):
+                assert_checkpoint_flags(old, v2)
 
 
 @unittest.skipUnless(HAS_TORCH, "torch not installed on this host")

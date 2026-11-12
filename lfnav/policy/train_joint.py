@@ -330,16 +330,19 @@ def train_loop(split: JointSplit, out: Path, cfg: dict, epochs: int, batch: int,
         )
         if best is None or val_loss < best:
             best = val_loss
-            torch.save({
+            payload = {
                 "model": model.state_dict(),
                 "dim": split.dim,
                 "grid": split.grid,
                 "actions": split.spec.actions,
                 "horizon": split.spec.horizon,
                 "recent_k": split.spec.recent_k,
-                "policy_uses_pooled": flags["policy_uses_pooled"],
-                "detach_scene": flags["detach_scene"],
-            }, best_path)
+                "policy_uses_pooled": bool(flags["policy_uses_pooled"]),
+                "detach_scene": bool(flags["detach_scene"]),
+            }
+            if "policy_uses_pooled" not in payload or "detach_scene" not in payload:
+                raise RuntimeError("joint_v2 checkpoint must record policy_uses_pooled and detach_scene")
+            torch.save(payload, best_path)
     return best_path
 
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 
 from lfnav.aggregate import argmax_name
@@ -12,6 +14,8 @@ from lfnav.policy.c2 import _visible
 from lfnav.types import ObjectBelief, PolicyInput, PolicyOutput, SceneState
 
 IGNORE = -100
+log = logging.getLogger("lfnav.policy.joint")
+V1_POLICY_FLAGS = {"policy_uses_pooled": True, "detach_scene": False}
 
 
 def joint_spec(cfg: dict | None = None) -> FeatureSpec:
@@ -109,11 +113,19 @@ def c2_input_dim(spec: FeatureSpec, dim: int, policy_uses_pooled: bool) -> int:
 def assert_checkpoint_flags(payload: dict, cfg: dict | None = None) -> None:
     flags = joint_policy_flags(cfg)
     if not isinstance(payload, dict):
-        raise RuntimeError("checkpoint is missing policy_uses_pooled / detach_scene")
+        raise RuntimeError("joint checkpoint must be a dict")
+    missing = [key for key in V1_POLICY_FLAGS if key not in payload]
+    resolved = dict(payload)
+    if missing:
+        resolved.update({key: V1_POLICY_FLAGS[key] for key in missing})
+        log.warning(
+            "checkpoint missing %s; using joint_v1 defaults policy_uses_pooled=%s detach_scene=%s",
+            ", ".join(missing),
+            V1_POLICY_FLAGS["policy_uses_pooled"],
+            V1_POLICY_FLAGS["detach_scene"],
+        )
     for key, want in flags.items():
-        if key not in payload:
-            raise RuntimeError(f"checkpoint missing {key} (config {key}={want})")
-        got = bool(payload[key])
+        got = bool(resolved[key])
         if got != want:
             raise RuntimeError(f"checkpoint {key}={got} != config {key}={want}")
 
