@@ -65,7 +65,7 @@ def checkpoint_record(flags: dict, version: str, **extra) -> dict:
     payload["version"] = str(version)
     payload["policy_uses_pooled"] = bool(flags["policy_uses_pooled"])
     payload["detach_scene"] = bool(flags["detach_scene"])
-    for key in ("policy_uses_pooled", "detach_scene", "version", "recent_k", "memory_size", "token_pool"):
+    for key in ("policy_uses_pooled", "detach_scene", "version", "recent_k", "memory_size", "token_pool", "hidden"):
         if key not in payload:
             raise RuntimeError(f"checkpoint must include {key}")
     return payload
@@ -285,10 +285,11 @@ def train_loop(split: JointSplit, out: Path, cfg: dict, epochs: int, batch: int,
     out.mkdir(parents=True, exist_ok=True)
     flags = joint_policy_flags(cfg)
     runtime = joint_runtime_from_cfg(cfg)
+    hidden = int((cfg.get("joint") or {}).get("hidden") or 256)
     model = JointNet(
         split.dim,
         split.spec,
-        int((cfg.get("joint") or {}).get("hidden") or 256),
+        hidden,
         split.spec.horizon,
         policy_uses_pooled=flags["policy_uses_pooled"],
         detach_scene=flags["detach_scene"],
@@ -369,6 +370,8 @@ def train_loop(split: JointSplit, out: Path, cfg: dict, epochs: int, batch: int,
                 grid=split.grid,
                 actions=split.spec.actions,
                 horizon=split.spec.horizon,
+                chunk=split.spec.horizon,
+                hidden=int(hidden),
                 recent_k=int(runtime["recent_k"]),
                 memory_size=int(runtime["memory_size"]),
                 token_pool=int(runtime["token_pool"]),
@@ -423,6 +426,8 @@ def main():
         "val_seeds": split.val_seeds,
         "dim": split.dim,
         "grid": list(split.grid),
+        "hidden": int((cfg.get("joint") or {}).get("hidden") or 256),
+        "chunk": split.spec.horizon,
         "lambda_c2": lam,
         "checkpoint": str(ckpt),
         "epochs": args.epochs,

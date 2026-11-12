@@ -139,6 +139,47 @@ def _state_dict(payload: dict) -> dict:
     return payload if isinstance(payload, dict) else {}
 
 
+def infer_hidden(payload: dict) -> int:
+    if isinstance(payload, dict) and payload.get("hidden") is not None:
+        return int(payload["hidden"])
+    state = _state_dict(payload)
+    fc = state.get("fc.weight")
+    if fc is not None:
+        return int(fc.shape[0])
+    p1 = state.get("p1.weight")
+    if p1 is not None:
+        return int(p1.shape[0])
+    conv = state.get("conv.weight")
+    if conv is not None:
+        return int(conv.shape[0])
+    raise RuntimeError("cannot infer hidden: missing fc.weight")
+
+
+def checkpoint_structure(payload: dict, cfg: dict | None = None) -> dict:
+    """Layer sizes from the checkpoint. Never read cfg.joint.hidden when a ckpt is loaded."""
+    hidden = infer_hidden(payload)
+    joint = (cfg or {}).get("joint") or {}
+    cfg_hidden = joint.get("hidden")
+    if cfg_hidden is not None and int(cfg_hidden) != hidden:
+        log.warning("checkpoint hidden=%s != cfg.joint.hidden=%s; using checkpoint", hidden, cfg_hidden)
+    dim = payload.get("dim") if isinstance(payload, dict) else None
+    if dim is None:
+        conv = _state_dict(payload).get("conv.weight")
+        if conv is not None:
+            dim = int(conv.shape[1])
+    horizon = None
+    if isinstance(payload, dict):
+        if payload.get("horizon") is not None:
+            horizon = int(payload["horizon"])
+        elif payload.get("chunk") is not None:
+            horizon = int(payload["chunk"])
+    cfg_chunk = joint.get("chunk")
+    if horizon is not None and cfg_chunk is not None and int(cfg_chunk) != horizon:
+        log.warning("checkpoint horizon=%s != cfg.joint.chunk=%s; using checkpoint", horizon, cfg_chunk)
+    grid = payload.get("grid") if isinstance(payload, dict) else None
+    return {"hidden": hidden, "dim": None if dim is None else int(dim), "horizon": horizon, "grid": grid}
+
+
 def infer_policy_uses_pooled(payload: dict, spec: FeatureSpec, dim: int | None = None) -> bool:
     """Whether C2's first linear layer includes the pooled DINOv2 width."""
     state = _state_dict(payload)
@@ -362,7 +403,6 @@ class JointAgent(Policy):
     def __init__(self, cfg: dict | None = None):
         self.cfg = cfg or {}
         joint = self.cfg.get("joint") or {}
-        self.hidden = int(joint.get("hidden") or 256)
         self.lambda_c2 = float(joint.get("lambda_c2", 1.0))
         self.flags = joint_policy_flags(self.cfg)
         self._torch = None
@@ -391,6 +431,15 @@ class JointAgent(Policy):
         self.spec = joint_spec(self.cfg, runtime=runtime)
         self.memory_size = int(runtime["memory_size"])
         self.token_pool = int(runtime["token_pool"])
+        structure = checkpoint_structure(payload, self.cfg) if payload is not None else None
+        if structure is not None:
+            self.hidden = int(structure["hidden"])
+            if structure["horizon"] is not None:
+                self.spec.horizon = int(structure["horizon"])
+            self.grid = structure["grid"]
+        else:
+            self.hidden = int(joint["hidden"] if joint.get("hidden") is not None else 256)
+            self.grid = None
         from lfnav.perception.encoder import FakeEncoder, load_encoder
 
         enc_name = joint.get("encoder") or ((self.cfg.get("perception") or {}).get("encoder") or "fake")
@@ -402,7 +451,14 @@ class JointAgent(Policy):
             self.encoder = load_encoder(enc_name, self.cfg)
         hw = self.cfg.get("image_hw") or [224, 364]
         feats = self.encoder(np.zeros((int(hw[0]), int(hw[1]), 3), dtype=np.uint8))
-        self.dim = int(np.asarray(feats["tokens"]).shape[-1])
+        enc_dim = int(np.asarray(feats["tokens"]).shape[-1])
+        self.dim = enc_dim
+        if structure is not None:
+            ckpt_dim = structure["dim"]
+            if ckpt_dim is not None:
+                if int(ckpt_dim) != enc_dim:
+                    log.warning("checkpoint dim=%s != encoder dim=%s; using checkpoint", ckpt_dim, enc_dim)
+                self.dim = int(ckpt_dim)
         if torch is not None:
             self.model = JointNet(
                 self.dim,

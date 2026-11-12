@@ -359,7 +359,7 @@ class PolicyHeadInterfaceTest(unittest.TestCase):
     def test_checkpoint_record_save_load_flags(self):
         flags = {"policy_uses_pooled": False, "detach_scene": True}
         rec = checkpoint_record(
-            flags, "joint_v2", model={}, recent_k=4, memory_size=15, token_pool=2,
+            flags, "joint_v2", model={}, recent_k=4, memory_size=15, token_pool=2, hidden=256,
         )
         self.assertIn("policy_uses_pooled", rec)
         self.assertIn("detach_scene", rec)
@@ -426,6 +426,7 @@ class JointTrainTest(unittest.TestCase):
                 "recent_k": 4,
                 "memory_size": 15,
                 "token_pool": 1,
+                "hidden": 8,
             }, ckpt)
             cfg["joint"]["checkpoint"] = str(ckpt)
             with self.assertRaises(RuntimeError):
@@ -461,7 +462,7 @@ class JointTrainTest(unittest.TestCase):
 
         flags = joint_policy_flags(load_config())
         rec = checkpoint_record(
-            flags, "joint_v2", model={}, recent_k=4, memory_size=15, token_pool=2,
+            flags, "joint_v2", model={}, recent_k=4, memory_size=15, token_pool=2, hidden=256,
         )
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "joint_v2.pt"

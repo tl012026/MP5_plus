@@ -47,6 +47,7 @@ from lfnav.policy.c2_data import encode_aux, load_task, pad_chunk
 from lfnav.policy.joint import (
     JointAgent,
     checkpoint_runtime,
+    infer_hidden,
     joint_runtime_from_cfg,
     joint_spec,
 )
@@ -120,6 +121,11 @@ class RuntimeSourceTest(unittest.TestCase):
             checkpoint_runtime({"model": {}, "recent_k": 4})
         self.assertIn("policy.*", str(ctx.exception))
         self.assertIn("memory_size", str(ctx.exception))
+
+    def test_infer_hidden_from_fc_not_cfg(self):
+        payload = {"model": {"fc.weight": np.zeros((8, 8), dtype=np.float32)}}
+        self.assertEqual(infer_hidden(payload), 8)
+        self.assertEqual(infer_hidden({"hidden": 16, "model": {"fc.weight": np.zeros((8, 8))}}), 16)
 
     def test_agent_uses_joint_not_policy(self):
         cfg = load_config()
@@ -210,7 +216,10 @@ class CheckpointRuntimeTest(unittest.TestCase):
         cfg["policy"] = dict(cfg.get("policy") or {})
         cfg["policy"].update(recent_k=99, memory_size=3)
         cfg["joint"] = dict(cfg.get("joint") or {})
-        cfg["joint"].update(encoder="fake", fake_dim=8, fake_grid=[2, 3], policy_uses_pooled=False, detach_scene=True)
+        cfg["joint"].update(
+            encoder="fake", fake_dim=8, fake_grid=[2, 3], hidden=256,
+            policy_uses_pooled=False, detach_scene=True,
+        )
         spec = joint_spec(cfg)
         model = JointNet(8, spec, hidden=8, horizon=spec.horizon, policy_uses_pooled=False, detach_scene=True)
         with tempfile.TemporaryDirectory() as tmp:
@@ -222,11 +231,17 @@ class CheckpointRuntimeTest(unittest.TestCase):
                 "recent_k": 4,
                 "memory_size": 15,
                 "token_pool": 1,
+                "dim": 8,
+                "horizon": spec.horizon,
             }, ckpt)
             cfg["joint"]["checkpoint"] = str(ckpt)
-            agent = JointAgent(cfg)
+            with self.assertLogs("lfnav.policy.joint", level="WARNING") as logs:
+                agent = JointAgent(cfg)
+            self.assertTrue(any("hidden=8" in row and "256" in row for row in logs.output))
+            self.assertEqual(agent.hidden, 8)
             self.assertEqual(agent.spec.recent_k, 4)
             self.assertEqual(agent.memory_size, 15)
+            self.assertEqual(agent.model.hidden, 8)
             bad = Path(tmp) / "bad.pt"
             torch.save({"model": model.state_dict(), "policy_uses_pooled": False, "detach_scene": True}, bad)
             cfg["joint"]["checkpoint"] = str(bad)
@@ -235,17 +250,48 @@ class CheckpointRuntimeTest(unittest.TestCase):
             self.assertIn("policy.*", str(ctx.exception))
 
 
-@unittest.skipUnless(HAS_TORCH, "torch not installed on this host")
 class ScratchReplayTest(unittest.TestCase):
+    """Replay 2–3 real demos. Requires env vars (skip lists whichever is missing):
+
+    LFNAV_JOINT_CKPT  path to joint .pt (must include or infer hidden; needs recent_k, memory_size, token_pool)
+    LFNAV_FEATURES    packed joint_v1 dir containing tokens.npy / pooled.npy / index.json
+    LFNAV_DEMOS       expert demo root (success/.../frames/*.jpg)
+    """
+
+    ENV_CKPT = "LFNAV_JOINT_CKPT"
+    ENV_FEAT = "LFNAV_FEATURES"
+    ENV_DEMOS = "LFNAV_DEMOS"
+
+    def _replay_paths(self):
+        ckpt = os.environ.get(self.ENV_CKPT) or ""
+        feat = os.environ.get(self.ENV_FEAT) or ""
+        demos = os.environ.get(self.ENV_DEMOS) or ""
+        missing = []
+        if not ckpt:
+            missing.append(f"{self.ENV_CKPT} (unset)")
+        elif not Path(ckpt).is_file():
+            missing.append(f"{self.ENV_CKPT} (not a file: {ckpt})")
+        if not feat:
+            missing.append(f"{self.ENV_FEAT} (unset)")
+        elif not (Path(feat) / "tokens.npy").is_file():
+            missing.append(f"{self.ENV_FEAT} (no tokens.npy in {feat})")
+        if not demos:
+            missing.append(f"{self.ENV_DEMOS} (unset)")
+        elif not Path(demos).is_dir():
+            missing.append(f"{self.ENV_DEMOS} (not a directory: {demos})")
+        if not HAS_TORCH:
+            missing.append("torch (not installed)")
+        return ckpt, feat, demos, missing
+
     def test_replay_two_or_three_demos(self):
+        ckpt, feat, demos, missing = self._replay_paths()
+        if missing:
+            msg = "real demo replay skipped, missing: " + "; ".join(missing)
+            print(msg, flush=True)
+            self.skipTest(msg)
         cfg = load_config()
-        feat_dir = Path(cfg["paths"]["features"]) / str((cfg.get("joint") or {}).get("features_version") or "joint_v1")
-        if not (feat_dir / "tokens.npy").is_file():
-            self.skipTest(f"no packed features at {feat_dir}")
-        demo_dirs = [(cfg.get("c2") or {}).get("demo_dirs") or []]
-        roots = [Path(p) for p in demo_dirs[0]]
-        if not roots or not roots[0].is_dir():
-            self.skipTest("no demo_dirs")
+        feat_dir = Path(feat)
+        roots = [Path(demos)]
         tokens_mm, pooled_mm, index = load_memmaps(feat_dir)
         lookup = {(str(r["episode"]), int(r["decision"])): int(r["row"]) for r in index.get("rows") or []}
         folders = []
@@ -264,19 +310,21 @@ class ScratchReplayTest(unittest.TestCase):
             if len(folders) >= 3:
                 break
         if len(folders) < 2:
-            self.skipTest("need 2 demo episodes with frames and feature rows")
+            msg = (
+                f"real demo replay skipped, missing: matched demo episodes with frames "
+                f"under LFNAV_DEMOS ({demos}); need 2, found {len(folders)}"
+            )
+            print(msg, flush=True)
+            self.skipTest(msg)
         folders = folders[:3]
-        ckpt = (cfg.get("joint") or {}).get("checkpoint")
-        if not ckpt or not Path(ckpt).is_file():
-            alt = Path(os.environ.get("SCR") or f"/scratch/{os.environ.get('USER', 'user')}") / "lfnav" / "ckpt" / "joint_v2" / "joint_v2.pt"
-            ckpt = str(alt) if alt.is_file() else None
         cfg["joint"] = dict(cfg.get("joint") or {})
-        if ckpt:
-            cfg["joint"]["checkpoint"] = ckpt
+        cfg["joint"]["checkpoint"] = ckpt
         try:
             agent = JointAgent(cfg)
         except Exception as exc:
-            self.skipTest(f"JointAgent not usable here: {exc}")
+            msg = f"JointAgent failed to load LFNAV_JOINT_CKPT={ckpt}: {exc}"
+            print(msg, flush=True)
+            self.skipTest(msg)
         spec = agent.spec
         token_sims, pooled_sims = [], []
         aux_ok = 0
