@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import io
 import json
 from pathlib import Path
+
+import numpy as np
 
 from lfnav.io import atomic_write_json, json_default
 from lfnav.policy.c1 import sector8_counts
@@ -11,6 +14,43 @@ from lfnav.policy.c1 import sector8_counts
 BUCKETS = ("success", "failure")
 FRAME_HW = (224, 364)  # height, width
 FRAME_QUALITY = 90
+
+
+def _hwc_uint8(rgb) -> np.ndarray:
+    arr = np.asarray(rgb)
+    if arr.ndim == 4:
+        arr = arr[0]
+    if arr.ndim != 3:
+        raise ValueError(f"expected an RGB image, got {arr.shape}")
+    if arr.shape[0] in (1, 3, 4) and arr.shape[0] < min(arr.shape[1], arr.shape[2]):
+        arr = np.transpose(arr, (1, 2, 0))
+    if arr.shape[-1] == 4:
+        arr = arr[..., :3]
+    if arr.dtype != np.uint8:
+        mx = float(arr.max()) if arr.size else 0.0
+        if mx <= 1.5:
+            arr = arr * 255.0
+        arr = np.clip(arr, 0, 255).astype(np.uint8)
+    return np.ascontiguousarray(arr)
+
+
+def preprocess_frame(rgb, write_to=None) -> np.ndarray:
+    """MineDojo RGB → uint8 (224, 364, 3) after the same JPEG-90 resize used for demos."""
+    from PIL import Image
+
+    image = Image.fromarray(_hwc_uint8(rgb))
+    height, width = FRAME_HW
+    if image.size != (width, height):
+        image = image.resize((width, height), Image.BILINEAR)
+    buf = io.BytesIO()
+    image.save(buf, format="JPEG", quality=FRAME_QUALITY)
+    data = buf.getvalue()
+    if write_to is not None:
+        dest = Path(write_to)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(data)
+    decoded = Image.open(io.BytesIO(data)).convert("RGB")
+    return np.asarray(decoded, dtype=np.uint8)
 
 
 def episode_dir(root, bucket: str, task_id: str, difficulty: str, seed: int) -> Path:
@@ -64,17 +104,12 @@ def save_decision_frame(folder: Path, decision: int, obs: dict, cfg: dict | None
     from lfnav.env.frames import rgb_hwc
 
     rgb = rgb_hwc(obs, cfg or {})
+    if rgb is None and isinstance(obs, dict):
+        rgb = obs.get("rgb")
     if rgb is None:
         return None
-    from PIL import Image
-
     dest = Path(folder) / "frames" / f"{int(decision):05d}.jpg"
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    image = Image.fromarray(rgb)
-    h, w = FRAME_HW
-    if image.size != (w, h):
-        image = image.resize((w, h), Image.BILINEAR)
-    image.save(dest, quality=FRAME_QUALITY)
+    preprocess_frame(rgb, write_to=dest)
     return dest
 
 

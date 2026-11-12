@@ -301,6 +301,8 @@ class JointAgent(Policy):
         return int(sum(p.numel() for p in self.model.parameters()))
 
     def features(self, frame) -> dict:
+        from lfnav.data.demo_format import preprocess_frame
+
         rgb = frame
         if isinstance(frame, dict):
             from lfnav.env.frames import rgb_hwc
@@ -308,6 +310,7 @@ class JointAgent(Policy):
             rgb = rgb_hwc(frame, self.cfg)
             if rgb is None:
                 rgb = frame.get("rgb")
+        rgb = preprocess_frame(rgb)
         encoded = self.encoder(rgb)
         tokens = pool_patch_tokens(np.asarray(encoded["tokens"], dtype=np.float32), token_pool_size(self.cfg))
         pooled = tokens.mean(axis=(0, 1))

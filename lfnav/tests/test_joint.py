@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from lfnav.config import load_config
-from lfnav.data.demo_format import write_episode
+from lfnav.data.demo_format import FRAME_HW, preprocess_frame, save_decision_frame, write_episode
 from lfnav.eval.run import make_perception, make_policy, match_distance
 from lfnav.matcher import Matcher
 from lfnav.perception.encoder import FakeEncoder, pool_patch_tokens, reshape_patch_tokens
@@ -65,6 +65,34 @@ class FeatureExtractTest(unittest.TestCase):
         grid = reshape_patch_tokens(tokens, 224, 364, 14)
         self.assertEqual(grid.shape, (16, 26, 8))
 
+    def test_infer_preprocess_matches_demo_jpeg(self):
+        rng = np.random.RandomState(0)
+        raw = rng.randint(0, 256, size=(3, 512, 820), dtype=np.uint8)
+        pre = preprocess_frame(raw)
+        self.assertEqual(pre.shape, (*FRAME_HW, 3))
+        self.assertEqual(pre.dtype, np.uint8)
+        encoder = FakeEncoder(dim=4, grid=(16, 26))
+        before_pool = encoder(pre)["tokens"]
+        self.assertEqual(before_pool.shape[:2], (16, 26))
+        after_pool = pool_patch_tokens(before_pool, 2)
+        self.assertEqual(after_pool.shape[:2], (8, 13))
+        cfg = load_config()
+        cfg["dry_run"] = True
+        cfg["joint"] = dict(cfg.get("joint") or {})
+        cfg["joint"].update(encoder="fake", fake_dim=4, fake_grid=[16, 26], token_pool=2)
+        agent = JointAgent(cfg)
+        inferred = agent.features(raw)
+        self.assertEqual(inferred["tokens"].shape[:2], (8, 13))
+        np.testing.assert_allclose(inferred["tokens"], after_pool, rtol=1e-5, atol=1e-5)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = save_decision_frame(Path(tmp), 0, {"rgb": raw}, cfg)
+            from PIL import Image
+
+            loaded = np.asarray(Image.open(path).convert("RGB"))
+            np.testing.assert_array_equal(loaded, pre)
+            trained = pool_patch_tokens(encoder(loaded)["tokens"], 2)
+            np.testing.assert_allclose(inferred["tokens"], trained, rtol=1e-5, atol=1e-5)
+
     def test_pool_16x26_is_8x13(self):
         grid = np.arange(16 * 26 * 3, dtype=np.float32).reshape(16, 26, 3)
         pooled = pool_patch_tokens(grid, 2)
@@ -116,20 +144,21 @@ class FeatureExtractTest(unittest.TestCase):
             self.assertEqual(len(files), 1)
             payload = np.load(files[0], allow_pickle=True).item()
             self.assertEqual(payload["tokens"].shape[1:3], (8, 13))
-            raw = encoder(np.zeros((8, 8, 3), dtype=np.uint8))["tokens"]
-            expected = pool_patch_tokens(raw, 2)
-            np.testing.assert_allclose(payload["tokens"][0].astype(np.float32), expected)
+            zeros = np.zeros((8, 8, 3), dtype=np.uint8)
+            extract_expected = pool_patch_tokens(encoder(zeros)["tokens"], 2)
+            np.testing.assert_allclose(payload["tokens"][0].astype(np.float32), extract_expected)
             agent = JointAgent(cfg)
-            encoded = agent.features(np.zeros((8, 8, 3), dtype=np.uint8))
+            encoded = agent.features(zeros)
+            infer_expected = pool_patch_tokens(encoder(preprocess_frame(zeros))["tokens"], 2)
             self.assertEqual(encoded["tokens"].shape[:2], (8, 13))
-            np.testing.assert_allclose(encoded["tokens"], expected)
-            np.testing.assert_allclose(agent._tokens, expected)
+            np.testing.assert_allclose(encoded["tokens"], infer_expected)
+            np.testing.assert_allclose(agent._tokens, infer_expected)
             convert_dir(out, pool=2)
             tokens_mm, _, _ = load_memmaps(out)
             self.assertEqual(tuple(tokens_mm.shape[1:3]), (8, 13))
             np.testing.assert_allclose(
                 np.asarray(tokens_mm[0], dtype=np.float32),
-                expected,
+                extract_expected,
                 rtol=1e-3,
                 atol=1e-3,
             )
