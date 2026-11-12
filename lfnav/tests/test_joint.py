@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +14,7 @@ from lfnav.data.demo_format import write_episode
 from lfnav.eval.run import make_perception, make_policy, match_distance
 from lfnav.matcher import Matcher
 from lfnav.perception.encoder import FakeEncoder, pool_patch_tokens, reshape_patch_tokens
+from lfnav.perception.convert_features import convert_dir, load_memmaps, rows_float32
 from lfnav.perception.extract_features import extract_demos, feature_path_for
 from lfnav.policy.c2_data import select_training_episodes
 from lfnav.policy.joint import JointAgent, belief_aligned_distance
@@ -122,6 +124,90 @@ class FeatureExtractTest(unittest.TestCase):
             self.assertEqual(encoded["tokens"].shape[:2], (8, 13))
             np.testing.assert_allclose(encoded["tokens"], expected)
             np.testing.assert_allclose(agent._tokens, expected)
+            convert_dir(out, pool=2)
+            tokens_mm, _, _ = load_memmaps(out)
+            self.assertEqual(tuple(tokens_mm.shape[1:3]), (8, 13))
+            np.testing.assert_allclose(
+                np.asarray(tokens_mm[0], dtype=np.float32),
+                expected,
+                rtol=1e-3,
+                atol=1e-3,
+            )
+
+    def test_memmap_batch_matches_full_read(self):
+        rng = np.random.RandomState(0)
+        with tempfile.TemporaryDirectory() as tmp:
+            feat = Path(tmp)
+            n, h, w, d = 10, 8, 13, 4
+            full = rng.randn(n, h, w, d).astype(np.float16)
+            pooled = full.astype(np.float32).mean(axis=(1, 2)).astype(np.float16)
+            np.save(feat / "ep__easy__1.npy", {
+                "tokens": full,
+                "pooled": pooled,
+                "decisions": np.arange(n, dtype=np.int32),
+                "episode": "ep__easy__1",
+            })
+            index = convert_dir(feat, pool=2)
+            self.assertEqual(index["grid"], [8, 13])
+            tokens, pooled_mm, packed = load_memmaps(feat)
+            self.assertEqual(tuple(tokens.shape), (n, h, w, d))
+            sl = np.array([0, 3, 9, 1])
+            np.testing.assert_allclose(
+                rows_float32(tokens, sl),
+                np.asarray(full, dtype=np.float32)[sl],
+                rtol=1e-3,
+                atol=1e-3,
+            )
+            np.testing.assert_allclose(
+                rows_float32(pooled_mm, sl),
+                np.asarray(pooled, dtype=np.float32)[sl],
+                rtol=1e-3,
+                atol=1e-3,
+            )
+            self.assertEqual(packed["rows"][3]["decision"], 3)
+            self.assertEqual(packed["rows"][3]["folder"], "ep/easy/1")
+            self.assertEqual(packed["aux"], "steps.jsonl")
+
+    def test_memmap_rss_does_not_grow_with_n(self):
+        status = Path("/proc/self/status")
+        if not status.is_file():
+            self.skipTest("no /proc/self/status")
+        h, w, d = 8, 13, 384
+        batch = np.arange(8)
+
+        def rss_bytes() -> int:
+            for line in status.read_text().splitlines():
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) * 1024
+            self.fail("VmRSS missing")
+
+        def fill(path: Path, n: int) -> None:
+            mm = np.lib.format.open_memmap(str(path), mode="w+", dtype=np.float16, shape=(n, h, w, d))
+            step = 16
+            for i in range(0, n, step):
+                j = min(i + step, n)
+                mm[i:j] = np.float16((i % 9) / 9.0)
+            mm.flush()
+            del mm
+
+        with tempfile.TemporaryDirectory() as tmp:
+            small_n, big_n = 32, 2500
+            small = Path(tmp) / "small.npy"
+            big = Path(tmp) / "big.npy"
+            fill(small, small_n)
+            fill(big, big_n)
+            gc.collect()
+            before = rss_bytes()
+            small_mm = np.load(small, mmap_mode="r")
+            _ = rows_float32(small_mm, batch)
+            mid = rss_bytes()
+            big_mm = np.load(big, mmap_mode="r")
+            got = rows_float32(big_mm, batch)
+            after = rss_bytes()
+            self.assertEqual(got.shape, (8, h, w, d))
+            full_big = big_n * h * w * d * 2
+            self.assertLess(after - before, full_big // 4)
+            self.assertLess(after - mid, 32 * 1024 * 1024)
 
 
 class MatcherUsesATest(unittest.TestCase):
@@ -199,6 +285,7 @@ class JointTrainTest(unittest.TestCase):
                 _episode(root, "1-4", "easy", seed, [["forward"], ["forward"]], config_name="main", hostile_seen=0)
             feat = Path(tmp) / "feat"
             extract_demos([root], feat, FakeEncoder(dim=8, grid=(2, 3)), cfg)
+            convert_dir(feat, pool=1)
             split = load_joint_split([root], feat, cfg, val_frac=0.25, rng_seed=0)
             self.assertTrue(split.train)
             self.assertTrue(split.val)

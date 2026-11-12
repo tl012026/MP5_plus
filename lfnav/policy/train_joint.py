@@ -17,8 +17,10 @@ if str(_ROOT) not in sys.path:
 from lfnav.config import load_config
 from lfnav.data.demo_format import read_episode
 from lfnav.io import atomic_write_json
+from lfnav.perception.convert_features import load_memmaps, rows_float32
 from lfnav.perception.extract_features import episode_feature_name
 from lfnav.policy.c2_data import (
+    FeatureSpec,
     class_weights,
     demo_roots,
     encode_aux,
@@ -40,7 +42,7 @@ def git_hash() -> str | None:
 
 @dataclass
 class JointSample:
-    tokens: np.ndarray
+    row: int
     aux: np.ndarray
     y: np.ndarray
     present: np.ndarray
@@ -65,24 +67,20 @@ class JointSplit:
     dim: int
     grid: tuple[int, int]
     n_decisions: int
+    feat_dir: Path
 
 
-def load_feature_file(path: Path) -> dict:
-    raw = np.load(path, allow_pickle=True)
-    if isinstance(raw, np.ndarray) and raw.dtype == object:
-        raw = raw.item()
-    return raw
+def _index_lookup(index: dict) -> dict[tuple[str, int], int]:
+    table = {}
+    for row in index.get("rows") or []:
+        table[(str(row["episode"]), int(row["decision"]))] = int(row["row"])
+    return table
 
 
-def samples_from_episode(folder: Path, feat_dir: Path, spec: FeatureSpec) -> list[JointSample]:
+def samples_from_episode(folder: Path, lookup: dict, spec: FeatureSpec) -> list[JointSample]:
     packed = read_episode(folder)
     record = packed["record"]
-    feat_path = Path(feat_dir) / episode_feature_name(record, Path(folder))
-    if not feat_path.is_file():
-        return []
-    feat = load_feature_file(feat_path)
-    tokens = np.asarray(feat["tokens"])
-    decisions = {int(d): i for i, d in enumerate(np.asarray(feat["decisions"]).tolist())}
+    stem = episode_feature_name(record, Path(folder)).removesuffix(".npy")
     from lfnav.policy.c2_data import load_task
 
     task = load_task(record, Path(folder))
@@ -97,7 +95,8 @@ def samples_from_episode(folder: Path, feat_dir: Path, spec: FeatureSpec) -> lis
         if not chunk:
             continue
         decision = int(step["decision"] if step.get("decision") is not None else i)
-        if decision not in decisions:
+        feat_row = lookup.get((stem, decision))
+        if feat_row is None:
             continue
         match = step.get("match") or {}
         env_step = int(step.get("env_step") or 0)
@@ -110,9 +109,8 @@ def samples_from_episode(folder: Path, feat_dir: Path, spec: FeatureSpec) -> lis
         mem = step.get("memory") or {}
         aux = encode_aux(task, mem.get("sector8"), mem.get("recent_actions"), last, env_step, spec)
         labels = scene_targets(step.get("scene") or {}, spec)
-        idx = decisions[decision]
         rows.append(JointSample(
-            tokens=np.asarray(tokens[idx], dtype=np.float32),
+            row=int(feat_row),
             aux=aux,
             y=np.asarray(pad_chunk(chunk, spec), dtype=np.int64),
             present=labels["present"],
@@ -131,6 +129,11 @@ def samples_from_episode(folder: Path, feat_dir: Path, spec: FeatureSpec) -> lis
 def load_joint_split(demos, feat_dir, cfg: dict | None = None, val_frac: float = 0.15, rng_seed: int = 0) -> JointSplit:
     cfg = cfg or {}
     spec = joint_spec(cfg)
+    feat_dir = Path(feat_dir)
+    if not (feat_dir / "tokens.npy").is_file() or not (feat_dir / "index.json").is_file():
+        raise RuntimeError(f"missing memmap features in {feat_dir}; run lfnav/perception/convert_features.py")
+    tokens, _, index = load_memmaps(feat_dir)
+    lookup = _index_lookup(index)
     folders = []
     for root in demo_roots(demos, cfg):
         folders.extend(iter_success_episodes(root))
@@ -138,21 +141,24 @@ def load_joint_split(demos, feat_dir, cfg: dict | None = None, val_frac: float =
     train_eps, val_eps, val_seeds = split_by_seed(episodes, val_frac=val_frac, rng_seed=rng_seed)
     train, val = [], []
     for folder in train_eps:
-        train.extend(samples_from_episode(folder, Path(feat_dir), spec))
+        train.extend(samples_from_episode(folder, lookup, spec))
     for folder in val_eps:
-        val.extend(samples_from_episode(folder, Path(feat_dir), spec))
+        val.extend(samples_from_episode(folder, lookup, spec))
     all_rows = train + val
     if not all_rows:
         raise RuntimeError("no joint samples (missing features or empty filter)")
-    grid = tuple(int(x) for x in all_rows[0].tokens.shape[:2])
-    dim = int(all_rows[0].tokens.shape[-1])
-    print(f"joint samples train={len(train)} val={len(val)} episodes={len(episodes)} dim={dim} grid={grid}")
-    return JointSplit(train, val, spec, len(episodes), val_seeds, filter_stats, dim, grid, len(all_rows))
+    grid = tuple(int(x) for x in (index.get("grid") or tokens.shape[1:3]))
+    dim = int(index.get("dim") or tokens.shape[-1])
+    print(
+        f"joint samples train={len(train)} val={len(val)} episodes={len(episodes)} "
+        f"dim={dim} grid={grid} mmap={tokens.shape}",
+        flush=True,
+    )
+    return JointSplit(train, val, spec, len(episodes), val_seeds, filter_stats, dim, grid, len(all_rows), feat_dir)
 
 
 def _collate(rows: list[JointSample]) -> dict:
     return {
-        "tokens": np.stack([r.tokens for r in rows]),
         "aux": np.stack([r.aux for r in rows]),
         "y": np.stack([r.y for r in rows]),
         "present": np.stack([r.present for r in rows]),
@@ -212,7 +218,7 @@ def dry_run_torch() -> float:
         loss.backward()
         opt.step()
     after = float(joint_loss(model(tokens, aux), batch, cw, 1.0)[0].item())
-    print(f"dry-run joint torch {before:.4f} -> {after:.4f}")
+    print(f"dry-run joint torch {before:.4f} -> {after:.4f}", flush=True)
     if after > before + 1e-3:
         raise RuntimeError(f"torch loss increased from {before} to {after}")
     return after
@@ -222,7 +228,7 @@ def dry_run() -> float:
     try:
         return dry_run_torch()
     except ImportError:
-        print("dry-run joint skipped (no torch)")
+        print("dry-run joint skipped (no torch)", flush=True)
         return 0.0
 
 
@@ -232,7 +238,7 @@ def train_loop(split: JointSplit, out: Path, cfg: dict, epochs: int, batch: int,
     torch.manual_seed(int(seed))
     np.random.seed(int(seed))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"device={device}")
+    print(f"device={device}", flush=True)
     out.mkdir(parents=True, exist_ok=True)
     model = JointNet(split.dim, split.spec, int((cfg.get("joint") or {}).get("hidden") or 256), split.spec.horizon)
     model.to(device)
@@ -242,23 +248,32 @@ def train_loop(split: JointSplit, out: Path, cfg: dict, epochs: int, batch: int,
     best_path = out / "joint_v1.pt"
     if not split.train:
         raise RuntimeError("no training samples")
+    tokens_mm, _, _ = load_memmaps(split.feat_dir)
     tr = _collate(split.train)
     va = _collate(split.val) if split.val else None
+    train_rows = np.asarray([s.row for s in split.train], dtype=np.int64)
+    val_rows = np.asarray([s.row for s in split.val], dtype=np.int64) if split.val else None
 
-    def batches(n):
+    def batches(n, shuffle=True):
         idx = np.arange(n)
-        np.random.shuffle(idx)
+        if shuffle:
+            np.random.shuffle(idx)
         for start in range(0, n, int(batch)):
             yield idx[start : start + int(batch)]
 
     def slice_np(data, sl):
         return {k: v[sl] for k, v in data.items()}
 
+    def torch_batch(labels, feat_rows, sl):
+        packed = slice_np(labels, sl)
+        packed["tokens"] = rows_float32(tokens_mm, feat_rows[sl])
+        return _to_torch(packed, device)
+
     for epoch in range(1, int(epochs) + 1):
         model.train()
         losses = []
-        for sl in batches(len(split.train)):
-            batch_t = _to_torch(slice_np(tr, sl), device)
+        for sl in batches(len(split.train), shuffle=True):
+            batch_t = torch_batch(tr, train_rows, sl)
             opt.zero_grad()
             out_m = model(batch_t["tokens"], batch_t["aux"])
             loss, _ = joint_loss(out_m, batch_t, cw, lam)
@@ -268,17 +283,29 @@ def train_loop(split: JointSplit, out: Path, cfg: dict, epochs: int, batch: int,
         train_loss = float(np.mean(losses))
         val_loss = train_loss
         acc = {"present": 0.0, "direction": 0.0, "distance": 0.0, "action": 0.0}
-        if va is not None:
+        if va is not None and val_rows is not None:
             model.eval()
+            loss_sum = 0.0
+            n_seen = 0
+            acc_sum = {k: 0.0 for k in acc}
             with torch.no_grad():
-                batch_v = _to_torch(va, device)
-                out_v = model(batch_v["tokens"], batch_v["aux"])
-                val_loss = float(joint_loss(out_v, batch_v, cw, lam)[0].item())
-                acc = joint_val_acc(out_v, batch_v)
+                for sl in batches(len(split.val), shuffle=False):
+                    batch_v = torch_batch(va, val_rows, sl)
+                    out_v = model(batch_v["tokens"], batch_v["aux"])
+                    part = float(joint_loss(out_v, batch_v, cw, lam)[0].item())
+                    n_b = int(len(sl))
+                    loss_sum += part * n_b
+                    n_seen += n_b
+                    part_acc = joint_val_acc(out_v, batch_v)
+                    for key in acc_sum:
+                        acc_sum[key] += part_acc[key] * n_b
+            val_loss = loss_sum / max(n_seen, 1)
+            acc = {k: acc_sum[k] / max(n_seen, 1) for k in acc}
         print(
             f"epoch {epoch} train {train_loss:.4f} val {val_loss:.4f} "
             f"present={acc['present']:.3f} dir={acc['direction']:.3f} "
-            f"dist={acc['distance']:.3f} action={acc['action']:.3f}"
+            f"dist={acc['distance']:.3f} action={acc['action']:.3f}",
+            flush=True,
         )
         if best is None or val_loss < best:
             best = val_loss
@@ -338,7 +365,7 @@ def main():
         "actions": split.spec.actions,
         "horizon": split.spec.horizon,
     })
-    print(f"wrote {ckpt}")
+    print(f"wrote {ckpt}", flush=True)
 
 
 if __name__ == "__main__":

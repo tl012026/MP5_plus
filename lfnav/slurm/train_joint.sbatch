@@ -4,14 +4,15 @@
 #SBATCH --partition=
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=32G
-#SBATCH --time=08:00:00
+#SBATCH --mem=16G
+#SBATCH --time=04:00:00
 #SBATCH --requeue
 #SBATCH --output=/scratch/%u/lfnav/logs/%x-%j.out
 #SBATCH --error=/scratch/%u/lfnav/logs/%x-%j.err
 
 # Joint A+C2 on cached DINOv2 features. Training conda env, not MineDojo.
 set -euo pipefail
+export PYTHONUNBUFFERED=1
 SCR=${SCR:-/scratch/$USER}
 MP5=${MP5:-$HOME/MP5_plus}
 VER=${VER:-joint_v1}
