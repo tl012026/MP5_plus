@@ -1,0 +1,1375 @@
+[00:17:49] [Realms Notification Availability checker #1/INFO]: Could not authorize you against Realms server: java.lang.RuntimeException: Failed to parse into SignedJWT: FML
+[00:17:49] [EnvServerSocketHandler/INFO]: [STDOUT]: Received from localhost:<MissionInit xmlns="http://ProjectMalmo.microsoft.com" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" SchemaVersion="" PlatformVersion="0.37.0">
+    <Mission xmlns="http://ProjectMalmo.microsoft.com">
+        <About>
+            <Summary>HarvestMeta</Summary>
+        </About>
+
+        <ModSettings>
+            <MsPerTick>50</MsPerTick>
+        </ModSettings>
+
+        <ServerSection>
+            <ServerInitialConditions>
+                <!-- Initial Conditions -->
+
+                
+                <Time>
+                   
+                   <AllowPassageOfTime>true</AllowPassageOfTime>
+                </Time>
+
+                
+                <AllowSpawning>true</AllowSpawning>
+
+                
+
+            </ServerInitialConditions>
+            <ServerHandlers>
+
+                
+                <BiomeGenerator forceReset="true" seed="123" biome="4"/>
+
+                
+
+                
+
+                
+
+
+            </ServerHandlers>
+        </ServerSection>
+
+
+        
+        <AgentSection mode="Survival">
+            <Name>MineDojoAgent0</Name>
+
+            <AgentStart>
+
+                
+                <LowLevelInputs>true</LowLevelInputs>
+
+                
+                <BreakSpeedMultiplier>100.0</BreakSpeedMultiplier>
+
+                
+                <StartingHealth maxHealth="20" health="20.0"/>
+
+                
+                <StartingFood food="20"/>
+
+                
+
+            </AgentStart>
+            <AgentHandlers>
+                <!-- These area  bit of boilerplate that
+                 we always expect to be included ... -->
+                <FileBasedPerformanceProducer/>
+                <ObservationFromDamage/>
+                <PauseCommand/>
+
+                <!--  Observations     -->
+
+                
+                <VideoProducer want_depth="false">
+                <Width>820 </Width>
+                <Height>512</Height>
+            </VideoProducer>
+
+                
+                <ObservationFromFullInventory flat="false"/>
+
+                
+                <ObservationFromFullStats/>
+
+                
+                <ObservationFromGrid>                      
+                <Grid name="voxels">                        
+                    <min x="-5" y="-5" z="-5"/>                        
+                    <max x="5" y="5" z="5"/>                      
+                </Grid>                  
+            </ObservationFromGrid>
+
+                
+                <ObservationFromRichLidar>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-1.0471975511965976" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.9599310885968813" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.8726646259971648" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.7853981633974483" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.6981317007977318" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.6108652381980153" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.5235987755982988" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.4363323129985824" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.3490658503988659" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.2617993877991494" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.17453292519943295" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="-0.08726646259971647" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.0" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.08726646259971647" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.17453292519943295" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.2617993877991494" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.3490658503988659" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.4363323129985824" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.5235987755982988" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.6108652381980153" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.6981317007977318" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.7853981633974483" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.8726646259971648" yaw="0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="-1.0471975511965976" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="-0.9599310885968813" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="-0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="-0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="-0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="-0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="-0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="-0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="-0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="-0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="-0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="-0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="0.0" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="0.08726646259971647" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="0.17453292519943295" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="0.2617993877991494" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="0.3490658503988659" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="0.4363323129985824" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="0.5235987755982988" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="0.6108652381980153" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="0.6981317007977318" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="0.7853981633974483" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="0.8726646259971648" distance="10"/>
+                
+                    <RayOffset pitch="0.9599310885968813" yaw="0.9599310885968813" distance="10"/>
+                
+            </ObservationFromRichLidar>
+
+                
+
+                <!--  Monitors     -->
+
+                <!--  Actions   -->
+                <ChatCommands/>
+
+                
+                <CameraCommands/>
+
+                
+                <NearbySmeltCommands/>
+
+                
+                <SimpleCraftCommands/>
+
+                
+                <NearbyCraftCommands/>
+
+                
+                <HumanLevelCommands/>
+
+                
+                <EquipCommands/>
+
+                
+                <PlaceCommands/>
+
+                
+
+                <!--  Rewards   -->
+
+                <!-- Additional Agent Handlers like quitting -->
+                
+
+                <!-- Env Monitors? -->
+            </AgentHandlers>
+        </AgentSection>
+        
+    </Mission>
+    <ExperimentUID>
+        af60fa73-569d-4e0e-95d5-74dadc2a09c9
+    </ExperimentUID>
+    <ClientRole>
+        0
+    </ClientRole>
+    <ClientAgentConnection>
+        <ClientIPAddress>127.0.0.1</ClientIPAddress>
+        <ClientMissionControlPort>0</ClientMissionControlPort>
+        <ClientCommandsPort>0</ClientCommandsPort>
+        <AgentIPAddress>127.0.0.1</AgentIPAddress>
+        <AgentMissionControlPort>0</AgentMissionControlPort>
+        <AgentVideoPort>0</AgentVideoPort>
+        <AgentDepthPort>0</AgentDepthPort>
+        <AgentLuminancePort>0</AgentLuminancePort>
+        <AgentObservationsPort>0</AgentObservationsPort>
+        <AgentRewardsPort>0</AgentRewardsPort>
+        <AgentColourMapPort>0</AgentColourMapPort>
+    </ClientAgentConnection>
+</MissionInit>
+[00:17:49] [EnvServerSocketHandler/INFO]: [STDOUT]: REPLYING WITH: MALMOOK
+[00:17:49] [Client thread/INFO]: [STDOUT]: Mission received: HarvestMeta
+[00:17:49] [Client thread/INFO]: [STDOUT]: CLIENT request state: CREATING_HANDLERS
+[00:17:49] [Client thread/INFO]: [STDOUT]: CLIENT enter state: CREATING_HANDLERS
+[00:17:49] [Client thread/INFO]: [STDOUT]: Starting command server.
+[00:17:49] [Thread-15/INFO]: [STDOUT]: INFO: ->com(0) Listening for messages on port 10524
+[00:17:49] [Client thread/INFO]: [STDOUT]: CLIENT request state: EVALUATING_WORLD_REQUIREMENTS
+[00:17:49] [Client thread/INFO]: [STDOUT]: CLIENT enter state: EVALUATING_WORLD_REQUIREMENTS
+[00:17:49] [Client thread/INFO]: [STDOUT]: CLIENT request state: CREATING_NEW_WORLD
+[00:17:49] [Client thread/INFO]: [STDOUT]: CLIENT enter state: CREATING_NEW_WORLD
+[00:17:50] [Client thread/INFO]: Mixing MixinWorldProviderSpawn from mixins.overclocking.malmomod.json into net.minecraft.world.WorldProvider
+[00:17:50] [Server thread/INFO]: Starting integrated minecraft server version 1.11.2
+[00:17:50] [Server thread/INFO]: Generating keypair
+[00:17:50] [Server thread/INFO]: Injecting existing block and item data into this server instance
+[00:17:50] [Server thread/INFO]: Applying holder lookups
+[00:17:50] [Server thread/INFO]: Holder lookups applied
+[00:17:50] [Server thread/INFO]: Loading dimension 0 (TEMP_0_0ae380b2-e556-4765-b645-62c846da95b3) (net.minecraft.server.integrated.IntegratedServer@46b7d7b5)
+[00:17:50] [Server thread/INFO]: Loading dimension 1 (TEMP_0_0ae380b2-e556-4765-b645-62c846da95b3) (net.minecraft.server.integrated.IntegratedServer@46b7d7b5)
+[00:17:50] [Server thread/INFO]: Loading dimension -1 (TEMP_0_0ae380b2-e556-4765-b645-62c846da95b3) (net.minecraft.server.integrated.IntegratedServer@46b7d7b5)
+[00:17:50] [Server thread/INFO]: Preparing start region for level 0
+[00:17:51] [Server thread/INFO]: Preparing spawn area: 15%
+[00:17:52] [Server thread/INFO]: Preparing spawn area: 32%
+[00:17:53] [Server thread/INFO]: Preparing spawn area: 52%
+[00:17:54] [Server thread/INFO]: Preparing spawn area: 70%
+[00:17:55] [Server thread/INFO]: Preparing spawn area: 89%
+[00:17:56] [Server thread/INFO]: Changing view distance to 4, from 10
+[00:17:56] [Netty Local Client IO #0/INFO]: [STDOUT]: Transformed Name: net.minecraft.client.entity.EntityOtherPlayerMP
+[00:17:56] [Netty Local Client IO #0/INFO]: [STDOUT]: MALMO: Found EntityOtherPlayerMP, attempting to transform it
+[00:17:56] [Server thread/INFO]: [STDOUT]: SERVER request state: WAITING_FOR_MOD_READY
+[00:17:56] [Server thread/INFO]: [STDOUT]: CLIENT request state: WAITING_FOR_SERVER_READY
+[00:17:56] [Server thread/INFO]: [STDOUT]: SERVER enter state: WAITING_FOR_MOD_READY
+[00:17:56] [Netty Local Client IO #0/INFO]: Server protocol version 2
+[00:17:56] [Netty Server IO #1/INFO]: Client protocol version 2
+[00:17:56] [Netty Server IO #1/INFO]: Client attempting to join with 5 mods : minecraft@1.11.2,FML@8.0.99.99,malmomod@0.37.0,forge@13.20.1.2588,mcp@9.19
+[00:17:56] [Netty Local Client IO #0/INFO]: [Netty Local Client IO #0] Client side modded connection established
+[00:17:56] [Client thread/INFO]: [STDOUT]: CLIENT enter state: WAITING_FOR_SERVER_READY
+[00:17:56] [Server thread/INFO]: [Server thread] Server side modded connection established
+[00:17:56] [Server thread/INFO]: MineDojoAgent0[local:E:59958e32] logged in with entity id 870 at (32.5, 77.0, 248.5)
+[00:17:56] [Server thread/INFO]: MineDojoAgent0 joined the game
+[00:17:56] [Server thread/INFO]: [STDOUT]: SERVER request state: DORMANT
+[00:17:56] [Server thread/INFO]: [STDOUT]: SERVER enter state: DORMANT
+[00:17:56] [Server thread/INFO]: [STDOUT]: INCOMING MISSION: Received MissionInit directly through ServerStateMachine constructor.
+[00:17:56] [Server thread/INFO]: [STDOUT]: Mission received: HarvestMeta
+[00:17:56] [Server thread/INFO]: Received mission: §9HarvestMeta
+[00:17:56] [Server thread/INFO]: Source: §alocalhost
+[00:17:56] [Server thread/INFO]: [STDOUT]: SERVER request state: BUILDING_WORLD
+[00:17:56] [Server thread/INFO]: [STDOUT]: SERVER enter state: BUILDING_WORLD
+[00:17:56] [Server thread/INFO]: [STDOUT]: SERVER request state: WAITING_FOR_AGENTS_TO_ASSEMBLE
+[00:17:57] [Client thread/INFO]: Mixing MixinRandomSkinTexture from mixins.overclocking.malmomod.json into net.minecraft.client.resources.DefaultPlayerSkin
+[00:17:57] [Server thread/INFO]: [STDOUT]: SERVER enter state: WAITING_FOR_AGENTS_TO_ASSEMBLE
+[00:17:57] [Server thread/INFO]: [STDOUT]: Experiment requires: 
+[00:17:57] [Server thread/INFO]: [STDOUT]: >>>> MineDojoAgent0
+[00:17:57] [Client thread/INFO]: [CHAT] Received mission: §9HarvestMeta
+[00:17:57] [Client thread/INFO]: [CHAT] Source: §alocalhost
+[00:17:57] [Client thread/INFO]: [STDOUT]: ***Telling server we are ready - MineDojoAgent0
+[00:17:57] [Server thread/INFO]: [STDOUT]: Initializing player with username MineDojoAgent0 and agentname MineDojoAgent0
+[00:17:57] [Client thread/INFO]: [STDOUT]: ***Telling server we are ready - MineDojoAgent0
+[00:17:57] [Client thread/INFO]: [STDOUT]: CLIENT request state: RUNNING
+[00:17:57] [Client thread/INFO]: [STDOUT]: CLIENT enter state: RUNNING
+[00:17:57] [Server thread/INFO]: [STDOUT]: SERVER request state: RUNNING
+[00:17:57] [Client thread/INFO]: [STDOUT]: [LOGTOPY] On Mac OSX Catalina make sure to install this OpenJDK 1.8.0_152-release-1056-b12, this prevents the NSDragRegions crash
+[00:17:57] [Client thread/INFO]: [STDOUT]: Resized the window
+[00:17:57] [Client thread/INFO]: [STDOUT]: Unpausing
+[00:17:57] [Server thread/INFO]: [STDOUT]: SERVER enter state: RUNNING
+[00:18:09] [Server thread/INFO]: [STDOUT]: Warning: managed 6/20 ticks this second.
