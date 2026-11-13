@@ -54,7 +54,19 @@ def _joint_agent(cfg: dict):
     return cfg["_joint_agent"]
 
 
+def _c2nav_agent(cfg: dict):
+    if cfg.get("_c2nav_agent") is None:
+        from lfnav.policy.c2nav import C2NavAgent
+
+        cfg["_c2nav_agent"] = C2NavAgent(cfg)
+    return cfg["_c2nav_agent"]
+
+
 def make_perception(cfg: dict):
+    if cfg.get("policy_name") == "c2nav" or cfg.get("perception_backend") == "c2nav":
+        cfg["perception_backend"] = "c2nav"
+        cfg["policy_name"] = "c2nav"
+        return _c2nav_agent(cfg)
     if cfg.get("policy_name") == "joint" or cfg.get("perception_backend") == "joint":
         cfg["perception_backend"] = "joint"
         return _joint_agent(cfg)
@@ -72,6 +84,9 @@ def make_perception(cfg: dict):
 
 def make_policy(cfg: dict):
     name = cfg.get("policy_name", "c1")
+    if name == "c2nav":
+        cfg["perception_backend"] = "c2nav"
+        return _c2nav_agent(cfg)
     if name == "joint":
         cfg["perception_backend"] = "joint"
         return _joint_agent(cfg)
@@ -95,6 +110,9 @@ def make_policy(cfg: dict):
 def match_distance(perception, obs, cfg: dict, task, scene):
     if getattr(perception, "name", None) == "joint":
         return belief_aligned_distance(scene, task.target, cfg)
+    getter = getattr(perception, "numeric_distance", None)
+    if callable(getter):
+        return getter(task.target)
     return aligned_target_distance(obs, cfg, task.target)
 
 
@@ -276,7 +294,8 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         gt_frame = scene_state_from_obs(obs, cfg)
         if rec is not None:
             rec.set_info(match.to_dict())
-        if match.stop:
+        policy_owns_stop = getattr(policy, "name", None) == "c2nav"
+        if match.stop and not policy_owns_stop:
             if rec is not None:
                 rec.set_info(match.to_dict(), action="stop")
                 rec.capture(obs, tag="stop", keyframe=True)
@@ -299,14 +318,37 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         decision_obs = obs
         output = policy.act(pin)
         t3 = time.perf_counter()
-        control_rows = []
-        for action in output.action_chunk:
-            remain = max_steps - env_steps
-            if remain <= 0:
-                break
+        if output.stop:
             if rec is not None:
-                rec.set_info(match.to_dict(), action=action)
-            result = controller.execute(action, budget=remain)
+                rec.set_info(match.to_dict(), action="stop", extra=(output.info or {}))
+                rec.capture(obs, tag="stop", keyframe=True)
+            row = {
+                "decision": len(events),
+                "scene": scene.to_dict(),
+                "perception": scene.to_dict(),
+                "gt": gt_frame.to_dict(),
+                "match": match.to_dict(),
+                "policy": output.to_dict(),
+                "control": None,
+                "seconds": {"perceive": t1 - t0, "match": t2 - t1, "policy": t3 - t2},
+            }
+            events.append(row)
+            if on_decision is not None:
+                on_decision(row, obs, mem)
+            stopped = True
+            break
+        control_rows = []
+        remain = max_steps - env_steps
+        chunk_budget = remain
+        if getattr(policy, "name", None) == "c2nav":
+            chunk_budget = min(remain, int(getattr(policy, "chunk_max", 8)))
+        if output.waypoints:
+            if rec is not None:
+                rec.set_info(match.to_dict(), extra=(output.info or {}))
+            result = controller.execute_waypoints(output.waypoints, budget=chunk_budget)
+            executed = list(result.executed or [])
+            if rec is not None:
+                rec.set_info(match.to_dict(), action=",".join(executed) or "waypoint", extra=(output.info or {}))
             if privileged_ray_distance(result.obs, cfg, task.target) is not None:
                 seen_gt = True
             hostile_seen += count_hostile_hits(result.obs, cfg)
@@ -320,15 +362,47 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
             memory.observe(
                 new_pos,
                 yaw_of(result.obs, cfg),
-                action,
+                (executed[-1] if executed else "forward"),
                 match.to_dict(),
                 increment_visits=not (skip_stuck and result.stuck),
             )
             last_stuck = result.stuck
             obs = result.obs
-            control_rows.append(result.to_dict())
-            if env_steps >= max_steps:
-                break
+            packed = result.to_dict()
+            packed["executed"] = executed
+            control_rows.append(packed)
+            if getattr(policy, "_prev_actions", None) is not None:
+                policy._prev_actions = executed
+        else:
+            for action in output.action_chunk:
+                remain = max_steps - env_steps
+                if remain <= 0:
+                    break
+                if rec is not None:
+                    rec.set_info(match.to_dict(), action=action, extra=(output.info or {}))
+                result = controller.execute(action, budget=remain)
+                if privileged_ray_distance(result.obs, cfg, task.target) is not None:
+                    seen_gt = True
+                hostile_seen += count_hostile_hits(result.obs, cfg)
+                result.obs = _hide_wide(result.obs, cfg)
+                env_steps += result.env_steps
+                new_pos = position_of(result.obs, cfg)
+                if prev is not None and new_pos is not None:
+                    path += math.hypot(new_pos[0] - prev[0], new_pos[-1] - prev[-1])
+                prev = new_pos or prev
+                skip_stuck = bool((cfg.get("policy") or {}).get("skip_visits_when_stuck", True))
+                memory.observe(
+                    new_pos,
+                    yaw_of(result.obs, cfg),
+                    action,
+                    match.to_dict(),
+                    increment_visits=not (skip_stuck and result.stuck),
+                )
+                last_stuck = result.stuck
+                obs = result.obs
+                control_rows.append(result.to_dict())
+                if env_steps >= max_steps:
+                    break
         row = {
             "decision": len(events),
             "scene": scene.to_dict(),

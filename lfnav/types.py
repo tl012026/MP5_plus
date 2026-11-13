@@ -158,17 +158,26 @@ class PolicyInput:
 class PolicyOutput:
     action_chunk: list = field(default_factory=list)
     waypoints: list = field(default_factory=list)
+    stop: bool = False
+    info: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if not self.action_chunk and not self.waypoints:
+        if not self.stop and not self.action_chunk and not self.waypoints:
             raise ValueError("PolicyOutput needs action_chunk or waypoints")
 
     def to_dict(self) -> dict:
-        return {"action_chunk": list(self.action_chunk), "waypoints": list(self.waypoints)}
+        out = {"action_chunk": list(self.action_chunk), "waypoints": list(self.waypoints)}
+        if self.stop:
+            out["stop"] = True
+        if self.info:
+            out["info"] = dict(self.info)
+        return out
 
     @classmethod
     def from_dict(cls, data: dict) -> "PolicyOutput":
         return cls(
             action_chunk=list(data.get("action_chunk") or []),
             waypoints=list(data.get("waypoints") or []),
+            stop=bool(data.get("stop")),
+            info=dict(data.get("info") or {}),
         )

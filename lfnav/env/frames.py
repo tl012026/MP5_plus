@@ -79,6 +79,7 @@ class FrameRecorder:
         self.direction = None
         self.distance = None
         self.action = None
+        self.extra = {}
 
     def begin_episode(self, folder, task_id, seed: int) -> None:
         self.opt = frames_cfg(self.cfg)
@@ -92,19 +93,22 @@ class FrameRecorder:
         self.direction = None
         self.distance = None
         self.action = None
+        self.extra = {}
         if not self.opt["enabled"]:
             return
         if self.dir.exists():
             shutil.rmtree(self.dir)
         self.dir.mkdir(parents=True, exist_ok=True)
 
-    def set_info(self, match=None, action=None) -> None:
+    def set_info(self, match=None, action=None, extra=None) -> None:
         if isinstance(match, dict):
             self.status = match.get("status")
             self.direction = match.get("target_direction")
             self.distance = match.get("target_distance")
         if action is not None:
             self.action = action
+        if extra:
+            self.extra = dict(extra)
 
     def after_step(self, obs: dict) -> None:
         self.step += 1
@@ -145,11 +149,20 @@ class FrameRecorder:
             w, h = image.size
             image = image.resize((max(int(w * scale), 1), max(int(h * scale), 1)), Image.BILINEAR)
         if self.opt["annotate"]:
-            _draw_caption(image, [
+            extra = self.extra or {}
+            belief = extra.get("belief") or {}
+            wp = extra.get("waypoint") or {}
+            lines = [
                 f"task={self.task} seed={self.seed} step={self.step}",
                 f"status={self.status} dir={self.direction} dist={self.distance}",
                 f"action={self.action}",
-            ])
+            ]
+            if extra:
+                lines.extend([
+                    f"mode={extra.get('mode')} wp={wp.get('turn_deg')}/{wp.get('forward')} p_stop={extra.get('p_stop')}",
+                    f"belief yaw_sin={belief.get('bearing_sin')} dist={belief.get('log_distance')} conf={belief.get('confidence')}",
+                ])
+            _draw_caption(image, lines)
         extra = {}
         if self.opt["format"] in ("jpg", "jpeg"):
             extra["quality"] = self.opt["quality"]
