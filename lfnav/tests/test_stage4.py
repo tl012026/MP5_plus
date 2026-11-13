@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -95,6 +96,49 @@ class PerceptionTest(unittest.TestCase):
         self.assertEqual(out["tokens"].shape, (16, 26, dim))
         self.assertEqual(out["cls"].shape, (dim,))
         self.assertEqual(out["pooled"].shape, (dim,))
+
+    @unittest.skipUnless(HAS_TORCH, "torch not installed on this host")
+    def test_dinov2_uses_local_hub_without_network(self):
+        dim = 8
+
+        class FakeDino(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.dummy = torch.nn.Parameter(torch.zeros(1))
+
+            def forward_features(self, tensor):
+                batch, _, height, width = tensor.shape
+                return {
+                    "x_norm_clstoken": torch.zeros(batch, dim),
+                    "x_norm_patchtokens": torch.zeros(batch, (height // 14) * (width // 14), dim),
+                }
+
+        def blocked(*_args, **_kwargs):
+            raise RuntimeError("network blocked")
+
+        calls = []
+
+        def hub_load(repo, entry, *args, **kwargs):
+            calls.append((repo, entry, kwargs.get("source"), kwargs.get("skip_validation")))
+            if kwargs.get("source") == "local":
+                return FakeDino()
+            raise RuntimeError("network blocked")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            local = Path(tmp) / "hub" / "facebookresearch_dinov2_main"
+            local.mkdir(parents=True)
+            with patch.dict(os.environ, {"TORCH_HOME": tmp}):
+                with patch("torch.hub.load", side_effect=hub_load):
+                    with patch("urllib.request.urlopen", side_effect=blocked):
+                        with patch("socket.create_connection", side_effect=blocked):
+                            encoder = load_encoder("dinov2_vits14")
+        self.assertEqual(encoder.name, "dinov2_vits14")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(Path(calls[0][0]), local)
+        self.assertEqual(calls[0][1], "dinov2_vits14")
+        self.assertEqual(calls[0][2], "local")
+        out = encoder(np.zeros((224, 364, 3), dtype=np.uint8))
+        self.assertEqual(out["tokens"].shape, (16, 26, dim))
 
     def test_ignore_patches_drop_out_of_loss(self):
         logits = np.array([10.0, -10.0])

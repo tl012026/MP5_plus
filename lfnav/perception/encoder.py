@@ -5,7 +5,13 @@ The fake encoder is the stand-in used by --dry-run and the login-node tests.
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import numpy as np
+
+DINOV2_HUB_NAME = "facebookresearch_dinov2_main"
+DINOV2_GITHUB = "facebookresearch/dinov2:main"
 
 
 class FakeEncoder:
@@ -39,11 +45,32 @@ def load_encoder(name: str, cfg: dict | None = None):
     raise KeyError(name)
 
 
-def _dinov2(name: str):
+def dinov2_local_repo():
+    """$TORCH_HOME/hub/facebookresearch_dinov2_main, or torch.hub.get_dir() if TORCH_HOME is unset."""
     import torch
-    hub = {"dinov2_vits14": "dinov2_vits14", "dinov2_vitb14": "dinov2_vitb14"}[name]
 
-    model = torch.hub.load("facebookresearch/dinov2", hub)
+    home = os.environ.get("TORCH_HOME")
+    if home:
+        path = Path(home) / "hub" / DINOV2_HUB_NAME
+    else:
+        path = Path(torch.hub.get_dir()) / DINOV2_HUB_NAME
+    if path.is_dir():
+        return path
+    return None
+
+
+def load_dinov2_backbone(entry: str):
+    import torch
+
+    local = dinov2_local_repo()
+    if local is not None:
+        return torch.hub.load(str(local), entry, source="local")
+    return torch.hub.load(DINOV2_GITHUB, entry, skip_validation=True)
+
+
+def _dinov2(name: str):
+    hub = {"dinov2_vits14": "dinov2_vits14", "dinov2_vitb14": "dinov2_vitb14"}[name]
+    model = load_dinov2_backbone(hub)
     model.eval()
     for param in model.parameters():
         param.requires_grad = False
