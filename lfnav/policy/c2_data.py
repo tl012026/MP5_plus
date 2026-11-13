@@ -301,7 +301,7 @@ def _is_main_source(record: dict, folder: Path) -> bool:
     stem = _config_stem(record.get("config_name"))
     if stem == "main":
         return True
-    return "demos_main" in Path(folder).parts
+    return any(str(p).startswith("demos_main") for p in Path(folder).parts)
 
 
 def _is_legacy_source(record: dict) -> bool:

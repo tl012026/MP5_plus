@@ -95,6 +95,38 @@ c2:
   demo_dirs:
     - /scratch/${USER}/lfnav/data/demos_main
 
+c2nav:
+  version: c2nav_v1
+  hidden: 256
+  channels: 64
+  dropout: 0.3
+  dim: 384
+  grid: [8, 13]
+  token_pool: 2
+  chunk_max_steps: 8
+  encoder: dinov2_vits14
+  stop_tau: 0.5
+  lr: 0.0003
+  weight_decay: 0.05
+  epochs: 20
+  batch: 16
+  label_smoothing: 0.1
+  features_version: joint_v1
+  val_seeds: [1, 13, 23, 26, 37, 45]
+  loss_weights:
+    a: 1.0
+    mode: 1.0
+    wp: 1.0
+    stop: 1.0
+  noise:
+    drop_visible: 0.1
+    bearing_std: 8.0
+    log_dist_std: 0.15
+    odom_std: 0.05
+  demo_dirs:
+    - /scratch/${USER}/lfnav/data/demos_main
+    - /scratch/${USER}/lfnav/data/demos_main_v3
+
 policy:
   chunk: 4
   recent_k: 8
