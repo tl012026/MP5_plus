@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import math
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,7 +11,7 @@ import numpy as np
 from lfnav.config import load_config
 from lfnav.data.demo_format import write_episode
 from lfnav.policy.c2nav import CKPT_STRUCTURE, assert_structure, spec_from_cfg, structure_record
-from lfnav.policy.c2nav_labels import FORWARD_BINS, compose_waypoint, flip_turn_index, gt_stop, invert_waypoint, labels_from_step
+from lfnav.policy.c2nav_labels import compose_waypoint, flip_turn_index, gt_stop, invert_waypoint, labels_from_step
 from lfnav.policy.state_tracker import TrackerNoise, TrackerState, flip_vector, replay, update
 from lfnav.types import PolicyOutput
 

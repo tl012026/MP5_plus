@@ -44,10 +44,12 @@ class DatasetSplitTest(unittest.TestCase):
         cfg["c2"] = dict(cfg.get("c2") or {})
         cfg["c2"]["wide_weight"] = 0.5
         with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "demos_main"
+            extra = {"config_name": "main", "peaceful_ok": True, "peaceful_sent": True, "hostile_seen": 0}
             for seed in (1, 2, 3, 4):
-                _episode(tmp, "1-4", "easy", seed, [["forward"], ["turn_left_15", "forward"]])
-            _episode(tmp, "1-3", "easy", 1, [["forward"]], used_wide=True)
-            split = load_c2_split(tmp, cfg, val_frac=0.25, rng_seed=0)
+                _episode(root, "1-4", "easy", seed, [["forward"], ["turn_left_15", "forward"]], **extra)
+            _episode(root, "1-3", "easy", 1, [["forward"]], used_wide=True, **extra)
+            split = load_c2_split(root, cfg, val_frac=0.25, rng_seed=0)
             train_ids = {row.episode_id for row in split.train}
             val_ids = {row.episode_id for row in split.val}
             self.assertTrue(split.train)
@@ -79,19 +81,20 @@ class DatasetSplitTest(unittest.TestCase):
             _episode(old, "2-3", "easy", 2, [["forward"]], config_name="demo_dynamic")
             _episode(main, "4-3", "easy", 3, [["forward"]], config_name="main", peaceful_ok=True, hostile_seen=0)
             _episode(main, "1-3", "easy", 4, [["forward"]], config_name="main", peaceful_ok=True, hostile_seen=2)
-            _episode(main, "2-1", "easy", 5, [["forward"]], config_name="main", hostile_seen=0)
+            _episode(main, "2-1", "easy", 5, [["forward"]], config_name="main", peaceful_ok=True, hostile_seen=0)
             folders = [p.parent for p in Path(tmp).glob("**/record.json")]
             kept, stats = select_training_episodes(folders, cfg)
             recs = [read_episode(f)["record"] for f in kept]
             keys = {(r["task_name"], int(r["seed"]), r.get("config_name")) for r in recs}
             self.assertIn(("1-4", 1, "main"), keys)
-            self.assertIn(("2-3", 2, "demo_dynamic"), keys)
             self.assertIn(("2-1", 5, "main"), keys)
+            self.assertNotIn(("2-3", 2, "demo_dynamic"), keys)
+            self.assertFalse(any(r.get("config_name") == "demo_dynamic" for r in recs))
             self.assertFalse(any(r["task_name"] == "4-3" for r in recs))
             self.assertFalse(any(r["task_name"] == "1-3" for r in recs))
-            self.assertGreaterEqual(stats["duplicate"], 1)
             self.assertGreaterEqual(stats["exclude_tasks"], 1)
             self.assertGreaterEqual(stats["main_hostile"], 1)
+            self.assertGreaterEqual(stats["legacy_not_allowed"], 1)
 
     def test_short_chunk_pads_with_noop(self):
         spec = FeatureSpec.from_cfg(load_config())

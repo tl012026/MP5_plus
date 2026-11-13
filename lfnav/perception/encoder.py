@@ -88,6 +88,8 @@ def _dinov2(name: str):
             return self
 
         def __call__(self, rgb):
+            import torch
+
             tensor = _as_tensor(rgb)
             device = next(self.model.parameters()).device
             tensor = tensor.to(device)
