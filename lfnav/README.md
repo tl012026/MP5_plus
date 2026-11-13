@@ -103,37 +103,36 @@ The expert is C1 with ground-truth perception plus a **360° wide lidar** (horiz
 
 ## 4. Results
 
-### 4.1 Baseline: C0 vs C1, GT perception, static setting (460/480 episodes)
-Full report: `result/lfnav_basline/report.md`.
+### 4.1 Main setting: C1 + GT (60 episodes, 2026-11-12)
+Setting: `configs/lfnav/main.yaml` (targets move, tall grass kept, natural mobs kept, peaceful). Evaluation seeds 9/19/29/39/49, max 3000 steps. Full report: `result/lfnav_basline/report_c1_main.md`.
+
+| Animal targets | C1 + GT |
+|---|---|
+| SR-b [95% CI] | **0.80** [0.68, 0.88] (48/60) |
+| SR-b easy / medium / hard | **1.00 / 0.93 / 0.69** (10/10, 14/15, 24/35) |
+| Median steps (successes) | 97 (easy 29, medium 48, hard 208) |
+| SPL | not available (initial distance not logged, see report) |
+
+- All 12 failures are timeouts after the target had been seen (`target_never_seen = 0`). C1's weakness is reaching or stopping at a moving target, not exploration.
+- Hard is the only difficulty with room left. 2-4 is the outlier (hard 1/5).
+- Covered: all 7 animal tasks at hard, plus representative easy/medium cells. Block tasks and the remaining animal easy/medium cells are not yet run.
+
+### 4.2 Earlier static setting: C0 vs C1 (superseded)
+Frozen targets, natural mobs removed, tall grass cleared, not peaceful. Not comparable with 4.1. Report: `result/lfnav_basline/report.md`.
 
 | Animal targets | C0 | C1 |
 |---|---|---|
-| SR-b [95% CI] | 0.17 [0.12, 0.25] | **0.81** [0.73, 0.87] |
-| SR-b easy / medium / hard | 0.30 / 0.15 / 0.07 | **0.85 / 0.80 / 0.78** |
-| SPL | 0.06 | **0.63** |
-| SR@500 | 0.09 | **0.72** |
-| Median steps (successes) | 372 | **89** |
-| Paired McNemar (115 pairs) | 2 episodes where only C0 succeeds | 74 episodes where only C1 succeeds; p = 7.7e-20 |
+| SR-b [95% CI] | 0.17 [0.12, 0.25] | 0.81 [0.73, 0.87] |
+| SR-b easy / medium / hard | 0.30 / 0.15 / 0.07 | 0.85 / 0.80 / 0.78 |
+| SPL | 0.06 | 0.63 |
+| Median steps (successes) | 372 | 89 |
 
-- C1 stays almost flat across difficulty; C0 collapses beyond 8 blocks.
-- C1's remaining failures are mostly conditions (`near X`); exploration failures are rare (1 `never_seen`).
-- 4-3 is nearly unsolvable: no water is placed near the cow in the desert yet.
-- Tree and grass targets need no navigation, so C0 does well there (block, easy: 0.85 for C0 vs 0.91 for C1).
-
-### 4.2 Dynamic setting (main), to be run
-| Policy | SR-b (animal) | easy / medium / hard | SPL | SR@500 |
-|---|---|---|---|---|
-| C0 + GT | | | | |
-| C1 + GT | | | | |
-| Expert (upper bound) | | | | |
-| Joint A+C2 | | | | |
-| C3 | | | | |
-
-### 4.3 Robustness (planned)
-- Static vs dynamic.
-- Tall grass kept (evaluation only).
-- C2 trained on static vs mixed data.
-- C3 chunk-length ablation (H = 4, 8, 16, 32) with moving targets.
+### 4.3 Main setting, to be filled
+| Policy | SR-b (animal) | easy / medium / hard | SPL |
+|---|---|---|---|
+| C1 + GT | 0.80 | 1.00 / 0.93 / 0.69 | — |
+| C2 (joint) | | | |
+| C3 | | | |
 
 ---
 
