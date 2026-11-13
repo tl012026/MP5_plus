@@ -359,7 +359,7 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         "task_name": task.id,
         "task_kind": "lfnav",
         "seed": seed,
-        "elapsed_s": sum(sum(ev["seconds"].values()) for ev in events),
+        "elapsed_s": float(time.perf_counter() - wall0),
         "frames_s": 0.0 if rec is None else rec.elapsed_s,
         "frames_overhead": (
             0.0 if rec is None or (time.perf_counter() - wall0) <= 0

@@ -18,14 +18,14 @@ ENVSH=${ENVSH:-$SCR/mp5_env.sh}
 SIF=${SIF:-$SCR/env/minedojo.sif}
 CFG=${CFG:-$MP5/configs/lfnav/main.yaml}
 SEEDS=${SEEDS:-$MP5/configs/lfnav/train_seeds_demo.txt}
-OUT=${OUT:-$SCR/lfnav/data/demos_main}
+OUT=${OUT:-$SCR/lfnav/data/demos_main_v3}
 mkdir -p "$SCR/lfnav/logs" "$OUT"
 idx=${SLURM_ARRAY_TASK_ID}
 PAIR=$(cd "$MP5" && python3 -c "from lfnav.eval.baseline_index import cell; t,d=cell($idx); print(t, d)")
 TASK=${PAIR%% *}
 DIFF=${PAIR##* }
 SPEC="$MP5/lfnav/tasks/specs/${TASK}.json"
-SKIP=$(python3 -c "import json,sys; t=json.load(open('$SPEC'))['target']; print(1 if t in ('tree','grass') and '$DIFF'!='easy' else 0)")
+SKIP=$(python3 -c "import json; d=json.load(open('$SPEC')); print(1 if d.get('id')=='4-3' or (d.get('target') in ('tree','grass') and '$DIFF'!='easy') else 0)")
 if [ "$SKIP" = "1" ]; then
   echo "skip block target $TASK $DIFF"
   exit 0

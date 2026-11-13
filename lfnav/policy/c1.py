@@ -86,6 +86,7 @@ class RuleBased(Policy):
         self._recover_scan = 0
         self._recover_back = False
         self.last_seen = None
+        self.last_branch = None
 
     def act(self, policy_input: PolicyInput) -> PolicyOutput:
         match = policy_input.match or {}
@@ -104,20 +105,25 @@ class RuleBased(Policy):
             self._recover_scan = 0
             self._recover_back = False
             if match.get("status") == "found":
+                self.last_branch = "approach"
                 return PolicyOutput(self._approach(direction, distance))
             if match.get("missing"):
+                self.last_branch = "approach"
                 return PolicyOutput(["turn_left_45", "forward"])
         if self._scan_left == SCAN_TURNS and env_steps > 0:
             self._scan_left = 0
         if self._scan_left > 0:
             self._scan_left -= 1
+            self.last_branch = "scan"
             return PolicyOutput(["turn_right_15"])
         if self.recover_scan and self._recover_back:
             self._recover_back = False
             self._recover_scan = SCAN_TURNS
+            self.last_branch = "reacquire"
             return PolicyOutput(["backward"])
         if self.recover_scan and self._recover_scan > 0:
             self._recover_scan -= 1
+            self.last_branch = "reacquire"
             return PolicyOutput(["turn_right_15"])
         if (
             self.recover_scan
@@ -128,6 +134,7 @@ class RuleBased(Policy):
         ):
             self.last_seen = None
             self._recover_scan = SCAN_TURNS
+            self.last_branch = "reacquire"
             return PolicyOutput(["backward"])
         grid = memory.get("local_grid") or []
         if self.eight_sectors:
@@ -135,9 +142,11 @@ class RuleBased(Policy):
             lo = min(counts)
             tied = [i for i, n in enumerate(counts) if n == lo]
             k = self.rng.choice(tied)
+            self.last_branch = "explore"
             return PolicyOutput(_face_sector(k))
         counts = _sector_counts(grid)
         direction = min(counts, key=lambda name: (counts[name], name))
+        self.last_branch = "explore"
         return PolicyOutput([self._steer(direction)])
 
     def _approach(self, direction: str | None, distance: str | None) -> list[str]:

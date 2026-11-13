@@ -144,11 +144,18 @@ class ControlResult:
     jumped: bool
     obs: dict
     escape_k: int | None = None
+    executed: list | None = None
+
+    def __post_init__(self) -> None:
+        if self.executed is None:
+            self.executed = []
 
     def to_dict(self) -> dict:
         out = {"env_steps": self.env_steps, "stuck": self.stuck, "jumped": self.jumped}
         if self.escape_k is not None:
             out["escape_k"] = self.escape_k
+        if self.executed:
+            out["executed"] = list(self.executed)
         return out
 
 
@@ -176,19 +183,20 @@ class Controller:
     def execute(self, action_name: str, budget: int | None = None) -> ControlResult:
         if budget is not None and budget <= 0:
             obs = self.env.observation() if hasattr(self.env, "observation") else {}
-            return ControlResult(0, False, False, obs)
+            return ControlResult(0, False, False, obs, executed=[])
         if self.displacement_stuck and not self._escaping and self._window_stuck():
             return self._run_escape(budget=budget)
         name = action_name
         if name == "forward":
             name = self._forward_name()
         obs, info = self._one(name)
+        executed = [str(name)]
         steps = 1
         jumped = bool(info.get("jumped"))
         left = None if budget is None else budget - 1
         if self.displacement_stuck:
             if left is not None and left <= 0:
-                return ControlResult(steps, False, jumped, obs)
+                return ControlResult(steps, False, jumped, obs, executed=executed)
             if not self._escaping and self._window_stuck():
                 extra = self._run_escape(budget=left)
                 return ControlResult(
@@ -197,15 +205,18 @@ class Controller:
                     jumped or extra.jumped,
                     extra.obs,
                     escape_k=extra.escape_k,
+                    executed=executed + list(extra.executed or []),
                 )
-            return ControlResult(steps, False, jumped, obs)
+            return ControlResult(steps, False, jumped, obs, executed=executed)
         if info.get("blocked") or info.get("stuck") or self._still >= self.stuck_threshold:
             if left is not None and left <= 0:
-                return ControlResult(steps, True, jumped, obs)
-            obs, _info = self._one(self._unstuck())
+                return ControlResult(steps, True, jumped, obs, executed=executed)
+            unstuck = self._unstuck()
+            obs, _info = self._one(unstuck)
+            executed.append(str(unstuck))
             steps += 1
-            return ControlResult(steps, True, jumped, obs)
-        return ControlResult(steps, False, jumped, obs)
+            return ControlResult(steps, True, jumped, obs, executed=executed)
+        return ControlResult(steps, False, jumped, obs, executed=executed)
 
     def execute_waypoints(self, waypoints, budget: int | None = None) -> ControlResult:
         obs = self.env.observation() if hasattr(self.env, "observation") else {}
@@ -213,6 +224,7 @@ class Controller:
         jumped = False
         stuck = False
         escape_k = None
+        executed: list[str] = []
         for waypoint in waypoints:
             dyaw, blocks = waypoint[0], waypoint[1]
             turn = "turn_left_15" if dyaw < 0 else "turn_right_15"
@@ -220,23 +232,25 @@ class Controller:
             for _ in range(n_turns):
                 left = None if budget is None else budget - steps
                 if left is not None and left <= 0:
-                    return ControlResult(steps, stuck, jumped, obs, escape_k=escape_k)
+                    return ControlResult(steps, stuck, jumped, obs, escape_k=escape_k, executed=executed)
                 result = self.execute(turn, budget=left)
                 obs = result.obs
                 steps += result.env_steps
                 stuck = stuck or result.stuck
                 escape_k = result.escape_k if result.escape_k is not None else escape_k
+                executed.extend(result.executed or [])
             for _ in range(int(round(float(blocks)))):
                 left = None if budget is None else budget - steps
                 if left is not None and left <= 0:
-                    return ControlResult(steps, stuck, jumped, obs, escape_k=escape_k)
+                    return ControlResult(steps, stuck, jumped, obs, escape_k=escape_k, executed=executed)
                 result = self.execute("forward", budget=left)
                 obs = result.obs
                 steps += result.env_steps
                 jumped = jumped or result.jumped
                 stuck = stuck or result.stuck
                 escape_k = result.escape_k if result.escape_k is not None else escape_k
-        return ControlResult(steps, stuck, jumped, obs, escape_k=escape_k)
+                executed.extend(result.executed or [])
+        return ControlResult(steps, stuck, jumped, obs, escape_k=escape_k, executed=executed)
 
     def _one(self, name: str):
         vectors = self.actions.get("vectors") or {}
@@ -278,14 +292,16 @@ class Controller:
         jumped = False
         obs = self.env.observation() if hasattr(self.env, "observation") else {}
         used = None
+        executed: list[str] = []
         try:
             for k, seq in enumerate(ESCAPE_SEQUENCES, start=1):
                 self.n_escape += 1
                 used = k
                 for name in seq:
                     if budget is not None and steps >= budget:
-                        return ControlResult(steps, True, jumped, obs, escape_k=used)
+                        return ControlResult(steps, True, jumped, obs, escape_k=used, executed=executed)
                     obs, info = self._one(name)
+                    executed.append(str(name))
                     steps += 1
                     self.stuck_steps_total += 1
                     jumped = jumped or bool(info.get("jumped"))
@@ -297,7 +313,7 @@ class Controller:
                     break
         finally:
             self._escaping = False
-        return ControlResult(steps, True, jumped, obs, escape_k=used)
+        return ControlResult(steps, True, jumped, obs, escape_k=used, executed=executed)
 
     def _forward_name(self) -> str:
         obs = self.env.observation()

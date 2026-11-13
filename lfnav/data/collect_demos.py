@@ -19,12 +19,15 @@ from lfnav.data.demo_format import (
     write_episode,
 )
 from lfnav.eval.run import EnvReuse, open_episode, run_episode
+from lfnav.gt.initial import privileged_ray_distance
 from lfnav.io import atomic_write_json
+from lfnav.obsutil import pitch_of, position_of, yaw_of
 from lfnav.perception.gt import GTPerception
 from lfnav.policy.expert import Expert, uses_wide_hint, wide_target
 from lfnav.types import TaskSpec
 
 BLOCK_DEMO_TARGETS = ("tree", "grass")
+EXCLUDE_DEMO_TASKS = ("4-3",)
 
 
 def assert_train_seed(seed: int) -> None:
@@ -33,7 +36,9 @@ def assert_train_seed(seed: int) -> None:
 
 
 def skip_demo_cell(task: TaskSpec, difficulty: str) -> bool:
-    """Block targets (tree/grass) are not collected on medium/hard."""
+    """Skip 4-3. Block targets (tree/grass) are not collected on medium/hard."""
+    if str(task.id) in EXCLUDE_DEMO_TASKS:
+        return True
     if str(difficulty or "").lower() not in ("medium", "hard"):
         return False
     return str(task.target) in BLOCK_DEMO_TARGETS
@@ -53,18 +58,22 @@ class _ExpertLoop:
         self.task = task
         self.env = env
         self.used_wide_log: list[bool] = []
+        self.branch_log: list[str | None] = []
 
     def reset(self):
         self.expert.reset()
         self.used_wide_log.clear()
+        self.branch_log.clear()
 
     def act(self, policy_input):
         obs = self.env.observation()
         wide = wide_target(obs, self.task.target, self.cfg)
         policy_input.memory["wide_target"] = wide
         used = used_wide_for_decision(wide, policy_input.match)
+        out = self.expert.act(policy_input)
         self.used_wide_log.append(used)
-        return self.expert.act(policy_input)
+        self.branch_log.append(getattr(self.expert, "last_branch", None))
+        return out
 
 
 def _write_legacy(out: Path, task: TaskSpec, seed: int, rec: dict, events: list, bucket: str) -> None:
@@ -113,11 +122,28 @@ def collect(cfg, tasks, seeds, out: Path, backend: str = "fake") -> dict:
                     wide_i = 0
                     for event, decision_obs, memory in pending:
                         used = False
+                        branch = "stop"
                         if event.get("policy") is not None:
                             if wide_i < len(policy.used_wide_log):
                                 used = policy.used_wide_log[wide_i]
+                            if wide_i < len(policy.branch_log):
+                                branch = policy.branch_log[wide_i]
                             wide_i += 1
-                        rows.append(step_row(event, int(memory.get("env_steps") or 0), memory, used))
+                        executed = []
+                        for control in event.get("control") or []:
+                            executed.extend(control.get("executed") or [])
+                        rows.append(step_row(
+                            event,
+                            int(memory.get("env_steps") or 0),
+                            memory,
+                            used,
+                            pos=position_of(decision_obs, cfg),
+                            yaw=yaw_of(decision_obs, cfg),
+                            pitch=pitch_of(decision_obs, cfg),
+                            executed_actions=executed,
+                            expert_branch=branch,
+                            target_distance_num=privileged_ray_distance(decision_obs, cfg, task.target),
+                        ))
                     dest = write_episode(out, bucket, task.id, difficulty, seed, rec, rows)
                     if save_frames and bucket == "success":
                         for event, decision_obs, _memory in pending:

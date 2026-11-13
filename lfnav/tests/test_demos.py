@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 from lfnav.config import load_config
-from lfnav.data.collect_demos import assert_train_seed, skip_demo_cell, used_wide_for_decision
+from lfnav.data.collect_demos import assert_train_seed, collect, skip_demo_cell, used_wide_for_decision
 from lfnav.data.demo_format import find_episode, read_episode, save_decision_frame, step_row, write_episode
 from lfnav.env.fake import FakeMineDojoEnv
 from lfnav.gt.initial import apply_spawn_offset_distance, initial_scene_metrics
@@ -34,6 +34,9 @@ class DemoFormatTest(unittest.TestCase):
             self.assertEqual(again["record"], record)
             self.assertEqual(again["steps"][0]["used_wide"], True)
             self.assertEqual(again["steps"][0]["action_chunk"], ["forward"])
+            self.assertEqual(again["steps"][0]["executed_actions"], [])
+            self.assertEqual(again["steps"][0]["expert_branch"], None)
+            self.assertIsNone(again["steps"][0]["target_distance_num"])
             self.assertEqual(len(again["steps"][0]["memory"]["sector8"]), 8)
             self.assertEqual(find_episode(tmp, "1-4", "easy", 1), folder)
 
@@ -55,6 +58,9 @@ class SeedAndSkipTest(unittest.TestCase):
         near_grass = TaskSpec.from_dict(json.loads((SPECS / "4-4.json").read_text()))
         self.assertTrue(skip_demo_cell(grass, "medium"))
         self.assertFalse(skip_demo_cell(near_grass, "hard"))
+        cow_water = TaskSpec.from_dict(json.loads((SPECS / "4-3.json").read_text()))
+        self.assertTrue(skip_demo_cell(cow_water, "easy"))
+        self.assertTrue(skip_demo_cell(cow_water, "hard"))
 
 
 class UsedWideTest(unittest.TestCase):
@@ -134,6 +140,22 @@ class DynamicDistanceTest(unittest.TestCase):
         self.assertAlmostEqual(float(metrics["spawn_target_distance"]), 16.0)
         self.assertTrue(metrics["natural_target_closer"])
         self.assertLess(float(metrics["initial_target_distance"]), 8.0)
+        self.assertNotIsInstance(metrics["initial_target_distance"], str)
+
+    def test_initial_distance_is_min_of_offset_and_ray(self):
+        cfg = load_config()
+        cfg["image_hw"] = [14, 14]
+        cfg["minedojo"] = dict(cfg.get("minedojo") or {})
+        cfg["minedojo"]["clear_entities"] = False
+        env = FakeMineDojoEnv(cfg, {"entities": [{"name": "pig", "x": 0.0, "z": 12.0}]})
+        obs = env.reset()
+        env.spawn_meta = {"target_spawn_offset": {"dx": 0, "dz": 8}}
+        task = TaskSpec.from_dict(json.loads((SPECS / "1-4.json").read_text()))
+        metrics = apply_spawn_offset_distance(initial_scene_metrics(obs, env, cfg, task), env.spawn_meta, cfg)
+        self.assertAlmostEqual(float(metrics["spawn_target_distance"]), 8.0)
+        self.assertLessEqual(float(metrics["initial_target_distance"]), 8.0 + 1e-6)
+        self.assertNotIsInstance(metrics["initial_target_distance"], str)
+        self.assertFalse(str(metrics["initial_target_distance"]).startswith(">"))
 
     def test_eval_dynamic_uses_the_same_ray_distance(self):
         cfg = load_config(ROOT / "configs/lfnav/eval_dynamic.yaml")
@@ -149,6 +171,37 @@ class DemoSeedsFileTest(unittest.TestCase):
         seeds = read_seeds(ROOT / "configs" / "lfnav" / "train_seeds_demo.txt")
         self.assertEqual(len(seeds), 44)
         self.assertTrue(all(1 <= s <= 48 and s % 10 != 9 for s in seeds))
+
+
+class CollectV3FieldsTest(unittest.TestCase):
+    def test_collect_writes_pose_branch_and_executed(self):
+        cfg = load_config()
+        cfg["image_hw"] = [14, 14]
+        cfg["backend"] = "fake"
+        cfg["perception_backend"] = "gt"
+        cfg["judge"] = dict(cfg.get("judge") or {}, max_steps=12, radius=3.0)
+        cfg["save_decision_frames"] = False
+        cfg["difficulty"] = "easy"
+        spec = str(SPECS / "1-4.json")
+        with tempfile.TemporaryDirectory() as tmp:
+            saved = collect(cfg, [spec], [1], Path(tmp), backend="fake")
+            self.assertGreaterEqual(saved["success"] + saved["failure"], 1)
+            folder = find_episode(tmp, "1-4", "easy", 1)
+            packed = read_episode(folder)
+            rec = packed["record"]
+            self.assertNotIsInstance(rec.get("initial_target_distance"), str)
+            self.assertGreaterEqual(float(rec.get("elapsed_s") or 0.0), 0.0)
+            self.assertTrue(packed["steps"])
+            row = packed["steps"][0]
+            self.assertEqual(len(row["pos"]), 3)
+            self.assertIsInstance(row["yaw"], float)
+            self.assertIsInstance(row["pitch"], float)
+            self.assertIn(row["expert_branch"], {
+                "scan", "approach", "reacquire", "explore", "stop", "wide_turn", None,
+            })
+            self.assertIsInstance(row["executed_actions"], list)
+            if packed["steps"][-1].get("expert_branch") != "stop":
+                self.assertTrue(any(s.get("executed_actions") for s in packed["steps"]) or rec.get("success"))
 
 
 class DecisionFrameTest(unittest.TestCase):

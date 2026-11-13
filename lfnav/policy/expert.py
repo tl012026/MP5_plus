@@ -50,5 +50,6 @@ class Expert(RuleBased):
         # view but a near-X condition failed, so the expert spun on the wide hit.
         if uses_wide_hint(wide, policy_input.match):
             self._scan_left = 0
+            self.last_branch = "wide_turn"
             return PolicyOutput([self._steer(wide.get("direction"))])
         return super().act(policy_input)

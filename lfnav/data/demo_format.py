@@ -72,7 +72,18 @@ def config_name(cfg: dict | None) -> str | None:
     return Path(path).stem if path else None
 
 
-def step_row(event: dict, env_step: int, memory: dict | None, used_wide: bool) -> dict:
+def step_row(
+    event: dict,
+    env_step: int,
+    memory: dict | None,
+    used_wide: bool,
+    pos=None,
+    yaw=None,
+    pitch=None,
+    executed_actions=None,
+    expert_branch=None,
+    target_distance_num=None,
+) -> dict:
     mem = memory or {}
     grid = mem.get("local_grid") or []
     return {
@@ -86,6 +97,12 @@ def step_row(event: dict, env_step: int, memory: dict | None, used_wide: bool) -
         },
         "action_chunk": None if not event.get("policy") else list((event.get("policy") or {}).get("action_chunk") or []),
         "used_wide": bool(used_wide),
+        "pos": None if pos is None else [float(v) for v in pos],
+        "yaw": None if yaw is None else float(yaw),
+        "pitch": None if pitch is None else float(pitch),
+        "executed_actions": list(executed_actions or []),
+        "expert_branch": expert_branch,
+        "target_distance_num": None if target_distance_num is None else float(target_distance_num),
     }
 
 

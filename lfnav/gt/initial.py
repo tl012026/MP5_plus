@@ -52,7 +52,6 @@ def initial_scene_metrics(obs: dict, env, cfg: dict, task: TaskSpec) -> dict:
         except Exception:
             euclidean = None
     ray_d = privileged_ray_distance(obs, cfg, task.target)
-    reach = float(cfg.get("wide_ray_range", 32))
     if euclidean is not None:
         numeric = float(euclidean)
         stored = numeric
@@ -63,12 +62,12 @@ def initial_scene_metrics(obs: dict, env, cfg: dict, task: TaskSpec) -> dict:
         beyond = False
     else:
         numeric = None
-        stored = f"> {reach:g}"
+        stored = None
         beyond = True
     return {
         "initial_target_visible": bool(visible),
         "initial_target_distance": stored,
-        "initial_target_distance_rays": (float(ray_d) if ray_d is not None else f"> {reach:g}"),
+        "initial_target_distance_rays": (float(ray_d) if ray_d is not None else None),
         "initial_target_distance_numeric": numeric,
         "initial_distance_beyond_range": beyond,
     }
@@ -91,20 +90,19 @@ def apply_spawn_offset_distance(metrics: dict, spawn_meta: dict | None, cfg: dic
         return metrics
     dist = math.hypot(float(off["dx"]), float(off["dz"]))
     metrics["spawn_target_distance"] = dist
-    clear = True if cfg is None else bool((cfg.get("minedojo") or {}).get("clear_entities", True))
-    if not clear:
-        ray = metrics.get("initial_target_distance_rays")
-        ray_n = float(ray) if isinstance(ray, (int, float)) else None
-        if ray_n is not None:
-            metrics["initial_target_distance"] = ray_n
-            metrics["initial_target_distance_numeric"] = ray_n
-            metrics["initial_distance_beyond_range"] = False
-        metrics["natural_target_closer"] = bool(ray_n is not None and ray_n + 1.0 < dist)
-        return metrics
-    metrics["initial_target_distance"] = dist
-    metrics["initial_target_distance_numeric"] = dist
-    metrics["initial_distance_beyond_range"] = False
-    metrics["natural_target_closer"] = False
+    ray = metrics.get("initial_target_distance_rays")
+    ray_n = float(ray) if isinstance(ray, (int, float)) else None
+    candidates = [v for v in (dist, ray_n) if v is not None]
+    if candidates:
+        chosen = min(candidates)
+        metrics["initial_target_distance"] = chosen
+        metrics["initial_target_distance_numeric"] = chosen
+        metrics["initial_distance_beyond_range"] = False
+    else:
+        metrics["initial_target_distance"] = dist
+        metrics["initial_target_distance_numeric"] = dist
+        metrics["initial_distance_beyond_range"] = False
+    metrics["natural_target_closer"] = bool(ray_n is not None and ray_n + 1.0 < dist)
     return metrics
 
 
