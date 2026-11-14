@@ -1,4 +1,4 @@
-"""Train C2Nav. A uses old+new demos; C uses v3 demos only. --dry-run needs no features."""
+"""Train C2Nav. A and C share demo_dirs from the config. --dry-run needs no features."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ from lfnav.policy.c2nav import (
     target_geometry,
 )
 from lfnav.policy.c2nav_labels import FORWARD_BINS, MODE_NAMES, N_TURN, flip_turn_index, labels_from_step
-from lfnav.policy.state_tracker import TrackerNoise, flip_vector, observation_from_step, replay
+from lfnav.policy.state_tracker import STEPS_NORM, TrackerNoise, flip_vector, observation_from_step, replay
 
 
 def git_hash() -> str | None:
@@ -149,9 +149,8 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
     target_index = objects.index(target) if target in objects else 0
     grid = tuple(spec["grid"])
     pool = int(spec["token_pool"])
-    max_steps = int((cfg.get("judge") or {}).get("max_steps") or 3000)
     radius = float((cfg.get("judge") or {}).get("radius") or 3.0)
-    states = replay(packed["steps"], max_steps=max_steps, noise=None)
+    states = replay(packed["steps"], max_steps=STEPS_NORM, noise=None)
     rng = random.Random(seed)
     rows = []
     for i, step in enumerate(packed["steps"]):
@@ -474,15 +473,15 @@ def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cf
     }
 
 
-def submit_val(ckpt: Path, val_out: Path) -> None:
+def submit_val(ckpt: Path, val_out: Path, cfg_path: Path | None = None) -> None:
     script = _ROOT / "lfnav" / "eval" / "val_c2nav.sbatch"
     if not script.is_file():
         print(f"val script missing: {script}", flush=True)
         return
-    env = os.environ.copy()
-    env["CKPT"] = str(ckpt)
-    env["VAL_OUT"] = str(val_out)
-    cmd = ["sbatch", "--export=ALL,CKPT=" + str(ckpt) + ",VAL_OUT=" + str(val_out), str(script)]
+    export = f"ALL,CKPT={ckpt},VAL_OUT={val_out}"
+    if cfg_path is not None:
+        export += f",CFG={cfg_path}"
+    cmd = ["sbatch", f"--export={export}", str(script)]
     try:
         subprocess.run(cmd, check=False)
         print(f"submitted val for {ckpt}", flush=True)
@@ -565,7 +564,7 @@ def dry_run_torch() -> float:
     return after
 
 
-def train_loop(cfg: dict, feat_dir: Path, out: Path, epochs: int, batch_size: int, lr: float, seed: int) -> Path:
+def train_loop(cfg: dict, feat_dir: Path, out: Path, epochs: int, batch_size: int, lr: float, seed: int, cfg_path: Path | None = None) -> Path:
     import torch
 
     spec = spec_from_cfg(cfg)
@@ -621,7 +620,7 @@ def train_loop(cfg: dict, feat_dir: Path, out: Path, epochs: int, batch_size: in
         save_checkpoint(ckpt, model, spec, epoch, metrics, extra={"filter": stats})
         save_checkpoint(last, model, spec, epoch, metrics, extra={"filter": stats})
         print(f"epoch {epoch} loss={metrics['train_loss']:.4f} metrics={json.dumps(metrics, default=str)}", flush=True)
-        submit_val(ckpt, out / f"val_epoch_{epoch:02d}")
+        submit_val(ckpt, out / f"val_epoch_{epoch:02d}", cfg_path=cfg_path)
     return last
 
 
@@ -642,14 +641,15 @@ def main():
         except ImportError:
             print("dry-run c2nav skipped (no torch)", flush=True)
         return
-    cfg = load_config(args.config) if args.config else load_config()
+    cfg_path = Path(args.config).resolve() if args.config else None
+    cfg = load_config(cfg_path) if cfg_path else load_config()
     nav = cfg.get("c2nav") or {}
     feat = Path(args.features) if args.features else Path(os.environ.get("SCR") or f"/scratch/{os.environ.get('USER', 'user')}") / "lfnav" / "features" / str(nav.get("features_version") or "joint_v1")
-    out = Path(args.out) if args.out else Path(os.environ.get("SCR") or f"/scratch/{os.environ.get('USER', 'user')}") / "lfnav" / "ckpt" / "c2nav"
+    out = Path(args.out) if args.out else Path(os.environ.get("SCR") or f"/scratch/{os.environ.get('USER', 'user')}") / "lfnav" / "ckpt" / "c2nav_easy"
     epochs = int(args.epochs if args.epochs is not None else nav.get("epochs") or 20)
     batch = int(args.batch if args.batch is not None else nav.get("batch") or 16)
     lr = float(args.lr if args.lr is not None else nav.get("lr") or 3e-4)
-    train_loop(cfg, feat, out, epochs, batch, lr, int(args.seed))
+    train_loop(cfg, feat, out, epochs, batch, lr, int(args.seed), cfg_path=cfg_path)
 
 
 if __name__ == "__main__":

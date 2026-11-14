@@ -9,6 +9,9 @@ N_SECTORS = 8
 DISP_WINDOW = 60
 UNSEEN_HORIZON = 40.0
 LOG_DIST_UNSEEN = math.log(32.0)
+# Feature scale for env_steps. Closed-loop val may cap the episode at 1000;
+# the tracker still divides by this constant so train and val stay aligned.
+STEPS_NORM = 3000
 TURN_ACTIONS = {
     "turn_left_15": -15.0,
     "turn_right_15": 15.0,
@@ -122,7 +125,7 @@ class TrackerState:
             "sectors": sectors,
             "displacement_60": float(disp),
             "stuck": 1.0 if self.stuck else 0.0,
-            "steps_frac": min(float(self.env_steps) / max(int(self.max_steps), 1), 1.0),
+            "steps_frac": min(float(self.env_steps) / float(STEPS_NORM), 1.0),
         }
 
     def vector(self) -> list[float]:

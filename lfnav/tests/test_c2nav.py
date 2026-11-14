@@ -12,7 +12,8 @@ from lfnav.config import load_config
 from lfnav.data.demo_format import write_episode
 from lfnav.policy.c2nav import CKPT_STRUCTURE, assert_structure, spec_from_cfg, structure_record
 from lfnav.policy.c2nav_labels import compose_waypoint, flip_turn_index, gt_stop, invert_waypoint, labels_from_step
-from lfnav.policy.state_tracker import TrackerNoise, TrackerState, flip_vector, replay, update
+from lfnav.eval.val_c2nav import val_plan
+from lfnav.policy.state_tracker import STEPS_NORM, TrackerNoise, TrackerState, flip_vector, replay, update
 from lfnav.types import PolicyOutput
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -38,6 +39,13 @@ class StateTrackerTest(unittest.TestCase):
             prev = list(step.get("executed_actions") or [])
         for a, b in zip(offline, online_rows):
             np.testing.assert_allclose(a.vector(), b.vector(), atol=1e-6)
+
+    def test_steps_frac_uses_fixed_3000(self):
+        self.assertEqual(STEPS_NORM, 3000)
+        state = TrackerState(max_steps=1000, env_steps=300)
+        self.assertAlmostEqual(state.features()["steps_frac"], 300.0 / 3000.0)
+        long = TrackerState(max_steps=1000, env_steps=4000)
+        self.assertEqual(long.features()["steps_frac"], 1.0)
 
     def test_flip_twice_restores(self):
         vec = [0.3, 0.9, 1.2, 0.1, 0.8, 0.4, 0.2, 0.1, 0.2, 0.05, 0.05, 0.1, 0.1, 0.2, 0.2, 3.0, 0.0, 0.1]
@@ -82,6 +90,27 @@ class WaypointTest(unittest.TestCase):
         })
         self.assertTrue(row["used_wide"])
         self.assertEqual(row["mode"], 1)
+
+
+class EasyTrainConfigTest(unittest.TestCase):
+    def test_c2nav_easy_yaml(self):
+        cfg = load_config(ROOT / "configs" / "lfnav" / "c2nav_easy.yaml")
+        nav = cfg["c2nav"]
+        self.assertEqual(nav["features_version"], "nav_v3_easy")
+        self.assertEqual(nav["train_difficulties"], ["easy"])
+        self.assertEqual(nav["val_seeds"], [1, 13, 23, 26, 37, 45])
+        self.assertEqual(nav["epochs"], 20)
+        self.assertAlmostEqual(float(nav["lr"]), 3e-4)
+        self.assertAlmostEqual(float(nav["weight_decay"]), 0.05)
+        self.assertAlmostEqual(float(nav["dropout"]), 0.3)
+        self.assertAlmostEqual(float(nav["label_smoothing"]), 0.1)
+        dirs = [str(p) for p in nav["demo_dirs"]]
+        self.assertTrue(all("demos_main_v3" in p for p in dirs))
+        self.assertFalse(any("demos_main" in Path(p).name and "v3" not in Path(p).name for p in dirs))
+        cells, seed, max_steps = val_plan(cfg)
+        self.assertEqual(seed, 13)
+        self.assertEqual(max_steps, 1000)
+        self.assertEqual(cells, [("1-3", "easy"), ("1-4", "easy"), ("2-3", "easy"), ("4-4", "easy")])
 
 
 class CheckpointTest(unittest.TestCase):

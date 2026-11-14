@@ -14,7 +14,7 @@ SCR=${SCR:-/scratch/$USER}
 MP5=${MP5:-$HOME/MP5_plus}
 ENVSH=${ENVSH:-$SCR/mp5_env.sh}
 SIF=${SIF:-$SCR/env/minedojo.sif}
-CFG=${CFG:-$MP5/configs/lfnav/main.yaml}
+CFG=${CFG:-$MP5/configs/lfnav/c2nav_easy.yaml}
 CKPT=${CKPT:?CKPT is required}
 VAL_OUT=${VAL_OUT:?VAL_OUT is required}
 mkdir -p "$SCR/lfnav/logs" "$VAL_OUT"

@@ -1,0 +1,38 @@
+inherit: default.yaml
+
+# First C2Nav round: easy v3 demos only. A and C share this set.
+difficulty: easy
+backend: minedojo
+perception_backend: c2nav
+policy_name: c2nav
+judge:
+  max_steps: 3000
+  radius: 3.0
+
+c2:
+  exclude_tasks: ["4-3"]
+  legacy_tasks: []
+  train_difficulties: [easy]
+  demo_dirs:
+    - /scratch/${USER}/lfnav/data/demos_main_v3
+
+c2nav:
+  version: c2nav_v1
+  features_version: nav_v3_easy
+  epochs: 20
+  batch: 16
+  lr: 0.0003
+  weight_decay: 0.05
+  dropout: 0.3
+  label_smoothing: 0.1
+  train_difficulties: [easy]
+  val_seeds: [1, 13, 23, 26, 37, 45]
+  val_seed: 13
+  val_max_steps: 1000
+  val_cells:
+    - ["1-3", "easy"]
+    - ["1-4", "easy"]
+    - ["2-3", "easy"]
+    - ["4-4", "easy"]
+  demo_dirs:
+    - /scratch/${USER}/lfnav/data/demos_main_v3

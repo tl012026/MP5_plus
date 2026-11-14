@@ -14,13 +14,27 @@ from lfnav.io import atomic_write_json
 from lfnav.types import TaskSpec
 
 CELLS = (
+    ("1-3", "easy"),
     ("1-4", "easy"),
-    ("2-3", "medium"),
-    ("3-4", "hard"),
-    ("4-4", "medium"),
+    ("2-3", "easy"),
+    ("4-4", "easy"),
 )
 SEED = 13
 MAX_STEPS = 1000
+
+
+def val_plan(cfg: dict) -> tuple[list[tuple[str, str]], int, int]:
+    nav = cfg.get("c2nav") or {}
+    raw = nav.get("val_cells") or CELLS
+    cells = []
+    for item in raw:
+        if isinstance(item, (list, tuple)) and len(item) >= 2:
+            cells.append((str(item[0]), str(item[1])))
+        else:
+            cells.append((str(item), "easy"))
+    seed = int(nav.get("val_seed") if nav.get("val_seed") is not None else SEED)
+    max_steps = int(nav.get("val_max_steps") if nav.get("val_max_steps") is not None else MAX_STEPS)
+    return cells, seed, max_steps
 
 
 def spec_path(root: Path, task_id: str) -> Path:
@@ -34,23 +48,24 @@ def run_val(cfg: dict, ckpt: Path, out: Path) -> dict:
     cfg["perception_backend"] = "c2nav"
     cfg["c2nav"] = dict(cfg.get("c2nav") or {})
     cfg["c2nav"]["checkpoint"] = str(ckpt)
+    cells, seed, max_steps = val_plan(cfg)
     cfg["judge"] = dict(cfg.get("judge") or {})
-    cfg["judge"]["max_steps"] = MAX_STEPS
+    cfg["judge"]["max_steps"] = max_steps
     cfg["frames"] = dict(cfg.get("frames") or {}, enabled=False)
     cfg["save_decision_frames"] = False
     out.mkdir(parents=True, exist_ok=True)
     session = EnvReuse(cfg)
     records = []
     try:
-        for task_id, difficulty in CELLS:
+        for task_id, difficulty in cells:
             cfg["difficulty"] = difficulty
             task = TaskSpec.from_dict(json.loads(spec_path(root, task_id).read_text()))
-            dest = out / task_id / f"{SEED}.json"
+            dest = out / task_id / f"{seed}.json"
             dest.parent.mkdir(parents=True, exist_ok=True)
-            env, obs, meta = open_episode(session, task, cfg, SEED)
-            rec, events = run_episode(env, task, cfg, seed=SEED, obs=obs, episode_meta=meta)
+            env, obs, meta = open_episode(session, task, cfg, seed)
+            rec, events = run_episode(env, task, cfg, seed=seed, obs=obs, episode_meta=meta)
             atomic_write_json(dest, rec)
-            event_path = out / task_id / str(SEED) / "events.jsonl"
+            event_path = out / task_id / str(seed) / "events.jsonl"
             event_path.parent.mkdir(parents=True, exist_ok=True)
             event_path.write_text("".join(json.dumps(ev) + "\n" for ev in events))
             records.append(rec)

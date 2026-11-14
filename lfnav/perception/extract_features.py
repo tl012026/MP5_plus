@@ -177,10 +177,12 @@ def main():
         print(f"shards={count}")
         return
     cfg = load_config(args.config) if args.config else load_config()
-    version = args.version or ((cfg.get("joint") or {}).get("data_version") or "joint_v1")
+    nav = cfg.get("c2nav") or {}
+    version = args.version or nav.get("features_version") or ((cfg.get("joint") or {}).get("data_version") or "joint_v1")
     if out.name != version:
         out = out / version
-    extract_demos(args.demos, out, encoder, cfg)
+    demos = args.demos if args.demos else nav.get("demo_dirs")
+    extract_demos(demos, out, encoder, cfg)
 
 
 if __name__ == "__main__":

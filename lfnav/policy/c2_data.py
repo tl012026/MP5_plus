@@ -320,13 +320,20 @@ def demo_roots(demos, cfg: dict | None = None) -> list[Path]:
 def select_training_episodes(folders: list[Path], cfg: dict | None = None) -> tuple[list[Path], dict]:
     """Keep demos that match the C2 training filter. Does not delete files."""
     c2 = (cfg or {}).get("c2") or {}
+    nav = (cfg or {}).get("c2nav") or {}
     exclude = {str(t) for t in (c2.get("exclude_tasks") or ["4-3"])}
     legacy_tasks = {str(t) for t in (c2.get("legacy_tasks") or [])}
+    allowed_diff = c2.get("train_difficulties")
+    if allowed_diff is None:
+        allowed_diff = nav.get("train_difficulties")
+    allowed_diff = {str(d) for d in allowed_diff} if allowed_diff else None
     stats = {
         "seen": 0,
         "not_success": 0,
         "difficulty_unmet": 0,
         "exclude_tasks": 0,
+        "difficulty_skip": 0,
+        "incomplete": 0,
         "main_not_peaceful": 0,
         "main_hostile": 0,
         "legacy_not_allowed": 0,
@@ -337,7 +344,15 @@ def select_training_episodes(folders: list[Path], cfg: dict | None = None) -> tu
     }
     ranked: dict[tuple[str, str, int], tuple[int, Path]] = {}
     for folder in folders:
-        packed = read_episode(folder)
+        rec_path = Path(folder) / "record.json"
+        if not rec_path.is_file():
+            stats["incomplete"] += 1
+            continue
+        try:
+            packed = read_episode(folder)
+        except (OSError, ValueError, json.JSONDecodeError, KeyError):
+            stats["incomplete"] += 1
+            continue
         record = packed["record"]
         stats["seen"] += 1
         task_id, difficulty, seed = _episode_key(record, Path(folder))
@@ -346,6 +361,9 @@ def select_training_episodes(folders: list[Path], cfg: dict | None = None) -> tu
             continue
         if record.get("difficulty_unmet"):
             stats["difficulty_unmet"] += 1
+            continue
+        if allowed_diff is not None and difficulty not in allowed_diff:
+            stats["difficulty_skip"] += 1
             continue
         if task_id in exclude:
             stats["exclude_tasks"] += 1

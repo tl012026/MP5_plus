@@ -10,7 +10,7 @@ from lfnav.geom import ray_directions
 from lfnav.gt.fov import ray_angles_deg
 from lfnav.policy.base import Policy
 from lfnav.policy.c2nav_labels import FORWARD_BINS, MODE_NAMES, N_TURN
-from lfnav.policy.state_tracker import TrackerState
+from lfnav.policy.state_tracker import STEPS_NORM, TrackerState
 
 VERSION = "c2nav_v1"
 CHANNELS = 64
@@ -270,7 +270,7 @@ class C2NavAgent(Policy):
         self._tokens = None
         self._scene = None
         self._last_a = None
-        self._s = TrackerState(max_steps=int((self.cfg.get("judge") or {}).get("max_steps") or 3000))
+        self._s = TrackerState(max_steps=STEPS_NORM)
         self._prev_actions: list[str] = []
         self.last_info: dict = {}
         self.model = None
@@ -308,7 +308,7 @@ class C2NavAgent(Policy):
         self._tokens = None
         self._scene = None
         self._last_a = None
-        self._s = TrackerState(max_steps=int((self.cfg.get("judge") or {}).get("max_steps") or 3000))
+        self._s = TrackerState(max_steps=STEPS_NORM)
         self._prev_actions = []
         self.last_info = {}
 
