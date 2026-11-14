@@ -63,6 +63,8 @@ class TrackerNoise:
     drop_visible: float = 0.0
     bearing_std: float = 0.0
     log_dist_std: float = 0.0
+    yaw_std: float = 0.0
+    disp_std: float = 0.0
     odom_std: float = 0.0
 
     def apply_obs(self, obs: TargetObs, rng) -> TargetObs:
@@ -71,7 +73,7 @@ class TrackerNoise:
             return TargetObs(visible=False)
         if not visible:
             return TargetObs(visible=False)
-        bearing = float(obs.bearing_deg or 0.0)
+        bearing = 0.0 if obs.bearing_deg is None else float(obs.bearing_deg)
         log_d = float(obs.log_distance if obs.log_distance is not None else LOG_DIST_UNSEEN)
         if self.bearing_std:
             bearing = wrap_deg(bearing + rng.gauss(0.0, float(self.bearing_std)))
@@ -80,11 +82,17 @@ class TrackerNoise:
         return TargetObs(visible=True, bearing_deg=bearing, log_distance=log_d)
 
     def apply_pose(self, pos, yaw: float, rng) -> tuple[list[float], float]:
-        if not self.odom_std:
+        disp = float(self.disp_std) if self.disp_std else float(self.odom_std)
+        yaw_s = float(self.yaw_std) if self.yaw_std else (float(self.odom_std) * 5.0 if self.odom_std else 0.0)
+        if disp <= 0.0 and yaw_s <= 0.0:
             return [float(v) for v in pos], float(yaw)
-        s = float(self.odom_std)
-        noisy = [float(pos[0]) + rng.gauss(0.0, s), float(pos[1]), float(pos[-1]) + rng.gauss(0.0, s)]
-        return noisy, wrap_deg(float(yaw) + rng.gauss(0.0, s * 5.0))
+        noisy = [
+            float(pos[0]) + (rng.gauss(0.0, disp) if disp else 0.0),
+            float(pos[1]),
+            float(pos[-1]) + (rng.gauss(0.0, disp) if disp else 0.0),
+        ]
+        yaw_v = float(yaw) + (rng.gauss(0.0, yaw_s) if yaw_s else 0.0)
+        return noisy, wrap_deg(yaw_v)
 
 
 @dataclass
@@ -333,15 +341,24 @@ def observation_from_step(step: dict) -> TargetObs:
     return TargetObs(visible=True, bearing_deg=bearing, log_distance=log_d)
 
 
-def replay(steps: list[dict], max_steps: int = 3000, noise: TrackerNoise | None = None, rng=None) -> list[TrackerState]:
+def replay(
+    steps: list[dict],
+    max_steps: int = 3000,
+    noise: TrackerNoise | None = None,
+    rng=None,
+    observations: list[TargetObs] | None = None,
+) -> list[TrackerState]:
     """S at each decision: current pose and observation, after the previous chunk's actions."""
     state = TrackerState(max_steps=max_steps)
     out = []
     prev_actions: list[str] = []
     for i, step in enumerate(steps):
-        pos = step.get("pos") or [0.0, 0.0, 0.0]
-        yaw = float(step.get("yaw") or 0.0)
-        obs = observation_from_step(step)
+        pos = step.get("pos") if step.get("pos") is not None else [0.0, 0.0, 0.0]
+        yaw = 0.0 if step.get("yaw") is None else float(step.get("yaw"))
+        if observations is not None:
+            obs = observations[i]
+        else:
+            obs = observation_from_step(step)
         action = [] if i == 0 else prev_actions
         state = update(state, pos, yaw, action, obs, max_steps=max_steps, noise=noise, rng=rng)
         out.append(state)

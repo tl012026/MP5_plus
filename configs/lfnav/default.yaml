@@ -119,10 +119,11 @@ c2nav:
     wp: 1.0
     stop: 1.0
   noise:
-    drop_visible: 0.1
-    bearing_std: 8.0
-    log_dist_std: 0.15
-    odom_std: 0.05
+    drop_visible: 0.15
+    bearing_std: 5.0
+    log_dist_std: 0.1
+    yaw_std: 1.0
+    disp_std: 0.05
   demo_dirs:
     - /scratch/${USER}/lfnav/data/demos_main
     - /scratch/${USER}/lfnav/data/demos_main_v3

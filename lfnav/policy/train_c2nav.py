@@ -43,7 +43,14 @@ from lfnav.policy.c2nav_labels import (
     labels_from_step,
     mode_from_branch,
 )
-from lfnav.policy.state_tracker import STEPS_NORM, TrackerNoise, flip_vector, observation_from_step, replay
+from lfnav.policy.state_tracker import (
+    LOG_DIST_UNSEEN,
+    STEPS_NORM,
+    TargetObs,
+    TrackerNoise,
+    flip_vector,
+    replay,
+)
 
 
 def git_hash() -> str | None:
@@ -164,10 +171,31 @@ def _forward_class(labels: dict | None) -> tuple[int, bool]:
 def _geom_from_obs(obs) -> np.ndarray:
     if not obs.visible:
         return np.asarray([0.0, 0.0, 1.0, math.log(32.0)], np.float32)
-    yaw = float(obs.bearing_deg or 0.0)
+    yaw = 0.0 if obs.bearing_deg is None else float(obs.bearing_deg)
     rad = math.radians(yaw)
     log_d = float(obs.log_distance if obs.log_distance is not None else math.log(32.0))
     return np.asarray([1.0, math.sin(rad), math.cos(rad), log_d], np.float32)
+
+
+def gt_target_obs(present: np.ndarray, ignore: np.ndarray, target_index: int, bearings: np.ndarray, dist_num) -> TargetObs:
+    p = np.asarray(present[int(target_index)], np.float32)
+    valid = np.asarray(ignore, np.float32) < 0.5
+    hit = (p > 0.5) & valid
+    if not np.any(hit):
+        return TargetObs(visible=False)
+    mass = np.where(hit, p, 0.0)
+    yaw = float((mass * np.asarray(bearings, np.float32)).sum() / max(float(mass.sum()), 1e-6))
+    if dist_num is None:
+        log_d = float(LOG_DIST_UNSEEN)
+    else:
+        log_d = math.log(max(float(dist_num), 0.05))
+    return TargetObs(visible=True, bearing_deg=yaw, log_distance=log_d)
+
+
+def _pose_noise(noise: TrackerNoise | None) -> TrackerNoise | None:
+    if noise is None:
+        return None
+    return TrackerNoise(yaw_std=float(noise.yaw_std), disp_std=float(noise.disp_std), odom_std=float(noise.odom_std))
 
 
 def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, noise: TrackerNoise | None) -> list[NavSample]:
@@ -185,27 +213,46 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
     grid = tuple(spec["grid"])
     pool = int(spec["token_pool"])
     radius = float((cfg.get("judge") or {}).get("radius") or 3.0)
-    states = replay(packed["steps"], max_steps=STEPS_NORM, noise=None)
+    bearings = patch_bearings(int(grid[0]), int(grid[1]), cfg)
     rng = random.Random(seed)
-    rows = []
+    parsed = []
+    gt_obs: list[TargetObs] = []
     for i, step in enumerate(packed["steps"]):
         decision = int(step["decision"] if step.get("decision") is not None else i)
         feat_row = lookup.get((stem, decision))
-        if feat_row is None:
-            continue
         scene = step.get("scene") or {}
         present, log_d, ignore = patch_targets(scene, objects, pool, grid)
+        obs_clean = gt_target_obs(present, ignore, target_index, bearings, step.get("target_distance_num"))
+        gt_obs.append(obs_clean)
+        parsed.append((i, step, feat_row, present, log_d, ignore, obs_clean))
+    noisy_obs = []
+    for obs_clean in gt_obs:
+        if noise is None:
+            noisy_obs.append(obs_clean)
+        else:
+            noisy_obs.append(noise.apply_obs(obs_clean, rng))
+    states = replay(
+        packed["steps"],
+        max_steps=STEPS_NORM,
+        noise=_pose_noise(noise),
+        rng=rng,
+        observations=noisy_obs,
+    )
+    rows = []
+    source = "gt_noisy"
+    for i, step, feat_row, present, log_d, ignore, obs_clean in parsed:
+        if feat_row is None:
+            continue
         labels = labels_from_step(step, radius=radius)
         has_c = labels is not None
         used_wide = bool((labels or {}).get("used_wide"))
         fwd_i, fwd_clip = _forward_class(labels)
         if labels is not None:
             fwd_clip = bool(labels.get("forward_clipped")) or fwd_clip
-        obs = observation_from_step(step)
-        if noise is not None and has_c:
-            obs = noise.apply_obs(obs, rng)
+        obs = noisy_obs[i]
         s_vec = encode_s(states[i] if i < len(states) else states[-1])
         geom = _geom_from_obs(obs)
+        geom_clean = _geom_from_obs(obs_clean)
         rows.append(NavSample(
             row=int(feat_row),
             present=present,
@@ -218,6 +265,7 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
             s_vec=s_vec,
             cond=encode_match(step.get("match"), objects),
             geom=geom,
+            geom_clean=geom_clean,
             target_index=target_index,
             mode=_label_int(labels, "mode", 0),
             turn=_label_int(labels, "turn_index", 0),
@@ -230,6 +278,7 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
             episode_id=episode_id,
             branch="" if step.get("expert_branch") is None else str(step.get("expert_branch")),
             forward_clipped=fwd_clip,
+            obs_source=source,
         ))
     return rows
 
@@ -237,7 +286,7 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
 VAL_SEEDS_DEFAULT = (1, 13, 23, 26, 37, 45)
 
 
-def load_split(cfg: dict, feat_dir: Path) -> tuple[list[NavSample], list[NavSample], dict]:
+def load_split(cfg: dict, feat_dir: Path, apply_noise: bool = True) -> tuple[list[NavSample], list[NavSample], dict]:
     spec = spec_from_cfg(cfg)
     tokens, _, index = load_memmaps(feat_dir)
     lookup = _index_lookup(index)
@@ -250,19 +299,22 @@ def load_split(cfg: dict, feat_dir: Path) -> tuple[list[NavSample], list[NavSamp
     episodes, stats = select_training_episodes(folders, cfg)
     val_seeds = {int(s) for s in (nav.get("val_seeds") or VAL_SEEDS_DEFAULT)}
     noise_cfg = nav.get("noise") or {}
-    noise = TrackerNoise(
-        drop_visible=float(noise_cfg.get("drop_visible") or 0.0),
-        bearing_std=float(noise_cfg.get("bearing_std") or 0.0),
-        log_dist_std=float(noise_cfg.get("log_dist_std") or 0.0),
-        odom_std=float(noise_cfg.get("odom_std") or 0.0),
+    train_noise = TrackerNoise(
+        drop_visible=float(noise_cfg["drop_visible"] if noise_cfg.get("drop_visible") is not None else 0.15),
+        bearing_std=float(noise_cfg["bearing_std"] if noise_cfg.get("bearing_std") is not None else 5.0),
+        log_dist_std=float(noise_cfg["log_dist_std"] if noise_cfg.get("log_dist_std") is not None else 0.1),
+        yaw_std=float(noise_cfg["yaw_std"] if noise_cfg.get("yaw_std") is not None else 1.0),
+        disp_std=float(noise_cfg["disp_std"] if noise_cfg.get("disp_std") is not None else 0.05),
     )
     train, val = [], []
     for folder in episodes:
-        rows = samples_from_episode(folder, lookup, spec, cfg, noise)
         seed = int(Path(folder).name) if str(Path(folder).name).isdigit() else 0
         rec = read_episode(folder)["record"]
         seed = int(rec.get("seed") if rec.get("seed") is not None else seed)
-        dest = val if seed in val_seeds else train
+        is_val = seed in val_seeds
+        use_noise = train_noise if (apply_noise and not is_val) else None
+        rows = samples_from_episode(folder, lookup, spec, cfg, use_noise)
+        dest = val if is_val else train
         dest.extend(rows)
     stats["train_rows"] = len(train)
     stats["val_rows"] = len(val)
@@ -427,6 +479,10 @@ def collate(rows: list[NavSample], tokens, flip: bool, rng: random.Random) -> di
         "stop": np.asarray([r.stop for r in chosen], np.float32),
         "used_wide": np.asarray([r.used_wide for r in chosen], np.float32),
         "has_c": np.asarray([r.has_c for r in chosen], np.float32),
+        "obs_source": [r.obs_source for r in chosen],
+        "geom_clean": np.stack([
+            r.geom if r.geom_clean is None else r.geom_clean for r in chosen
+        ]),
     }
 
 
@@ -462,7 +518,7 @@ def nav_loss(out, batch, weights, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth
     loss_time = F.cross_entropy(out["time"], batch["time"])
     loss_weather = F.cross_entropy(out["weather"], batch["weather"])
     loss_bright = F.cross_entropy(out["brightness"], batch["brightness"])
-    loss_g = 0.25 * (loss_biome + loss_time + loss_weather + loss_bright)
+    loss_g = (loss_biome + loss_time + loss_weather + loss_bright) / 4.0
     loss_a = loss_p + loss_d + loss_g
     c_mask = (batch["has_c"] > 0.5) & (batch["used_wide"] < 0.5)
     if c_mask.any():
@@ -512,8 +568,12 @@ def nav_loss(out, batch, weights, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth
 def _to_torch(batch, device, bearings=None):
     import torch
 
+    skip = {"obs_source"}
     out = {}
     for key, value in batch.items():
+        if key in skip:
+            out[key] = value
+            continue
         tensor = torch.from_numpy(np.asarray(value))
         if tensor.dtype == torch.float16:
             tensor = tensor.float()
