@@ -86,6 +86,28 @@ def patch_bearings(n_h: int, n_w: int, cfg: dict | None = None) -> np.ndarray:
     return yaw
 
 
+def align_hw(arr, height: int, width: int, how: str = "max") -> np.ndarray:
+    """Map a 2D grid onto (height, width). 16x26 ignore/present becomes 8x13 by 2x2 pooling."""
+    gh, gw = int(height), int(width)
+    a = np.asarray(arr, dtype=np.float32)
+    if a.ndim != 2:
+        return np.zeros((gh, gw), np.float32)
+    h, w = int(a.shape[0]), int(a.shape[1])
+    if h == gh and w == gw:
+        return a
+    if gh < 1 or gw < 1:
+        return np.zeros((gh, gw), np.float32)
+    kh, kw = h // gh, w // gw
+    if kh < 1 or kw < 1 or h != kh * gh or w != kw * gw:
+        return np.zeros((gh, gw), np.float32)
+    blocks = a.reshape(gh, kh, gw, kw)
+    if how == "max":
+        return np.asarray(blocks.max(axis=(1, 3)), dtype=np.float32)
+    if how == "min":
+        return np.asarray(blocks.min(axis=(1, 3)), dtype=np.float32)
+    return np.asarray(blocks.mean(axis=(1, 3)), dtype=np.float32)
+
+
 def encode_match(match: dict | None, objects: list[str]) -> np.ndarray:
     match = match or {}
     sat = match.get("satisfied") or {}
@@ -113,8 +135,39 @@ def encode_s(state: TrackerState | dict | list[float]) -> np.ndarray:
 FORWARD_KEYS = ("tokens", "s_vec", "cond", "target_index", "bearings")
 
 
-def target_geometry(present_p, log_dist, target_index, bearings, vis_tau: float = 0.5):
-    """present_p, log_dist: (B, K, H, W). Visible if any target patch is >= vis_tau."""
+def _yaw_for_grid(height: int, width: int, bearings, device, dtype, cfg: dict | None = None):
+    import torch
+
+    if bearings is not None:
+        yaw = torch.as_tensor(bearings, device=device, dtype=dtype)
+        if tuple(int(x) for x in yaw.shape[-2:]) == (int(height), int(width)):
+            return yaw
+    native = patch_bearings(int(height), int(width), cfg)
+    return torch.as_tensor(native, device=device, dtype=dtype)
+
+
+def _ignore_for_grid(ignore, height: int, width: int, device, dtype):
+    import torch
+
+    if ignore is None:
+        return None
+    if torch.is_tensor(ignore):
+        arr = ignore.detach().cpu().numpy()
+    else:
+        arr = np.asarray(ignore, np.float32)
+    if arr.size == 0:
+        return None
+    if arr.ndim == 2:
+        aligned = align_hw(arr, height, width, "max")
+        return torch.as_tensor(aligned, device=device, dtype=dtype)
+    if arr.ndim == 3:
+        stacked = np.stack([align_hw(row, height, width, "max") for row in arr])
+        return torch.as_tensor(stacked, device=device, dtype=dtype)
+    return None
+
+
+def target_geometry(present_p, log_dist, target_index, bearings=None, vis_tau: float = 0.5, ignore=None, cfg: dict | None = None):
+    """present_p, log_dist: (B, K, H, W). Yaw uses the actual (H, W); ignore 16x26 is 2x2-pooled to 8x13."""
     import torch
 
     b, _k, height, width = present_p.shape
@@ -134,10 +187,15 @@ def target_geometry(present_p, log_dist, target_index, bearings, vis_tau: float 
         p = present_p.gather(1, gather).squeeze(1).clamp(0.0, 1.0)
         dist = log_dist.gather(1, gather).squeeze(1)
     hit = p >= float(vis_tau)
+    ig = _ignore_for_grid(ignore, height, width, p.device, p.dtype)
+    if ig is not None:
+        if ig.ndim == 2:
+            ig = ig.unsqueeze(0)
+        hit = hit & (ig < 0.5)
     vis = hit.flatten(1).any(dim=1).to(dtype=p.dtype)
     mass = hit.to(dtype=p.dtype)
     denom = mass.flatten(1).sum(dim=1).clamp_min(1e-6)
-    yaw = torch.as_tensor(bearings, device=p.device, dtype=p.dtype)
+    yaw = _yaw_for_grid(height, width, bearings, p.device, p.dtype, cfg)
     yaw_hat = (mass * yaw).flatten(1).sum(dim=1) / denom
     log_d = (mass * dist).flatten(1).sum(dim=1) / denom
     unseen = vis < 0.5
@@ -230,7 +288,8 @@ def C2NavNet(spec: dict):
             a = self.perception(batch["tokens"])
             vis_tau = float(self.spec["vis_tau"] if self.spec.get("vis_tau") is not None else 0.5)
             vis, sn, cs, log_d = target_geometry(
-                a["present_p"], a["log_dist"], batch["target_index"], batch["bearings"], vis_tau=vis_tau,
+                a["present_p"], a["log_dist"], batch["target_index"], batch.get("bearings"),
+                vis_tau=vis_tau, ignore=batch.get("ignore"), cfg=None,
             )
             geom_from_a = torch.stack([vis, sn, cs, log_d], dim=-1)
             if self.training and batch.get("geom") is not None:
@@ -275,7 +334,7 @@ def load_net(payload: dict, map_location="cpu"):
     return net, spec
 
 
-def _scene_from_present(present_p, log_dist, spec: dict, bearings: np.ndarray):
+def _scene_from_present(present_p, log_dist, spec: dict, bearings: np.ndarray, ignore=None, cfg: dict | None = None):
     import torch
 
     from lfnav.aggregate import distance_bin
@@ -288,7 +347,7 @@ def _scene_from_present(present_p, log_dist, spec: dict, bearings: np.ndarray):
         pmap = present_p[i]
         p = float(np.clip(pmap.max() if pmap.size else 0.0, 0.0, 1.0))
         vis_tau = float(spec["vis_tau"] if spec.get("vis_tau") is not None else 0.5)
-        vis, sn, cs, log_d = target_geometry(t_p, t_d, i, bearings, vis_tau=vis_tau)
+        vis, sn, cs, log_d = target_geometry(t_p, t_d, i, bearings, vis_tau=vis_tau, ignore=ignore, cfg=cfg)
         yaw = math.degrees(math.atan2(float(sn), float(cs))) if float(vis) > 0.05 else 0.0
         if yaw < -20:
             direction = {"left": 1.0, "center": 0.0, "right": 0.0}
@@ -309,7 +368,8 @@ class C2NavAgent(Policy):
     def __init__(self, cfg: dict | None = None):
         self.cfg = cfg or {}
         nav = self.cfg.get("c2nav") or {}
-        self.tau = float(nav.get("stop_tau") or 0.5)
+        stop_tau = nav.get("stop_tau")
+        self.tau = 0.5 if stop_tau is None else float(stop_tau)
         self.chunk_max = int(nav.get("chunk_max_steps") or 8)
         self._tokens = None
         self._scene = None
@@ -320,6 +380,7 @@ class C2NavAgent(Policy):
         self.model = None
         self.spec = spec_from_cfg(self.cfg)
         self.bearings = patch_bearings(self.spec["grid"][0], self.spec["grid"][1], self.cfg)
+        self._ignore_hw = self._hud_ignore_map()
         try:
             import torch
         except ImportError:
@@ -336,6 +397,9 @@ class C2NavAgent(Policy):
             if meta.get("chosen_tau") is not None:
                 self.tau = float(meta["chosen_tau"])
             self.bearings = patch_bearings(self.spec["grid"][0], self.spec["grid"][1], self.cfg)
+            if self.spec.get("vis_tau") is None:
+                self.spec["vis_tau"] = float(nav["vis_tau"] if nav.get("vis_tau") is not None else 0.5)
+            self._ignore_hw = self._hud_ignore_map()
         from lfnav.perception.encoder import FakeEncoder, load_encoder
 
         enc_name = nav.get("encoder") or ((self.cfg.get("perception") or {}).get("encoder") or "fake")
@@ -347,6 +411,16 @@ class C2NavAgent(Policy):
             self.model = C2NavNet(self.spec)
             self.model.eval()
         self.reset()
+
+    def _hud_ignore_map(self) -> np.ndarray:
+        from lfnav.geom import patch_grid
+        from lfnav.gt.camera import patch_ignore
+
+        hw = list(self.cfg.get("image_hw") or [224, 364])
+        patch = int(self.cfg.get("patch") or 14)
+        n_h, n_w = patch_grid(int(hw[0]), int(hw[1]), patch)
+        ignored = patch_ignore(int(hw[0]), int(hw[1]), n_h, n_w, self.cfg.get("camera_calib") or {})
+        return np.asarray(ignored, dtype=np.float32)
 
     def reset(self) -> None:
         self._tokens = None
@@ -370,8 +444,16 @@ class C2NavAgent(Policy):
             if rgb is None:
                 rgb = frame.get("rgb")
         rgb = preprocess_frame(rgb)
-        encoded = encode_joint_tokens(rgb, self.encoder, int(self.spec["token_pool"]))
-        self._tokens = encoded["tokens"]
+        encoded = encode_joint_tokens(rgb, self.encoder, int(self.spec["token_pool"] or 1))
+        tokens = np.asarray(encoded["tokens"], dtype=np.float32)
+        gh, gw = int(self.spec["grid"][0]), int(self.spec["grid"][1])
+        if tokens.ndim == 3 and (int(tokens.shape[0]), int(tokens.shape[1])) != (gh, gw) and gh > 0:
+            from lfnav.perception.encoder import pool_patch_tokens
+
+            kh = int(tokens.shape[0]) // gh
+            tokens = pool_patch_tokens(tokens, max(int(kh), 1))
+        encoded["tokens"] = tokens
+        self._tokens = tokens
         return encoded
 
     def numeric_distance(self, target: str):
@@ -383,7 +465,7 @@ class C2NavAgent(Policy):
         vis_tau = float(self.spec["vis_tau"] if self.spec.get("vis_tau") is not None else 0.5)
         vis, _sn, _cs, log_d = target_geometry(
             self._last_a["present_p"], self._last_a["log_dist"], objects.index(target), self.bearings,
-            vis_tau=vis_tau,
+            vis_tau=vis_tau, ignore=self._ignore_hw, cfg=self.cfg,
         )
         if float(vis) < vis_tau:
             return None
@@ -406,6 +488,8 @@ class C2NavAgent(Policy):
             a["log_dist"][0].cpu().numpy(),
             self.spec,
             self.bearings,
+            ignore=self._ignore_hw,
+            cfg=self.cfg,
         )
         return self._scene
 
@@ -435,6 +519,7 @@ class C2NavAgent(Policy):
                     "cond": torch.from_numpy(encode_match(match, objects)).unsqueeze(0).to(device),
                     "target_index": torch.tensor([t_i], device=device, dtype=torch.long),
                     "bearings": torch.as_tensor(self.bearings, device=device, dtype=torch.float32),
+                    "ignore": torch.as_tensor(self._ignore_hw, device=device, dtype=torch.float32),
                 }
                 out = self.model(batch)
             vis_f = float(out["vis"][0])
