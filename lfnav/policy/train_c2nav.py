@@ -32,7 +32,17 @@ from lfnav.policy.c2nav import (
     spec_from_cfg,
     structure_record,
 )
-from lfnav.policy.c2nav_labels import FORWARD_BINS, MODE_NAMES, N_TURN, flip_turn_index, labels_from_step, mode_from_branch
+from lfnav.policy.c2nav_labels import (
+    FORWARD_BINS,
+    MODE_NAMES,
+    N_TURN,
+    branch_is_mapped,
+    clip_forward_blocks,
+    flip_turn_index,
+    forward_index,
+    labels_from_step,
+    mode_from_branch,
+)
 from lfnav.policy.state_tracker import STEPS_NORM, TrackerNoise, flip_vector, observation_from_step, replay
 
 
@@ -124,12 +134,31 @@ class NavSample:
     world_seed: int
     episode_id: str
     branch: str = ""
+    forward_clipped: bool = False
+    geom_clean: np.ndarray | None = None
+    obs_source: str = "gt_noisy"
 
 
 def _label_int(labels: dict | None, key: str, default: int) -> int:
-    if not labels or labels.get(key) is None:
+    if labels is None:
         return int(default)
-    return int(labels[key])
+    value = labels.get(key)
+    if value is None:
+        return int(default)
+    return int(value)
+
+
+def _forward_class(labels: dict | None) -> tuple[int, bool]:
+    if labels is None or labels.get("forward_index") is None:
+        if labels is None or labels.get("forward") is None:
+            return 0, False
+        clipped, was = clip_forward_blocks(labels["forward"])
+        return forward_index(clipped), was
+    idx = int(labels["forward_index"])
+    if 0 <= idx < len(FORWARD_BINS):
+        return idx, False
+    clipped, was = clip_forward_blocks(idx)
+    return forward_index(clipped), was
 
 
 def _geom_from_obs(obs) -> np.ndarray:
@@ -169,6 +198,9 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
         labels = labels_from_step(step, radius=radius)
         has_c = labels is not None
         used_wide = bool((labels or {}).get("used_wide"))
+        fwd_i, fwd_clip = _forward_class(labels)
+        if labels is not None:
+            fwd_clip = bool(labels.get("forward_clipped")) or fwd_clip
         obs = observation_from_step(step)
         if noise is not None and has_c:
             obs = noise.apply_obs(obs, rng)
@@ -189,14 +221,15 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
             target_index=target_index,
             mode=_label_int(labels, "mode", 0),
             turn=_label_int(labels, "turn_index", 0),
-            forward=_label_int(labels, "forward_index", 1),
+            forward=fwd_i,
             stop=_label_int(labels, "stop", 0),
             used_wide=used_wide,
             has_c=has_c,
             seed=seed,
             world_seed=seed,
             episode_id=episode_id,
-            branch=str(step.get("expert_branch") or ""),
+            branch="" if step.get("expert_branch") is None else str(step.get("expert_branch")),
+            forward_clipped=fwd_clip,
         ))
     return rows
 
@@ -258,6 +291,8 @@ def print_label_stats(name: str, rows: list[NavSample], spec: dict) -> dict:
         mapped[raw] = {"count": cnt, "mode": MODE_NAMES[idx], "mode_index": idx, "used_wide": wide_b}
     stop_pos = sum(r.stop for r in rows if r.has_c)
     stop_n = sum(1 for r in rows if r.has_c)
+    n_clip = sum(1 for r in usable if r.forward_clipped)
+    unmapped = Counter(r.branch for r in rows if r.branch and not branch_is_mapped(r.branch))
     pos_cells = 0
     tot_cells = 0
     for r in rows:
@@ -274,6 +309,8 @@ def print_label_stats(name: str, rows: list[NavSample], spec: dict) -> dict:
         "stop_pos_frac": None if stop_n == 0 else stop_pos / stop_n,
         "present_pos_frac": None if tot_cells == 0 else pos_cells / tot_cells,
         "expert_branch": mapped,
+        "forward_clipped": n_clip,
+        "unmapped_branch": dict(unmapped),
     }
     print(f"c2nav labels {name} {json.dumps(stats, default=str)}", flush=True)
     return stats
@@ -353,6 +390,9 @@ def flip_sample(sample: NavSample) -> NavSample:
         world_seed=sample.world_seed,
         episode_id=sample.episode_id,
         branch=sample.branch,
+        forward_clipped=sample.forward_clipped,
+        geom_clean=None if sample.geom_clean is None else np.asarray(sample.geom_clean, np.float32).copy(),
+        obs_source=sample.obs_source,
     )
 
 

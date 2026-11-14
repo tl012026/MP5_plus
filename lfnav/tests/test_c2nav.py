@@ -219,6 +219,12 @@ class WeightAndLabelTest(unittest.TestCase):
         self.assertAlmostEqual(float(seen.mean()), 1.0, places=5)
         self.assertEqual(_label_int({"forward_index": 0}, "forward_index", 1), 0)
         self.assertEqual(_label_int({}, "forward_index", 1), 1)
+        from lfnav.policy.c2nav_labels import forward_index
+
+        self.assertEqual(forward_index(0), 1)
+        self.assertEqual(forward_index(-1), 0)
+        self.assertEqual(forward_index(4), 5)
+        self.assertEqual(forward_index(6), 5)
 
 
 @unittest.skipUnless(HAS_TORCH, "torch not installed on this host")

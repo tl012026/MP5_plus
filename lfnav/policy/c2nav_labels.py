@@ -6,9 +6,13 @@ from lfnav.policy.state_tracker import FORWARD_ACTIONS, TURN_ACTIONS, wrap_deg
 
 MODE_NAMES = ("scan", "approach", "reacquire", "explore", "stop")
 FORWARD_BINS = (-1, 0, 1, 2, 3, 4)
+# Explicit class ids. Do not use `x or 1`: forward 0 must stay class 1.
+FORWARD_TO_CLASS = {-1: 0, 0: 1, 1: 2, 2: 3, 3: 4, 4: 5}
+CLASS_TO_FORWARD = {v: k for k, v in FORWARD_TO_CLASS.items()}
 N_TURN = 12
 TURN_WIDTH = 30.0
 USED_WIDE_MODES = {"wide_turn"}
+KNOWN_BRANCHES = set(MODE_NAMES) | USED_WIDE_MODES
 
 YAW_TO_ACTION = {
     -45.0: "turn_left_45",
@@ -29,13 +33,19 @@ def is_v3_demo(record: dict, folder=None) -> bool:
 
 def mode_from_branch(branch: str | None, used_wide: bool = False) -> tuple[int, bool]:
     """Return (mode_index, used_wide). wide_turn maps to approach with used_wide."""
-    name = str(branch or "")
+    name = "" if branch is None else str(branch)
     wide = bool(used_wide) or name in USED_WIDE_MODES
     if name in USED_WIDE_MODES:
         name = "approach"
     if name not in MODE_NAMES:
         name = "explore"
     return MODE_NAMES.index(name), wide
+
+
+def branch_is_mapped(branch: str | None) -> bool:
+    if branch is None:
+        return False
+    return str(branch) in KNOWN_BRANCHES
 
 
 def net_yaw_forward(actions: list[str]) -> tuple[float, int]:
@@ -59,21 +69,37 @@ def turn_center(index: int) -> float:
     return wrap_deg(int(index) * TURN_WIDTH)
 
 
-def forward_index(blocks: float) -> int:
-    clipped = int(max(FORWARD_BINS[0], min(FORWARD_BINS[-1], int(round(float(blocks))))))
-    return FORWARD_BINS.index(clipped)
+def clip_forward_blocks(blocks: float) -> tuple[int, bool]:
+    raw = int(round(float(blocks)))
+    lo, hi = int(FORWARD_BINS[0]), int(FORWARD_BINS[-1])
+    clipped = lo if raw < lo else hi if raw > hi else raw
+    return clipped, clipped != raw
+
+
+def forward_index(blocks: float, clip_counts: list[int] | None = None) -> int:
+    clipped, was_clipped = clip_forward_blocks(blocks)
+    if was_clipped and clip_counts is not None:
+        clip_counts.append(1)
+    return int(FORWARD_TO_CLASS[clipped])
+
+
+def forward_blocks_from_class(index: int) -> int:
+    return int(CLASS_TO_FORWARD[int(index)])
 
 
 def compose_waypoint(actions: list[str]) -> dict:
     yaw, forward = net_yaw_forward(actions)
     t_i = turn_index(yaw)
-    f_i = forward_index(forward)
+    clipped, was_clipped = clip_forward_blocks(forward)
+    f_i = forward_index(clipped)
     return {
         "turn_index": t_i,
         "forward_index": f_i,
         "yaw_deg": yaw,
         "forward": FORWARD_BINS[f_i],
         "turn_center": turn_center(t_i),
+        "forward_clipped": was_clipped,
+        "forward_raw": int(round(float(forward))),
     }
 
 
@@ -87,7 +113,7 @@ def invert_waypoint(turn_i: int, forward_i: int) -> list[str]:
     n15 = int(round(remaining / 15.0))
     if n15:
         actions.extend(["turn_right_15" if n15 > 0 else "turn_left_15"] * abs(n15))
-    blocks = FORWARD_BINS[int(forward_i) % len(FORWARD_BINS)]
+    blocks = forward_blocks_from_class(int(forward_i) % len(FORWARD_BINS))
     if blocks < 0:
         actions.extend(["backward"] * abs(blocks))
     elif blocks > 0:
@@ -139,6 +165,7 @@ def labels_from_step(step: dict, radius: float = 3.0) -> dict | None:
         "used_wide": wide,
         "turn_index": wp["turn_index"],
         "forward_index": wp["forward_index"],
+        "forward_clipped": bool(wp.get("forward_clipped")),
         "stop": int(bool(stop)),
         "has_policy": branch != "stop",
     }
