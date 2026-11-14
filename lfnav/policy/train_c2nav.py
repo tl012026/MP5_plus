@@ -7,7 +7,6 @@ import json
 import math
 import os
 import random
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -54,8 +53,13 @@ from lfnav.policy.state_tracker import (
 
 
 def git_hash() -> str | None:
+    git_dir = _ROOT / ".git"
     try:
-        return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=_ROOT, text=True).strip()
+        head = (git_dir / "HEAD").read_text().strip()
+        if head.startswith("ref:"):
+            ref = git_dir / head.split(":", 1)[1].strip()
+            return ref.read_text().strip() or None
+        return head or None
     except Exception:
         return None
 
