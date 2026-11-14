@@ -910,17 +910,24 @@ def train_loop(cfg: dict, feat_dir: Path, out: Path, epochs: int, batch_size: in
             opt.step()
             running += float(loss.item())
             n_b += 1
-            for key, val in parts.items():
-                part_sum[key] = part_sum.get(key, 0.0) + float(val)
+            for key, part in parts.items():
+                part_sum[key] = part_sum.get(key, 0.0) + float(part)
         sched.step()
-        avg_parts = {key: val / max(n_b, 1) for key, val in part_sum.items()}
+        avg_parts = {key: part / max(n_b, 1) for key, part in part_sum.items()}
         if first_parts is None:
             first_parts = avg_parts
             print(f"c2nav loss epoch_1 {json.dumps(first_parts)}", flush=True)
         last_parts = avg_parts
+        eval_rows = val if len(val) != 0 else train[: min(64, len(train))]
         metrics = offline_metrics(
-            model, val or train[: min(64, len(train))], tokens, device, spec, cfg, bearings,
-            warn_empty_stop=bool(val),
+            model=model,
+            rows=eval_rows,
+            tokens=tokens,
+            device=device,
+            spec=spec,
+            cfg=cfg,
+            bearings=bearings,
+            warn_empty_stop=len(val) != 0,
         )
         metrics["train_loss"] = running / max(n_b, 1)
         metrics["loss_parts"] = avg_parts
