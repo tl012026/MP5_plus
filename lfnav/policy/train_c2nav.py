@@ -518,7 +518,8 @@ def nav_loss(out, batch, weights, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth
     loss_time = F.cross_entropy(out["time"], batch["time"])
     loss_weather = F.cross_entropy(out["weather"], batch["weather"])
     loss_bright = F.cross_entropy(out["brightness"], batch["brightness"])
-    loss_g = (loss_biome + loss_time + loss_weather + loss_bright) / 4.0
+    # Each global CE is already a batch mean; L_global is the mean of those four.
+    loss_g = torch.stack([loss_biome, loss_time, loss_weather, loss_bright]).mean()
     loss_a = loss_p + loss_d + loss_g
     c_mask = (batch["has_c"] > 0.5) & (batch["used_wide"] < 0.5)
     if c_mask.any():
@@ -528,7 +529,7 @@ def nav_loss(out, batch, weights, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth
         loss_mode = F.cross_entropy(mode_logits, batch["mode"][c_mask], weight=mode_w, label_smoothing=smooth)
         loss_turn = F.cross_entropy(turn_logits, batch["turn"][c_mask], weight=turn_w, label_smoothing=smooth)
         loss_fwd = F.cross_entropy(fwd_logits, batch["forward"][c_mask], weight=fwd_w, label_smoothing=smooth)
-        loss_wp = 0.5 * (loss_turn + loss_fwd)
+        loss_wp = (loss_turn + loss_fwd) / 2.0
     else:
         loss_mode = present.new_zeros(())
         loss_wp = present.new_zeros(())
