@@ -6,8 +6,6 @@ import math
 
 import numpy as np
 
-from lfnav.geom import ray_directions
-from lfnav.gt.fov import ray_angles_deg
 from lfnav.policy.base import Policy
 from lfnav.policy.c2nav_labels import FORWARD_BINS, MODE_NAMES, N_TURN
 from lfnav.policy.state_tracker import STEPS_NORM, TrackerState
@@ -55,6 +53,7 @@ def spec_from_cfg(cfg: dict | None = None) -> dict:
         "token_pool": int(nav.get("token_pool") or ((cfg.get("joint") or {}).get("token_pool") or 2)),
         "dropout": float(nav.get("dropout") or 0.3),
         "chunk_max_steps": int(nav.get("chunk_max_steps") or 8),
+        "vis_tau": float(nav["vis_tau"] if nav.get("vis_tau") is not None else 0.5),
         "modes": list(MODE_NAMES),
         "n_turn": int(N_TURN),
         "forward_bins": list(FORWARD_BINS),
@@ -64,13 +63,26 @@ def spec_from_cfg(cfg: dict | None = None) -> dict:
     }
 
 
-def patch_bearings(n_h: int, n_w: int, cfg: dict | None = None) -> np.ndarray:
+def horizontal_fov_deg(cfg: dict | None = None) -> float:
     cfg = cfg or {}
-    dirs = ray_directions(n_h, n_w, float(cfg.get("fov_deg") or 70), str(cfg.get("fov_axis") or "vertical"))
-    yaw = np.zeros((n_h, n_w), dtype=np.float32)
-    for i in range(n_h):
-        for j in range(n_w):
-            yaw[i, j] = ray_angles_deg(dirs[i][j])[0]
+    hw = list(cfg.get("image_hw") or [224, 364])
+    height = float(hw[0])
+    width = float(hw[1])
+    vfov = math.radians(float(cfg.get("fov_deg") or 70))
+    return math.degrees(2.0 * math.atan(math.tan(vfov / 2.0) * (width / height)))
+
+
+def column_bearing_deg(col: float, n_w: int, hfov_deg: float) -> float:
+    u = (float(col) + 0.5) / float(n_w) - 0.5
+    return math.degrees(math.atan(2.0 * u * math.tan(math.radians(float(hfov_deg)) / 2.0)))
+
+
+def patch_bearings(n_h: int, n_w: int, cfg: dict | None = None) -> np.ndarray:
+    """Yaw at each patch, degrees. Image centre is 0, right is positive. HFOV from 224x364 / 70° VFOV."""
+    hfov = horizontal_fov_deg(cfg)
+    yaw = np.zeros((int(n_h), int(n_w)), dtype=np.float32)
+    for j in range(int(n_w)):
+        yaw[:, j] = column_bearing_deg(j, int(n_w), hfov)
     return yaw
 
 
@@ -101,8 +113,8 @@ def encode_s(state: TrackerState | dict | list[float]) -> np.ndarray:
 FORWARD_KEYS = ("tokens", "s_vec", "cond", "target_index", "bearings")
 
 
-def target_geometry(present_p, log_dist, target_index, bearings):
-    """present_p, log_dist: (B, K, H, W). target_index: int or (B,). Returns vis, sin, cos, log_d each (B,)."""
+def target_geometry(present_p, log_dist, target_index, bearings, vis_tau: float = 0.5):
+    """present_p, log_dist: (B, K, H, W). Visible if any target patch is >= vis_tau."""
     import torch
 
     b, _k, height, width = present_p.shape
@@ -121,12 +133,14 @@ def target_geometry(present_p, log_dist, target_index, bearings):
         gather = idx.view(b, 1, 1, 1).expand(b, 1, height, width)
         p = present_p.gather(1, gather).squeeze(1).clamp(0.0, 1.0)
         dist = log_dist.gather(1, gather).squeeze(1)
-    vis = 1.0 - (1.0 - p).clamp(0.0, 1.0).flatten(1).prod(dim=1)
-    mass = p.flatten(1).sum(dim=1).clamp_min(1e-6)
+    hit = p >= float(vis_tau)
+    vis = hit.flatten(1).any(dim=1).to(dtype=p.dtype)
+    mass = hit.to(dtype=p.dtype)
+    denom = mass.flatten(1).sum(dim=1).clamp_min(1e-6)
     yaw = torch.as_tensor(bearings, device=p.device, dtype=p.dtype)
-    yaw_hat = (p * yaw).flatten(1).sum(dim=1) / mass
-    log_d = (p * dist).flatten(1).sum(dim=1) / mass
-    unseen = vis < 1e-4
+    yaw_hat = (mass * yaw).flatten(1).sum(dim=1) / denom
+    log_d = (mass * dist).flatten(1).sum(dim=1) / denom
+    unseen = vis < 0.5
     log_d = torch.where(unseen, torch.full_like(log_d, math.log(32.0)), log_d)
     yaw_hat = torch.where(unseen, torch.zeros_like(yaw_hat), yaw_hat)
     rad = yaw_hat * math.pi / 180.0
@@ -214,8 +228,9 @@ def C2NavNet(spec: dict):
             if missing:
                 raise RuntimeError("c2nav batch missing " + ", ".join(missing))
             a = self.perception(batch["tokens"])
+            vis_tau = float(self.spec["vis_tau"] if self.spec.get("vis_tau") is not None else 0.5)
             vis, sn, cs, log_d = target_geometry(
-                a["present_p"], a["log_dist"], batch["target_index"], batch["bearings"],
+                a["present_p"], a["log_dist"], batch["target_index"], batch["bearings"], vis_tau=vis_tau,
             )
             geom_from_a = torch.stack([vis, sn, cs, log_d], dim=-1)
             if self.training and batch.get("geom") is not None:
@@ -272,7 +287,8 @@ def _scene_from_present(present_p, log_dist, spec: dict, bearings: np.ndarray):
     for i, name in enumerate(spec["objects"]):
         pmap = present_p[i]
         p = float(np.clip(pmap.max() if pmap.size else 0.0, 0.0, 1.0))
-        vis, sn, cs, log_d = target_geometry(t_p, t_d, i, bearings)
+        vis_tau = float(spec["vis_tau"] if spec.get("vis_tau") is not None else 0.5)
+        vis, sn, cs, log_d = target_geometry(t_p, t_d, i, bearings, vis_tau=vis_tau)
         yaw = math.degrees(math.atan2(float(sn), float(cs))) if float(vis) > 0.05 else 0.0
         if yaw < -20:
             direction = {"left": 1.0, "center": 0.0, "right": 0.0}
@@ -364,10 +380,12 @@ class C2NavAgent(Policy):
         objects = list(self.spec["objects"])
         if target not in objects:
             return None
+        vis_tau = float(self.spec["vis_tau"] if self.spec.get("vis_tau") is not None else 0.5)
         vis, _sn, _cs, log_d = target_geometry(
             self._last_a["present_p"], self._last_a["log_dist"], objects.index(target), self.bearings,
+            vis_tau=vis_tau,
         )
-        if float(vis) < 0.5:
+        if float(vis) < vis_tau:
             return None
         return math.exp(float(log_d))
 
@@ -423,8 +441,9 @@ class C2NavAgent(Policy):
             sn = float(out["geom"][0, 1])
             cs = float(out["geom"][0, 2])
             log_d = float(out["geom"][0, 3])
+            vis_tau = float(self.spec["vis_tau"] if self.spec.get("vis_tau") is not None else 0.5)
             obs = TargetObs(
-                visible=vis_f >= 0.5,
+                visible=vis_f >= vis_tau,
                 bearing_deg=math.degrees(math.atan2(sn, cs)),
                 log_distance=log_d,
             )

@@ -111,6 +111,9 @@ c2nav:
   epochs: 20
   batch: 16
   label_smoothing: 0.1
+  vis_tau: 0.5
+  augment:
+    flip: false
   features_version: joint_v1
   val_seeds: [1, 13, 23, 26, 37, 45]
   loss_weights:

@@ -87,7 +87,28 @@ def pool2d(arr: np.ndarray, k: int, how: str) -> np.ndarray:
     return blocks.mean(axis=(1, 3))
 
 
+def pool_to_grid(arr: np.ndarray, grid: tuple[int, int], how: str = "max") -> np.ndarray:
+    """Pool or keep a 2D map so it matches grid. 16x26 patches become 8x13 with factor 2."""
+    gh, gw = int(grid[0]), int(grid[1])
+    a = np.asarray(arr, dtype=np.float32)
+    if a.ndim != 2:
+        return np.zeros((gh, gw), np.float32)
+    h, w = int(a.shape[0]), int(a.shape[1])
+    if h == gh and w == gw:
+        return a
+    kh = h // gh
+    kw = w // gw
+    if kh < 1 or kw < 1:
+        return np.zeros((gh, gw), np.float32)
+    k = kh if kh == kw else kh
+    pooled = pool2d(a, k, how)
+    if pooled.shape != (gh, gw):
+        return np.zeros((gh, gw), np.float32)
+    return np.asarray(pooled, dtype=np.float32)
+
+
 def patch_targets(scene: dict, objects: list[str], pool: int, grid: tuple[int, int]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    del pool
     gh, gw = int(grid[0]), int(grid[1])
     k = len(objects)
     present = np.zeros((k, gh, gw), np.float32)
@@ -97,17 +118,13 @@ def patch_targets(scene: dict, objects: list[str], pool: int, grid: tuple[int, i
     if raw_ignore:
         ig = np.asarray(raw_ignore, dtype=np.float32)
         if ig.ndim == 2:
-            ignore = pool2d(ig, pool, "max")
-            if ignore.shape != (gh, gw):
-                ignore = np.zeros((gh, gw), np.float32)
+            ignore = pool_to_grid(ig, grid, "max")
     patches = scene.get("patches") or {}
     for i, name in enumerate(objects):
         grid_p = np.asarray(patches.get(name) or [], dtype=np.float32)
         if grid_p.ndim != 2:
             continue
-        pooled = pool2d(grid_p, pool, "max")
-        if pooled.shape != (gh, gw):
-            continue
+        pooled = pool_to_grid(grid_p, grid, "max")
         present[i] = pooled
         log_d[i] = np.where(pooled > 0.5, math.log(8.0), 0.0)
     return present, log_d, ignore
@@ -189,13 +206,14 @@ def _geom_from_obs(obs) -> np.ndarray:
 
 
 def gt_target_obs(present: np.ndarray, ignore: np.ndarray, target_index: int, bearings: np.ndarray, dist_num) -> TargetObs:
+    """Visible if the target has at least one non-ignore positive patch. Bearing is mean column yaw."""
     p = np.asarray(present[int(target_index)], np.float32)
     valid = np.asarray(ignore, np.float32) < 0.5
     hit = (p > 0.5) & valid
     if not np.any(hit):
         return TargetObs(visible=False)
-    mass = np.where(hit, p, 0.0)
-    yaw = float((mass * np.asarray(bearings, np.float32)).sum() / max(float(mass.sum()), 1e-6))
+    yaw_map = np.asarray(bearings, np.float32)
+    yaw = float(yaw_map[hit].mean())
     if dist_num is None:
         log_d = float(LOG_DIST_UNSEEN)
     else:
@@ -269,6 +287,7 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
         s_vec = encode_s(states[i] if i < len(states) else states[-1])
         geom = _geom_from_obs(obs)
         geom_clean = _geom_from_obs(obs_clean)
+        scene = step.get("scene") or {}
         rows.append(NavSample(
             row=int(feat_row),
             present=present,
@@ -315,8 +334,11 @@ def load_split(cfg: dict, feat_dir: Path, apply_noise: bool = True) -> tuple[lis
     episodes, stats = select_training_episodes(folders, cfg)
     val_seeds = {int(s) for s in (nav.get("val_seeds") or VAL_SEEDS_DEFAULT)}
     noise_cfg = nav.get("noise") or {}
+    drop_visible = float(noise_cfg["drop_visible"] if noise_cfg.get("drop_visible") is not None else 0.15)
+    if drop_visible > 0.15:
+        drop_visible = 0.15
     train_noise = TrackerNoise(
-        drop_visible=float(noise_cfg["drop_visible"] if noise_cfg.get("drop_visible") is not None else 0.15),
+        drop_visible=drop_visible,
         bearing_std=float(noise_cfg["bearing_std"] if noise_cfg.get("bearing_std") is not None else 5.0),
         log_dist_std=float(noise_cfg["log_dist_std"] if noise_cfg.get("log_dist_std") is not None else 0.1),
         yaw_std=float(noise_cfg["yaw_std"] if noise_cfg.get("yaw_std") is not None else 1.0),
@@ -655,7 +677,7 @@ def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cf
         for start in range(0, len(rows), bs):
             chunk = rows[start : start + bs]
             batch = _to_torch(collate(chunk, tokens, False, rng), device, bearings=bearings)
-            out = heads_out(model, batch)
+            out = model(batch)
             for i, row in enumerate(chunk):
                 if policy_supervised(row):
                     y_mode.append(row.mode)
@@ -864,11 +886,11 @@ def train_loop(cfg: dict, feat_dir: Path, out: Path, epochs: int, batch_size: in
     pos_w = torch.as_tensor(_presence_pos_weight(train, len(spec["objects"])), device=device)
     usable = [r for r in train if policy_supervised(r)]
     mode_w, mode_n = class_weights([r.mode for r in usable], len(MODE_NAMES))
-    turn_w, turn_n = class_weights([r.turn for r in usable], N_TURN)
-    fwd_w, fwd_n = class_weights([r.forward for r in usable], len(FORWARD_BINS))
+    turn_n = class_counts([r.turn for r in usable], N_TURN)
+    fwd_n = class_counts([r.forward for r in usable], len(FORWARD_BINS))
     mode_w = torch.as_tensor(mode_w, device=device)
-    turn_w = torch.as_tensor(turn_w, device=device)
-    fwd_w = torch.as_tensor(fwd_w, device=device)
+    turn_w = torch.ones(N_TURN, device=device, dtype=torch.float32)
+    fwd_w = torch.ones(len(FORWARD_BINS), device=device, dtype=torch.float32)
     stop_scale = stop_pos_weight(train)
     stop_pos = torch.tensor(stop_scale, device=device)
     wts = dict((cfg.get("c2nav") or {}).get("loss_weights") or {"a": 1, "mode": 1, "wp": 1, "stop": 1})
@@ -893,6 +915,7 @@ def train_loop(cfg: dict, feat_dir: Path, out: Path, epochs: int, batch_size: in
     last = out / "last.pt"
     first_parts = None
     last_parts = None
+    use_flip = bool(((cfg.get("c2nav") or {}).get("augment") or {}).get("flip"))
     for epoch in range(1, epochs + 1):
         model.train()
         order = list(range(len(train)))
@@ -902,7 +925,7 @@ def train_loop(cfg: dict, feat_dir: Path, out: Path, epochs: int, batch_size: in
         n_b = 0
         for start in range(0, len(order), batch_size):
             chunk = [train[i] for i in order[start : start + batch_size]]
-            batch = _to_torch(collate(chunk, tokens, True, rng), device, bearings=bearings)
+            batch = _to_torch(collate(chunk, tokens, use_flip, rng), device, bearings=bearings)
             opt.zero_grad()
             out_b = heads_out(model, batch)
             loss, parts = nav_loss(out_b, batch, wts, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth)

@@ -25,6 +25,9 @@ c2nav:
   weight_decay: 0.05
   dropout: 0.3
   label_smoothing: 0.1
+  vis_tau: 0.5
+  augment:
+    flip: false
   train_difficulties: [easy]
   val_seeds: [1, 13, 23, 26, 37, 45]
   val_seed: 13
