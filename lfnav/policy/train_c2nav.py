@@ -31,7 +31,6 @@ from lfnav.policy.c2nav import (
     patch_bearings,
     spec_from_cfg,
     structure_record,
-    target_geometry,
 )
 from lfnav.policy.c2nav_labels import FORWARD_BINS, MODE_NAMES, N_TURN, flip_turn_index, labels_from_step
 from lfnav.policy.state_tracker import STEPS_NORM, TrackerNoise, flip_vector, observation_from_step, replay
@@ -372,7 +371,7 @@ def nav_loss(out, batch, weights, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth
     }
 
 
-def _to_torch(batch, device):
+def _to_torch(batch, device, bearings=None):
     import torch
 
     out = {}
@@ -381,6 +380,8 @@ def _to_torch(batch, device):
         if tensor.dtype == torch.float16:
             tensor = tensor.float()
         out[key] = tensor.to(device)
+    if bearings is not None:
+        out["bearings"] = torch.as_tensor(bearings, device=device, dtype=torch.float32)
     return out
 
 
@@ -405,31 +406,23 @@ def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cf
     with torch.no_grad():
         for start in range(0, len(rows), bs):
             chunk = rows[start : start + bs]
-            batch = _to_torch(collate(chunk, tokens, False, rng), device)
-            a = model.perception(batch["tokens"])
-            vis, sn, cs, log_d = target_geometry(a["present_p"], a["log_dist"], int(chunk[0].target_index), bearings)
-            # per-sample target index
-            geoms = []
-            for i, row in enumerate(chunk):
-                v, s, c, ld = target_geometry(a["present_p"][i : i + 1], a["log_dist"][i : i + 1], int(row.target_index), bearings)
-                geoms.append(torch.stack([v, s, c, ld], dim=-1))
-            geom = torch.cat(geoms, dim=0)
-            c_out = model.policy(geom, batch["s_vec"], batch["cond"])
+            batch = _to_torch(collate(chunk, tokens, False, rng), device, bearings=bearings)
+            out = model(batch)
             for i, row in enumerate(chunk):
                 if row.has_c and not row.used_wide:
                     y_mode.append(row.mode)
-                    p_mode.append(int(c_out["mode"][i].argmax().item()))
+                    p_mode.append(int(out["mode"][i].argmax().item()))
                     y_turn.append(row.turn)
-                    p_turn.append(int(c_out["turn"][i].argmax().item()))
+                    p_turn.append(int(out["turn"][i].argmax().item()))
                 if row.has_c:
                     y_stop.append(row.stop)
-                    p_stop.append(float(torch.sigmoid(c_out["stop"][i]).item()))
+                    p_stop.append(float(torch.sigmoid(out["stop"][i]).item()))
                 mask = row.ignore < 0.5
                 present_y.append(row.present[:, mask].reshape(-1))
-                present_p.append(a["present_p"][i].detach().cpu().numpy()[:, mask].reshape(-1))
+                present_p.append(out["present_p"][i].detach().cpu().numpy()[:, mask].reshape(-1))
                 exist = (row.present > 0.5) & mask
                 if exist.any():
-                    pred = a["log_dist"][i].detach().cpu().numpy()[exist]
+                    pred = out["log_dist"][i].detach().cpu().numpy()[exist]
                     dist_err.append(float(np.mean(np.abs(pred - row.log_dist[exist]))))
     def acc(y, p):
         return None if not y else float(np.mean(np.asarray(y) == np.asarray(p)))
@@ -514,6 +507,7 @@ def dry_run_torch() -> float:
     model = C2NavNet(spec)
     tokens = torch.randn(b, h, w, d)
     batch = {
+        "tokens": tokens,
         "present": torch.zeros(b, k, h, w),
         "log_dist": torch.zeros(b, k, h, w),
         "ignore": torch.zeros(b, h, w),
@@ -524,6 +518,8 @@ def dry_run_torch() -> float:
         "s_vec": torch.zeros(b, spec["s_dim"]),
         "cond": torch.zeros(b, spec["cond_dim"]),
         "geom": torch.zeros(b, 4),
+        "target_index": torch.zeros(b, dtype=torch.long),
+        "bearings": torch.zeros(h, w),
         "mode": torch.zeros(b, dtype=torch.long),
         "turn": torch.zeros(b, dtype=torch.long),
         "forward": torch.ones(b, dtype=torch.long),
@@ -532,10 +528,7 @@ def dry_run_torch() -> float:
         "has_c": torch.ones(b),
     }
     batch["present"][:, 0, 1, 2] = 1.0
-    a = model.perception(tokens)
-    c = model.policy(batch["geom"], batch["s_vec"], batch["cond"])
-    out = dict(a)
-    out.update(c)
+    out = model(batch)
     pos_w = torch.ones(k)
     mode_w = torch.ones(len(MODE_NAMES))
     turn_w = torch.ones(N_TURN)
@@ -545,17 +538,11 @@ def dry_run_torch() -> float:
     before = float(nav_loss(out, batch, wts, pos_w, mode_w, turn_w, fwd_w, torch.tensor(1.0), 0.1)[0].item())
     for _ in range(8):
         opt.zero_grad()
-        a = model.perception(tokens)
-        c = model.policy(batch["geom"], batch["s_vec"], batch["cond"])
-        out = dict(a)
-        out.update(c)
+        out = model(batch)
         loss, _ = nav_loss(out, batch, wts, pos_w, mode_w, turn_w, fwd_w, torch.tensor(1.0), 0.1)
         loss.backward()
         opt.step()
-    a = model.perception(tokens)
-    c = model.policy(batch["geom"], batch["s_vec"], batch["cond"])
-    out = dict(a)
-    out.update(c)
+    out = model(batch)
     after = float(nav_loss(out, batch, wts, pos_w, mode_w, turn_w, fwd_w, torch.tensor(1.0), 0.1)[0].item())
     print(f"dry-run c2nav torch {before:.4f} -> {after:.4f}", flush=True)
     payload = structure_record(spec, model=model.state_dict())
@@ -602,12 +589,9 @@ def train_loop(cfg: dict, feat_dir: Path, out: Path, epochs: int, batch_size: in
         n_b = 0
         for start in range(0, len(order), batch_size):
             chunk = [train[i] for i in order[start : start + batch_size]]
-            batch = _to_torch(collate(chunk, tokens, True, rng), device)
+            batch = _to_torch(collate(chunk, tokens, True, rng), device, bearings=bearings)
             opt.zero_grad()
-            a = model.perception(batch["tokens"])
-            c = model.policy(batch["geom"], batch["s_vec"], batch["cond"])
-            out_b = dict(a)
-            out_b.update(c)
+            out_b = model(batch)
             loss, parts = nav_loss(out_b, batch, wts, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth)
             loss.backward()
             opt.step()

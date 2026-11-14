@@ -98,17 +98,34 @@ def encode_s(state: TrackerState | dict | list[float]) -> np.ndarray:
     return np.asarray(state, dtype=np.float32).reshape(-1)
 
 
-def target_geometry(present_p, log_dist, target_index: int, bearings: np.ndarray):
-    """present_p, log_dist: (B, K, H, W). Returns vis, sin, cos, log_d each (B,)."""
+FORWARD_KEYS = ("tokens", "s_vec", "cond", "target_index", "bearings")
+
+
+def target_geometry(present_p, log_dist, target_index, bearings):
+    """present_p, log_dist: (B, K, H, W). target_index: int or (B,). Returns vis, sin, cos, log_d each (B,)."""
     import torch
 
-    p = present_p[:, int(target_index)].clamp(0.0, 1.0)
-    vis = 1.0 - (1.0 - p).clamp(0.0, 1.0).prod(dim=(1, 2))
-    w = p
-    mass = w.sum(dim=(1, 2)).clamp_min(1e-6)
+    b, _k, height, width = present_p.shape
+    idx = target_index
+    if not torch.is_tensor(idx):
+        idx = torch.as_tensor(idx, device=present_p.device, dtype=torch.long)
+    else:
+        idx = idx.to(device=present_p.device, dtype=torch.long)
+    if idx.ndim == 0:
+        p = present_p[:, int(idx)].clamp(0.0, 1.0)
+        dist = log_dist[:, int(idx)]
+    else:
+        idx = idx.reshape(-1)
+        if idx.numel() == 1 and b > 1:
+            idx = idx.expand(b)
+        gather = idx.view(b, 1, 1, 1).expand(b, 1, height, width)
+        p = present_p.gather(1, gather).squeeze(1).clamp(0.0, 1.0)
+        dist = log_dist.gather(1, gather).squeeze(1)
+    vis = 1.0 - (1.0 - p).clamp(0.0, 1.0).flatten(1).prod(dim=1)
+    mass = p.flatten(1).sum(dim=1).clamp_min(1e-6)
     yaw = torch.as_tensor(bearings, device=p.device, dtype=p.dtype)
-    yaw_hat = (w * yaw).sum(dim=(1, 2)) / mass
-    log_d = (w * log_dist[:, int(target_index)]).sum(dim=(1, 2)) / mass
+    yaw_hat = (p * yaw).flatten(1).sum(dim=1) / mass
+    log_d = (p * dist).flatten(1).sum(dim=1) / mass
     unseen = vis < 1e-4
     log_d = torch.where(unseen, torch.full_like(log_d, math.log(32.0)), log_d)
     yaw_hat = torch.where(unseen, torch.zeros_like(yaw_hat), yaw_hat)
@@ -159,7 +176,7 @@ def C2NavNet(spec: dict):
             self.drop = nn.Dropout(drop)
             self.mode = nn.Linear(hidden, n_mode)
             self.turn = nn.Linear(hidden, n_turn)
-            self.forward = nn.Linear(hidden, n_fwd)
+            self.fwd = nn.Linear(hidden, n_fwd)
             self.stop = nn.Linear(hidden, 1)
 
         def perception(self, tokens):
@@ -188,15 +205,20 @@ def C2NavNet(spec: dict):
             return {
                 "mode": self.mode(h),
                 "turn": self.turn(h),
-                "forward": self.forward(h),
+                "forward": self.fwd(h),
                 "stop": self.stop(h).squeeze(-1),
             }
 
-        def forward(self, tokens, s_vec, cond, target_index, bearings):
-            a = self.perception(tokens)
-            vis, sn, cs, log_d = target_geometry(a["present_p"], a["log_dist"], int(target_index), bearings)
+        def forward(self, batch):
+            missing = [key for key in FORWARD_KEYS if key not in batch]
+            if missing:
+                raise RuntimeError("c2nav batch missing " + ", ".join(missing))
+            a = self.perception(batch["tokens"])
+            vis, sn, cs, log_d = target_geometry(
+                a["present_p"], a["log_dist"], batch["target_index"], batch["bearings"],
+            )
             geom = torch.stack([vis, sn, cs, log_d], dim=-1)
-            c = self.policy(geom, s_vec, cond)
+            c = self.policy(geom, batch["s_vec"], batch["cond"])
             out = dict(a)
             out.update(c)
             out["geom"] = geom
@@ -381,25 +403,30 @@ class C2NavAgent(Policy):
         p_stop = 0.0
         if self.model is not None and self._torch is not None and self._tokens is not None:
             torch = self._torch
+            device = next(self.model.parameters()).device
             with torch.no_grad():
-                tokens = torch.from_numpy(np.asarray(self._tokens, np.float32)).unsqueeze(0)
-                a = self.model.perception(tokens)
-                vis, sn, cs, log_d = target_geometry(a["present_p"], a["log_dist"], t_i, self.bearings)
-                geom = torch.stack([vis, sn, cs, log_d], dim=-1)
-                s_t = torch.from_numpy(encode_s(self._s)).unsqueeze(0)
-                cond = torch.from_numpy(encode_match(match, objects)).unsqueeze(0)
-                c = self.model.policy(geom, s_t, cond)
-            vis_f = float(vis)
+                batch = {
+                    "tokens": torch.from_numpy(np.asarray(self._tokens, np.float32)).unsqueeze(0).to(device),
+                    "s_vec": torch.from_numpy(encode_s(self._s)).unsqueeze(0).to(device),
+                    "cond": torch.from_numpy(encode_match(match, objects)).unsqueeze(0).to(device),
+                    "target_index": torch.tensor([t_i], device=device, dtype=torch.long),
+                    "bearings": torch.as_tensor(self.bearings, device=device, dtype=torch.float32),
+                }
+                out = self.model(batch)
+            vis_f = float(out["vis"][0])
+            sn = float(out["geom"][0, 1])
+            cs = float(out["geom"][0, 2])
+            log_d = float(out["geom"][0, 3])
             obs = TargetObs(
                 visible=vis_f >= 0.5,
-                bearing_deg=math.degrees(math.atan2(float(sn), float(cs))),
-                log_distance=float(log_d),
+                bearing_deg=math.degrees(math.atan2(sn, cs)),
+                log_distance=log_d,
             )
-            geom_np = np.asarray([vis_f, float(sn), float(cs), float(log_d)], np.float32)
-            mode_i = int(c["mode"][0].argmax().item())
-            turn_i = int(c["turn"][0].argmax().item())
-            fwd_i = int(c["forward"][0].argmax().item())
-            p_stop = float(torch.sigmoid(c["stop"][0]).item())
+            geom_np = np.asarray([vis_f, sn, cs, log_d], np.float32)
+            mode_i = int(out["mode"][0].argmax().item())
+            turn_i = int(out["turn"][0].argmax().item())
+            fwd_i = int(out["forward"][0].argmax().item())
+            p_stop = float(torch.sigmoid(out["stop"][0]).item())
         self._s = update(self._s, pos, yaw, self._prev_actions, obs, max_steps=self._s.max_steps)
         feat = self._s.features()
         info = {

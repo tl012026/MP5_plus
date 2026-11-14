@@ -10,11 +10,17 @@ import numpy as np
 
 from lfnav.config import load_config
 from lfnav.data.demo_format import write_episode
-from lfnav.policy.c2nav import CKPT_STRUCTURE, assert_structure, spec_from_cfg, structure_record
-from lfnav.policy.c2nav_labels import compose_waypoint, flip_turn_index, gt_stop, invert_waypoint, labels_from_step
 from lfnav.eval.val_c2nav import val_plan
+from lfnav.policy.c2nav import CKPT_STRUCTURE, C2NavAgent, C2NavNet, assert_structure, spec_from_cfg, structure_record
+from lfnav.policy.c2nav_labels import compose_waypoint, flip_turn_index, gt_stop, invert_waypoint, labels_from_step
 from lfnav.policy.state_tracker import STEPS_NORM, TrackerNoise, TrackerState, flip_vector, replay, update
-from lfnav.types import PolicyOutput
+from lfnav.types import PolicyInput, PolicyOutput
+
+try:
+    import torch  # noqa: F401
+    HAS_TORCH = True
+except Exception:
+    HAS_TORCH = False
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -199,6 +205,80 @@ class SmokeDemoTest(unittest.TestCase):
             noise = TrackerNoise(drop_visible=1.0)
             noisy = replay(packed["steps"], noise=noise, rng=__import__("random").Random(0))
             self.assertEqual(len(noisy), 3)
+
+
+@unittest.skipUnless(HAS_TORCH, "torch not installed on this host")
+class ForwardSmokeTest(unittest.TestCase):
+    def test_collate_train_step_and_infer_forward(self):
+        import random
+
+        import torch
+
+        from lfnav.policy.train_c2nav import NavSample, collate, nav_loss, _to_torch
+
+        spec = spec_from_cfg(load_config())
+        spec["dim"] = 8
+        spec["grid"] = (4, 6)
+        spec["hidden"] = 16
+        spec["channels"] = 4
+        gh, gw, dim = 4, 6, 8
+        k = len(spec["objects"])
+        tokens = np.random.randn(2, gh, gw, dim).astype(np.float32)
+        rows = []
+        for i in range(2):
+            present = np.zeros((k, gh, gw), np.float32)
+            present[0, 1, 2] = 1.0
+            rows.append(NavSample(
+                row=i,
+                present=present,
+                log_dist=np.zeros((k, gh, gw), np.float32),
+                ignore=np.zeros((gh, gw), np.float32),
+                biome=0,
+                time=0,
+                weather=0,
+                brightness=0,
+                s_vec=np.zeros(spec["s_dim"], np.float32),
+                cond=np.zeros(spec["cond_dim"], np.float32),
+                geom=np.asarray([1.0, 0.0, 1.0, 1.0], np.float32),
+                target_index=0,
+                mode=1,
+                turn=3,
+                forward=2,
+                stop=i,
+                used_wide=False,
+                has_c=True,
+                seed=i,
+                world_seed=i,
+                episode_id=f"1-4/easy/{i}",
+            ))
+        batch_np = collate(rows, tokens, False, random.Random(0))
+        bearings = np.zeros((gh, gw), np.float32)
+        batch = _to_torch(batch_np, torch.device("cpu"), bearings=bearings)
+        model = C2NavNet(spec)
+        opt = torch.optim.AdamW(model.parameters(), lr=1e-2)
+        model.train()
+        opt.zero_grad()
+        out = model(batch)
+        wts = {"a": 1.0, "mode": 1.0, "wp": 1.0, "stop": 1.0}
+        loss, _ = nav_loss(
+            out, batch, wts,
+            torch.ones(k), torch.ones(len(spec["modes"])),
+            torch.ones(spec["n_turn"]), torch.ones(len(spec["forward_bins"])),
+            torch.tensor(1.0), 0.1,
+        )
+        loss.backward()
+        opt.step()
+        model.eval()
+        with torch.no_grad():
+            infer_out = model(batch)
+        self.assertEqual(tuple(infer_out["mode"].shape), (2, len(spec["modes"])))
+        agent = C2NavAgent({"dry_run": True, "backend": "fake"})
+        agent.model = model
+        agent.spec = spec
+        agent.bearings = bearings
+        agent._tokens = np.asarray(batch_np["tokens"][0], np.float32)
+        out_act = agent.act(PolicyInput(task={"target": "pig"}, match={}, memory={"pos": [0.0, 64.0, 0.0], "yaw": 0.0}))
+        self.assertIsNotNone(out_act)
 
 
 if __name__ == "__main__":
