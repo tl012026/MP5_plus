@@ -217,12 +217,18 @@ def C2NavNet(spec: dict):
             vis, sn, cs, log_d = target_geometry(
                 a["present_p"], a["log_dist"], batch["target_index"], batch["bearings"],
             )
-            geom = torch.stack([vis, sn, cs, log_d], dim=-1)
+            geom_from_a = torch.stack([vis, sn, cs, log_d], dim=-1)
+            if self.training and batch.get("geom") is not None:
+                geom = batch["geom"]
+                vis_out = geom[:, 0]
+            else:
+                geom = geom_from_a
+                vis_out = vis
             c = self.policy(geom, batch["s_vec"], batch["cond"])
             out = dict(a)
             out.update(c)
             out["geom"] = geom
-            out["vis"] = vis
+            out["vis"] = vis_out
             return out
 
     return _Net()

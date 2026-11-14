@@ -95,7 +95,7 @@ class WaypointTest(unittest.TestCase):
             "match": {"satisfied": {"target": False}, "missing": ["target"]},
         })
         self.assertTrue(row["used_wide"])
-        self.assertEqual(row["mode"], 1)
+        self.assertEqual(row["stop"], 0)
 
 
 class EasyTrainConfigTest(unittest.TestCase):
@@ -198,9 +198,9 @@ class SmokeDemoTest(unittest.TestCase):
             self.assertEqual(len(states), 3)
             labs = [labels_from_step(s) for s in packed["steps"]]
             self.assertEqual(labs[0]["mode"], 0)
-            self.assertEqual(labs[1]["mode"], 1)
-            self.assertEqual(labs[2]["mode"], 4)
-            self.assertTrue(labs[2]["stop"])
+            self.assertEqual(labs[1]["mode"], 2)
+            self.assertEqual(labs[2]["stop"], 1)
+            self.assertEqual(labs[2]["has_policy"], False)
             PolicyOutput(stop=True, info={"p_stop": 0.9})
             noise = TrackerNoise(drop_visible=1.0)
             noisy = replay(packed["steps"], noise=noise, rng=__import__("random").Random(0))
@@ -208,23 +208,22 @@ class SmokeDemoTest(unittest.TestCase):
 
 
 class WeightAndLabelTest(unittest.TestCase):
-    def test_class_weight_zeros_unseen(self):
+    def test_class_weight_errors_on_empty(self):
         from lfnav.policy.train_c2nav import class_weights, _label_int
 
-        w, counts = class_weights([0, 0, 1], 5)
-        self.assertGreater(float(w[0]), 0.0)
-        self.assertEqual(float(w[4]), 0.0)
-        self.assertEqual(int(counts[4]), 0)
-        seen = w[w > 0]
-        self.assertAlmostEqual(float(seen.mean()), 1.0, places=5)
+        with self.assertRaises(RuntimeError):
+            class_weights([0, 0, 1], 5)
+        w, counts = class_weights([0, 0, 1, 1], 2)
+        self.assertEqual(int(counts[0]), 2)
+        self.assertAlmostEqual(float(w.mean()), 1.0, places=5)
         self.assertEqual(_label_int({"forward_index": 0}, "forward_index", 1), 0)
         self.assertEqual(_label_int({}, "forward_index", 1), 1)
         from lfnav.policy.c2nav_labels import forward_index
 
         self.assertEqual(forward_index(0), 1)
         self.assertEqual(forward_index(-1), 0)
-        self.assertEqual(forward_index(4), 5)
-        self.assertEqual(forward_index(6), 5)
+        self.assertEqual(forward_index(2), 3)
+        self.assertEqual(forward_index(9), 3)
 
 
 @unittest.skipUnless(HAS_TORCH, "torch not installed on this host")

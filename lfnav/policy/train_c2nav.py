@@ -36,7 +36,6 @@ from lfnav.policy.c2nav_labels import (
     MODE_NAMES,
     N_TURN,
     branch_is_mapped,
-    clip_forward_blocks,
     flip_turn_index,
     forward_index,
     labels_from_step,
@@ -159,17 +158,25 @@ def _label_int(labels: dict | None, key: str, default: int) -> int:
     return int(value)
 
 
+def policy_supervised(row) -> bool:
+    if bool(row.has_c) is False:
+        return False
+    if bool(row.used_wide) is True:
+        return False
+    if int(row.stop) != 0:
+        return False
+    return True
+
+
 def _forward_class(labels: dict | None) -> tuple[int, bool]:
     if labels is None or labels.get("forward_index") is None:
         if labels is None or labels.get("forward") is None:
-            return 0, False
-        clipped, was = clip_forward_blocks(labels["forward"])
-        return forward_index(clipped), was
+            return 1, False
+        return forward_index(labels["forward"]), False
     idx = int(labels["forward_index"])
-    if 0 <= idx < len(FORWARD_BINS):
-        return idx, False
-    clipped, was = clip_forward_blocks(idx)
-    return forward_index(clipped), was
+    if idx < 0 or idx >= len(FORWARD_BINS):
+        raise RuntimeError(f"forward class {idx} outside 0..{len(FORWARD_BINS) - 1}")
+    return idx, False
 
 
 def _geom_from_obs(obs) -> np.ndarray:
@@ -244,9 +251,14 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
     )
     rows = []
     source = "gt_noisy"
+    last_feat = None
     for i, step, feat_row, present, log_d, ignore, obs_clean in parsed:
         if feat_row is None:
-            continue
+            if last_feat is None:
+                continue
+            feat_row = last_feat
+        else:
+            last_feat = feat_row
         labels = labels_from_step(step, radius=radius)
         has_c = labels is not None
         used_wide = bool((labels or {}).get("used_wide"))
@@ -336,7 +348,7 @@ def print_label_stats(name: str, rows: list[NavSample], spec: dict) -> dict:
     n = len(rows)
     ignored = sum(1 for r in rows if not r.has_c)
     wide = sum(1 for r in rows if r.has_c and r.used_wide)
-    usable = [r for r in rows if r.has_c and not r.used_wide]
+    usable = [r for r in rows if policy_supervised(r)]
     mode_c = Counter(r.mode for r in usable)
     turn_c = Counter(r.turn for r in usable)
     fwd_c = Counter(r.forward for r in usable)
@@ -397,21 +409,18 @@ def class_counts(values: list[int], n: int) -> np.ndarray:
 
 
 def class_weights(values: list[int], n: int, cap: float = 10.0) -> tuple[np.ndarray, np.ndarray]:
-    """Unseen classes get weight 0. Seen: min(10, sqrt(N/(K n_c))), then mean 1."""
+    """w_c = min(10, sqrt(N/(K n_c))), then mean 1. Empty class raises."""
     counts = class_counts(values, n)
-    w = np.zeros(n, np.float32)
-    seen = counts > 0
-    k = int(seen.sum())
     total = float(counts.sum())
-    if k == 0 or total <= 0:
-        return w, counts
-    raw = np.sqrt(total / (k * counts[seen]))
+    empty = [i for i in range(int(n)) if counts[i] == 0]
+    if len(empty) != 0 or total <= 0 or int(n) <= 0:
+        raise RuntimeError(f"empty class counts={counts.tolist()} N={total} K={int(n)} empty={empty}")
+    raw = np.sqrt(total / (float(n) * counts))
     raw = np.minimum(raw, float(cap))
     mean = float(raw.mean())
     if mean > 0:
         raw = raw / mean
-    w[seen] = raw.astype(np.float32)
-    return w, counts
+    return raw.astype(np.float32), counts
 
 
 def stop_pos_weight(rows: list[NavSample]) -> float:
@@ -525,7 +534,7 @@ def nav_loss(out, batch, weights, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth
     # Each global CE is already a batch mean; L_global is the mean of those four.
     loss_g = torch.stack([loss_biome, loss_time, loss_weather, loss_bright]).mean()
     loss_a = loss_p + loss_d + loss_g
-    c_mask = (batch["has_c"] > 0.5) & (batch["used_wide"] < 0.5)
+    c_mask = (batch["has_c"] > 0.5) & (batch["used_wide"] < 0.5) & (batch["stop"] < 0.5)
     if c_mask.any():
         mode_logits = _mask_unseen_logits(out["mode"][c_mask], mode_w)
         turn_logits = _mask_unseen_logits(out["turn"][c_mask], turn_w)
@@ -648,7 +657,7 @@ def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cf
             batch = _to_torch(collate(chunk, tokens, False, rng), device, bearings=bearings)
             out = heads_out(model, batch)
             for i, row in enumerate(chunk):
-                if row.has_c and not row.used_wide:
+                if policy_supervised(row):
                     y_mode.append(row.mode)
                     p_mode.append(int(out["mode"][i].argmax().item()))
                     y_turn.append(row.turn)
@@ -853,7 +862,7 @@ def train_loop(cfg: dict, feat_dir: Path, out: Path, epochs: int, batch_size: in
     opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=float((cfg.get("c2nav") or {}).get("weight_decay") or 0.05))
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max(epochs, 1))
     pos_w = torch.as_tensor(_presence_pos_weight(train, len(spec["objects"])), device=device)
-    usable = [r for r in train if r.has_c and not r.used_wide]
+    usable = [r for r in train if policy_supervised(r)]
     mode_w, mode_n = class_weights([r.mode for r in usable], len(MODE_NAMES))
     turn_w, turn_n = class_weights([r.turn for r in usable], N_TURN)
     fwd_w, fwd_n = class_weights([r.forward for r in usable], len(FORWARD_BINS))

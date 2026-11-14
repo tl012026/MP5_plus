@@ -250,6 +250,10 @@ class CheckpointRuntimeTest(unittest.TestCase):
             self.assertIn("policy.*", str(ctx.exception))
 
 
+@unittest.skipUnless(
+    os.environ.get("LFNAV_SLOW_TESTS") == "1",
+    "scans real demos/features; set LFNAV_SLOW_TESTS=1 to run",
+)
 class ScratchReplayTest(unittest.TestCase):
     """Replay 2–3 real demos. Requires env vars (skip lists whichever is missing):
 
