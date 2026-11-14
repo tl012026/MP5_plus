@@ -1,0 +1,16 @@
+diff --git a/src/model/openlamm.py b/src/model/openlamm.py
+index e313fb9..664ee96 100644
+--- a/src/model/openlamm.py
++++ b/src/model/openlamm.py
+@@ -13,7 +13,10 @@ from transformers import StoppingCriteria, StoppingCriteriaList
+ from .CLIP import load as load_clip
+ from .MINECLIP import load as load_mineclip
+ 
+-from .modeling_lightllm import LlamaLightForCausalLM
++try:  # MP5_plus: lightllm is only needed when use_lightllm=True
++    from .modeling_lightllm import LlamaLightForCausalLM
++except ImportError:
++    LlamaLightForCausalLM = None
+ from .modeling_llama import LlamaForCausalLM
+ from .utils.pcl_utils import MEAN_COLOR_RGB, RandomCuboid, random_sampling
+ from .utils.data import transform_vision_data
