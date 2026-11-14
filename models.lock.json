@@ -1,0 +1,56 @@
+{
+  "_comment": "MineLLM (Percipient) weights for MP5 reproduction. Files were already present in /scratch/wz2999/MP5_plus/LAMM (placed 2026-11-13, original download commit unknown); on 2026-11-14 they were verified against the HuggingFace LFS sha256 at the commits below, moved to /scratch/wz2999/models/, and symlinked back. Symlink paths are relative to the repo root (LAMM/ is git-ignored; it is a clone of IranQin/LAMM).",
+  "lamm_code": {
+    "source": "https://github.com/IranQin/LAMM",
+    "commit": "52303e6e23559c86b23dee08b15e26600db0dfcc",
+    "path": "LAMM/"
+  },
+  "weights": {
+    "minellm_delta": {
+      "source": "huggingface:IranQin/MineLLM",
+      "hf_path": "Mine_52k_Vicuna_13b_v1.5_epoch_3_mlp2x_gelu/",
+      "hf_commit": "030971fd70f44ffe4e7d9bbe4f52e8d66d08c925",
+      "real_path": "/scratch/wz2999/models/minellm/Mine_52k_Vicuna_13b_v1.5_epoch_3_mlp2x_gelu/",
+      "symlink": "LAMM/ckpt/Mine_52k_Vicuna_13b_v1.5_epoch_3_mlp2x_gelu",
+      "files": {
+        "pytorch_model.pt": { "size": 165228971, "sha256": "8d248fbae4d47652f4863a1bfd2ec46081fc2f8a02b3de2cd1078e2209b16ee7", "hf_lfs_match": true },
+        "tokenizer.model": { "size": 499723, "sha256": "9e556afd44213b6bd1be2b850ebbbd98f5481437a8021afaf58ee7fb1818d347", "hf_lfs_match": true },
+        "config.json": { "size": 657, "sha256": "63af6a404594103601127ee452b0d23dcaacdbd3715d14f35216fb52fe20caf2", "hf_git_blob_match": true },
+        "special_tokens_map.json": { "size": 437, "sha256": "4452b845ab9ca2afa863f59f1411a959e8a32bb4334e264b0e71d5d17dd4dcb9", "hf_git_blob_match": true },
+        "tokenizer_config.json": { "size": 770, "sha256": "d2382a5affd7eafe0b0a03fa1800ec3ee1ef5f2b05c5d237c5037e792a900871", "hf_git_blob_match": true }
+      },
+      "placed_date": "2026-11-13",
+      "verified_date": "2026-11-14"
+    },
+    "vicuna_13b_v1_5": {
+      "source": "huggingface:lmsys/vicuna-13b-v1.5",
+      "hf_commit": "c8327bf999adbd2efe2e75f6509fa01436100dc2",
+      "real_path": "/scratch/wz2999/models/vicuna-13b-v1.5/",
+      "symlink": "LAMM/model_zoo/vicuna_ckpt/13b_v1.5",
+      "files": {
+        "pytorch_model-00001-of-00003.bin": { "size": 9948728430, "sha256": "e9b54ba4bf8f87c6129f1e35c63d1ed248971d827ee5559f1a3bb48b39e43187", "hf_lfs_match": true },
+        "pytorch_model-00002-of-00003.bin": { "size": 9904165024, "sha256": "ade40ae3180cbe5553278edb8e61ff4f2059f62be12b06f253b373838c199221", "hf_lfs_match": true },
+        "pytorch_model-00003-of-00003.bin": { "size": 6178983625, "sha256": "b4bd8cf2ab7e7bf22aaaf9b35ec5d41602d83f5a97bb82e17662ffe0a20ab215", "hf_lfs_match": true },
+        "tokenizer.model": { "size": 499723, "sha256": "9e556afd44213b6bd1be2b850ebbbd98f5481437a8021afaf58ee7fb1818d347", "hf_lfs_match": true },
+        "pytorch_model.bin.index.json": { "size": 33444, "sha256": "7f6e735d80e3a51b1f270fd60599edad3bdf4c306f7f23a8b41172ceecfcebc5", "hf_git_blob_match": true },
+        "config.json": { "size": 638, "sha256": "ff01ad505c4699a6be3bfc9365dce9e4205d35cb3a2a1df10a79ceb52ab5d2ed", "hf_git_blob_match": true },
+        "generation_config.json": { "size": 192, "sha256": "684451ef5b02bb2883d15bff0aef7be79726bdd936ea45e599248e073d5b4d2f", "hf_git_blob_match": true },
+        "special_tokens_map.json": { "size": 438, "sha256": "719833ff26ac897a3ec8ed946028a135de2a351470af59b4008744ab1f0ee9b7", "hf_git_blob_match": true },
+        "tokenizer_config.json": { "size": 749, "sha256": "1cbc84c8a5b41e0ec24e0da66677773569fb0ccfa753d5d184e343e2ec3815a0", "hf_git_blob_match": true }
+      },
+      "placed_date": "2026-11-13",
+      "verified_date": "2026-11-14"
+    },
+    "mineclip_image_encoder": {
+      "source": "https://drive.google.com/file/d/1EGZLIefb8OsJ3mFCq9-AcSaG2GZRuech/view (linked from https://github.com/IranQin/MP5 README)",
+      "hf_commit": null,
+      "real_path": "/scratch/wz2999/models/mineclip/mineclip_image_encoder_vit-B_196tokens.pth",
+      "symlink": "LAMM/model_zoo/mineclip_ckpt/mineclip_image_encoder_vit-B_196tokens.pth",
+      "files": {
+        "mineclip_image_encoder_vit-B_196tokens.pth": { "size": 344820535, "sha256": "e61c78744bfc83eefd3cd786965a494a902121c8e34df0e07a6b43055e4de593" }
+      },
+      "placed_date": "2026-11-13",
+      "verified_date": "2026-11-14"
+    }
+  }
+}
