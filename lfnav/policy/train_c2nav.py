@@ -608,18 +608,24 @@ def heads_out(model, batch):
     return out
 
 
-def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cfg: dict, bearings) -> dict:
+def _metric(value, n: int) -> dict:
+    return {"value": None if n <= 0 else value, "n": int(n)}
+
+
+def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cfg: dict, bearings, warn_empty_stop: bool = True) -> dict:
     import torch
 
+    empty_mode = {name: _metric(None, 0) for name in MODE_NAMES}
     if not rows:
         return {
-            "mode_acc": None,
-            "mode_acc_by_name": {name: None for name in MODE_NAMES},
-            "turn_acc": None,
-            "stop_f1": None,
-            "stop_auc": None,
-            "present_auc": None,
-            "log_dist_mae": None,
+            "mode_acc": _metric(None, 0),
+            "mode_acc_by_name": empty_mode,
+            "turn_acc": _metric(None, 0),
+            "forward_acc": _metric(None, 0),
+            "stop_f1": _metric(None, 0),
+            "stop_auc": _metric(None, 0),
+            "present_auc": _metric(None, 0),
+            "log_dist_mae": _metric(None, 0),
             "n": 0,
         }
     model.eval()
@@ -627,8 +633,10 @@ def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cf
     y_mode, p_mode = [], []
     y_stop, p_stop = [], []
     y_turn, p_turn = [], []
+    y_fwd, p_fwd = [], []
     present_y, present_p = [], []
     dist_err = []
+    n_dist = 0
     bs = 16
     with torch.no_grad():
         for start in range(0, len(rows), bs):
@@ -641,6 +649,8 @@ def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cf
                     p_mode.append(int(out["mode"][i].argmax().item()))
                     y_turn.append(row.turn)
                     p_turn.append(int(out["turn"][i].argmax().item()))
+                    y_fwd.append(row.forward)
+                    p_fwd.append(int(out["forward"][i].argmax().item()))
                 if row.has_c:
                     y_stop.append(int(row.stop))
                     p_stop.append(float(torch.sigmoid(out["stop"][i]).item()))
@@ -652,41 +662,58 @@ def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cf
                     if exist.any():
                         pred = out["log_dist"][i].detach().cpu().numpy()[exist]
                         dist_err.append(float(np.mean(np.abs(pred - row.log_dist[exist]))))
+                        n_dist += int(exist.sum())
     def acc(y, p):
-        return None if not y else float(np.mean(np.asarray(y) == np.asarray(p)))
-    f1 = None
-    if y_stop:
+        n = len(y)
+        if n == 0:
+            return _metric(None, 0)
+        return _metric(float(np.mean(np.asarray(y) == np.asarray(p))), n)
+
+    n_stop = len(y_stop)
+    n_pos = int(sum(y_stop))
+    f1_val = None
+    auc_val = None
+    if n_stop == 0 or n_pos == 0:
+        if warn_empty_stop and n_stop >= 0:
+            print("验证集无停止正样本", flush=True)
+        f1_val = None
+        auc_val = None
+    else:
         pred = [1 if v >= 0.5 else 0 for v in p_stop]
         tp = sum(1 for a, b in zip(y_stop, pred) if a == 1 and b == 1)
         fp = sum(1 for a, b in zip(y_stop, pred) if a == 0 and b == 1)
         fn = sum(1 for a, b in zip(y_stop, pred) if a == 1 and b == 0)
-        if tp + fp + fn == 0:
-            f1 = None
-        else:
-            prec = tp / max(tp + fp, 1)
-            rec = tp / max(tp + fn, 1)
-            f1 = 2 * prec * rec / max(prec + rec, 1e-9)
-    mode_acc = {name: None for name in MODE_NAMES}
+        prec = tp / max(tp + fp, 1)
+        rec = tp / max(tp + fn, 1)
+        f1_val = 2 * prec * rec / max(prec + rec, 1e-9)
+        auc_val = _binary_auc(y_stop, p_stop)
+    mode_acc = {}
     if y_mode:
         y_mode_a = np.asarray(y_mode)
         p_mode_a = np.asarray(p_mode)
         for i, name in enumerate(MODE_NAMES):
             m = y_mode_a == i
-            mode_acc[name] = None if not m.any() else float(np.mean(p_mode_a[m] == i))
+            n_c = int(m.sum())
+            mode_acc[name] = _metric(None if n_c == 0 else float(np.mean(p_mode_a[m] == i)), n_c)
+    else:
+        mode_acc = empty_mode
     py = np.concatenate(present_y) if present_y else np.zeros(0)
     pp = np.concatenate(present_p) if present_p else np.zeros(0)
+    present_auc = None if py.size == 0 else _binary_auc((py > 0.5).astype(int), pp)
     return {
         "mode_acc": acc(y_mode, p_mode),
         "mode_acc_by_name": mode_acc,
         "turn_acc": acc(y_turn, p_turn),
-        "stop_f1": f1,
-        "stop_auc": _binary_auc(y_stop, p_stop),
-        "present_auc": _binary_auc((py > 0.5).astype(int), pp) if py.size else None,
-        "log_dist_mae": None if not dist_err else float(np.mean(dist_err)),
+        "forward_acc": acc(y_fwd, p_fwd),
+        "stop_f1": _metric(f1_val, n_pos),
+        "stop_auc": _metric(auc_val, n_pos),
+        "present_auc": _metric(present_auc, int(py.size)),
+        "log_dist_mae": _metric(None if not dist_err else float(np.mean(dist_err)), n_dist),
         "pred_mode": {MODE_NAMES[i]: int(p_mode.count(i)) for i in range(len(MODE_NAMES))} if p_mode else None,
         "n": len(rows),
         "n_mode": len(y_mode),
-        "n_stop": len(y_stop),
+        "n_stop": n_stop,
+        "n_stop_pos": n_pos,
     }
 
 
@@ -740,7 +767,7 @@ def overfit_check(cfg: dict, feat_dir: Path, seed: int = 0) -> dict:
         opt.step()
         if step in (0, 49, 99, 199):
             print(f"overfit step={step} loss={float(loss.item()):.4f} parts={json.dumps(parts)}", flush=True)
-    metrics = offline_metrics(model, subset, tokens, device, spec, cfg, bearings)
+    metrics = offline_metrics(model, subset, tokens, device, spec, cfg, bearings, warn_empty_stop=False)
     after = float(parts["total"])
     print(f"overfit done before={before:.4f} after={after:.4f} metrics={json.dumps(metrics, default=str)}", flush=True)
     return {"before": before, "after": after, "metrics": metrics}
@@ -878,7 +905,10 @@ def train_loop(cfg: dict, feat_dir: Path, out: Path, epochs: int, batch_size: in
             first_parts = avg_parts
             print(f"c2nav loss epoch_1 {json.dumps(first_parts)}", flush=True)
         last_parts = avg_parts
-        metrics = offline_metrics(model, val or train[: min(64, len(train))], tokens, device, spec, cfg, bearings)
+        metrics = offline_metrics(
+            model, val or train[: min(64, len(train))], tokens, device, spec, cfg, bearings,
+            warn_empty_stop=bool(val),
+        )
         metrics["train_loss"] = running / max(n_b, 1)
         metrics["loss_parts"] = avg_parts
         ckpt = out / f"epoch_{epoch:02d}.pt"
