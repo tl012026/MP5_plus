@@ -32,7 +32,7 @@ from lfnav.policy.c2nav import (
     spec_from_cfg,
     structure_record,
 )
-from lfnav.policy.c2nav_labels import FORWARD_BINS, MODE_NAMES, N_TURN, flip_turn_index, labels_from_step
+from lfnav.policy.c2nav_labels import FORWARD_BINS, MODE_NAMES, N_TURN, flip_turn_index, labels_from_step, mode_from_branch
 from lfnav.policy.state_tracker import STEPS_NORM, TrackerNoise, flip_vector, observation_from_step, replay
 
 
@@ -123,6 +123,13 @@ class NavSample:
     seed: int
     world_seed: int
     episode_id: str
+    branch: str = ""
+
+
+def _label_int(labels: dict | None, key: str, default: int) -> int:
+    if not labels or labels.get(key) is None:
+        return int(default)
+    return int(labels[key])
 
 
 def _geom_from_obs(obs) -> np.ndarray:
@@ -180,15 +187,16 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
             cond=encode_match(step.get("match"), objects),
             geom=geom,
             target_index=target_index,
-            mode=int((labels or {}).get("mode") or 0),
-            turn=int((labels or {}).get("turn_index") or 0),
-            forward=int((labels or {}).get("forward_index") or 1),
-            stop=int((labels or {}).get("stop") or 0),
+            mode=_label_int(labels, "mode", 0),
+            turn=_label_int(labels, "turn_index", 0),
+            forward=_label_int(labels, "forward_index", 1),
+            stop=_label_int(labels, "stop", 0),
             used_wide=used_wide,
             has_c=has_c,
             seed=seed,
             world_seed=seed,
             episode_id=episode_id,
+            branch=str(step.get("expert_branch") or ""),
         ))
     return rows
 
@@ -228,7 +236,47 @@ def load_split(cfg: dict, feat_dir: Path) -> tuple[list[NavSample], list[NavSamp
     stats["grid"] = list(index.get("grid") or tokens.shape[1:3])
     stats["dim"] = int(index.get("dim") or tokens.shape[-1])
     print(f"c2nav samples train={len(train)} val={len(val)} episodes={len(episodes)}", flush=True)
+    print_label_stats("train", train, spec)
+    print_label_stats("val", val, spec)
     return train, val, stats
+
+
+def print_label_stats(name: str, rows: list[NavSample], spec: dict) -> dict:
+    from collections import Counter
+
+    n = len(rows)
+    ignored = sum(1 for r in rows if not r.has_c)
+    wide = sum(1 for r in rows if r.has_c and r.used_wide)
+    usable = [r for r in rows if r.has_c and not r.used_wide]
+    mode_c = Counter(r.mode for r in usable)
+    turn_c = Counter(r.turn for r in usable)
+    fwd_c = Counter(r.forward for r in usable)
+    branch_c = Counter(r.branch or "(empty)" for r in rows)
+    mapped = {}
+    for raw, cnt in sorted(branch_c.items()):
+        idx, wide_b = mode_from_branch(None if raw == "(empty)" else raw, raw == "wide_turn")
+        mapped[raw] = {"count": cnt, "mode": MODE_NAMES[idx], "mode_index": idx, "used_wide": wide_b}
+    stop_pos = sum(r.stop for r in rows if r.has_c)
+    stop_n = sum(1 for r in rows if r.has_c)
+    pos_cells = 0
+    tot_cells = 0
+    for r in rows:
+        m = r.ignore < 0.5
+        tot_cells += int(r.present[:, m].size)
+        pos_cells += int((r.present[:, m] > 0.5).sum())
+    stats = {
+        "n": n,
+        "ignored_no_c": ignored,
+        "used_wide": wide,
+        "mode": {MODE_NAMES[i]: int(mode_c.get(i, 0)) for i in range(len(MODE_NAMES))},
+        "turn": {str(i): int(turn_c.get(i, 0)) for i in range(N_TURN)},
+        "forward": {str(FORWARD_BINS[i]): int(fwd_c.get(i, 0)) for i in range(len(FORWARD_BINS))},
+        "stop_pos_frac": None if stop_n == 0 else stop_pos / stop_n,
+        "present_pos_frac": None if tot_cells == 0 else pos_cells / tot_cells,
+        "expert_branch": mapped,
+    }
+    print(f"c2nav labels {name} {json.dumps(stats, default=str)}", flush=True)
+    return stats
 
 
 def _presence_pos_weight(rows: list[NavSample], n_obj: int) -> np.ndarray:
@@ -247,13 +295,38 @@ def _presence_pos_weight(rows: list[NavSample], n_obj: int) -> np.ndarray:
     return w
 
 
-def _class_weight(values: list[int], n: int) -> np.ndarray:
-    counts = np.ones(n, np.float64)
+def class_counts(values: list[int], n: int) -> np.ndarray:
+    counts = np.zeros(n, np.float64)
     for v in values:
         if 0 <= int(v) < n:
             counts[int(v)] += 1
-    w = counts.sum() / (n * counts)
-    return w.astype(np.float32)
+    return counts
+
+
+def class_weights(values: list[int], n: int, cap: float = 10.0) -> tuple[np.ndarray, np.ndarray]:
+    """Unseen classes get weight 0. Seen: min(10, sqrt(N/(K n_c))), then mean 1."""
+    counts = class_counts(values, n)
+    w = np.zeros(n, np.float32)
+    seen = counts > 0
+    k = int(seen.sum())
+    total = float(counts.sum())
+    if k == 0 or total <= 0:
+        return w, counts
+    raw = np.sqrt(total / (k * counts[seen]))
+    raw = np.minimum(raw, float(cap))
+    mean = float(raw.mean())
+    if mean > 0:
+        raw = raw / mean
+    w[seen] = raw.astype(np.float32)
+    return w, counts
+
+
+def stop_pos_weight(rows: list[NavSample]) -> float:
+    n_pos = sum(int(r.stop) for r in rows if r.has_c)
+    n_neg = sum(1 for r in rows if r.has_c) - n_pos
+    if n_pos <= 0:
+        raise RuntimeError("no stop positives in the training set")
+    return float(min(10.0, n_neg / float(n_pos)))
 
 
 def flip_sample(sample: NavSample) -> NavSample:
@@ -279,6 +352,7 @@ def flip_sample(sample: NavSample) -> NavSample:
         seed=sample.seed,
         world_seed=sample.world_seed,
         episode_id=sample.episode_id,
+        branch=sample.branch,
     )
 
 
@@ -316,6 +390,16 @@ def collate(rows: list[NavSample], tokens, flip: bool, rng: random.Random) -> di
     }
 
 
+def _mask_unseen_logits(logits, weight):
+    import torch
+
+    valid = weight > 0
+    if bool(valid.all()):
+        return logits
+    fill = torch.full_like(logits, -1.0e9)
+    return torch.where(valid.unsqueeze(0), logits, fill)
+
+
 def nav_loss(out, batch, weights, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth: float):
     import torch
     from torch.nn import functional as F
@@ -334,22 +418,26 @@ def nav_loss(out, batch, weights, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth
         loss_d = F.smooth_l1_loss(out["log_dist"][mask_d], batch["log_dist"][mask_d])
     else:
         loss_d = present.new_zeros(())
-    loss_g = (
-        F.cross_entropy(out["biome"], batch["biome"])
-        + F.cross_entropy(out["time"], batch["time"])
-        + F.cross_entropy(out["weather"], batch["weather"])
-        + F.cross_entropy(out["brightness"], batch["brightness"])
-    )
+    loss_biome = F.cross_entropy(out["biome"], batch["biome"])
+    loss_time = F.cross_entropy(out["time"], batch["time"])
+    loss_weather = F.cross_entropy(out["weather"], batch["weather"])
+    loss_bright = F.cross_entropy(out["brightness"], batch["brightness"])
+    loss_g = 0.25 * (loss_biome + loss_time + loss_weather + loss_bright)
     loss_a = loss_p + loss_d + loss_g
     c_mask = (batch["has_c"] > 0.5) & (batch["used_wide"] < 0.5)
     if c_mask.any():
-        loss_mode = F.cross_entropy(out["mode"][c_mask], batch["mode"][c_mask], weight=mode_w, label_smoothing=smooth)
-        loss_turn = F.cross_entropy(out["turn"][c_mask], batch["turn"][c_mask], weight=turn_w, label_smoothing=smooth)
-        loss_fwd = F.cross_entropy(out["forward"][c_mask], batch["forward"][c_mask], weight=fwd_w, label_smoothing=smooth)
-        loss_wp = loss_turn + loss_fwd
+        mode_logits = _mask_unseen_logits(out["mode"][c_mask], mode_w)
+        turn_logits = _mask_unseen_logits(out["turn"][c_mask], turn_w)
+        fwd_logits = _mask_unseen_logits(out["forward"][c_mask], fwd_w)
+        loss_mode = F.cross_entropy(mode_logits, batch["mode"][c_mask], weight=mode_w, label_smoothing=smooth)
+        loss_turn = F.cross_entropy(turn_logits, batch["turn"][c_mask], weight=turn_w, label_smoothing=smooth)
+        loss_fwd = F.cross_entropy(fwd_logits, batch["forward"][c_mask], weight=fwd_w, label_smoothing=smooth)
+        loss_wp = 0.5 * (loss_turn + loss_fwd)
     else:
         loss_mode = present.new_zeros(())
         loss_wp = present.new_zeros(())
+        loss_turn = present.new_zeros(())
+        loss_fwd = present.new_zeros(())
     if (batch["has_c"] > 0.5).any():
         stop_mask = batch["has_c"] > 0.5
         loss_stop = F.binary_cross_entropy_with_logits(
@@ -365,9 +453,19 @@ def nav_loss(out, batch, weights, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth
     )
     return total, {
         "a": float(loss_a.detach().item()),
+        "present": float(loss_p.detach().item()),
+        "log_dist": float(loss_d.detach().item()),
+        "global": float(loss_g.detach().item()),
+        "biome": float(loss_biome.detach().item()),
+        "time": float(loss_time.detach().item()),
+        "weather": float(loss_weather.detach().item()),
+        "brightness": float(loss_bright.detach().item()),
         "mode": float(loss_mode.detach().item()),
         "wp": float(loss_wp.detach().item()),
+        "turn": float(loss_turn.detach().item()),
+        "forward": float(loss_fwd.detach().item()),
         "stop": float(loss_stop.detach().item()),
+        "total": float(total.detach().item()),
     }
 
 
@@ -385,16 +483,44 @@ def _to_torch(batch, device, bearings=None):
     return out
 
 
+def _binary_auc(y, p) -> float | None:
+    y = np.asarray(y, dtype=np.int32)
+    p = np.asarray(p, dtype=np.float64)
+    if y.size == 0 or p.size == 0 or y.min() == y.max():
+        return None
+    order = np.argsort(p)
+    y_sorted = y[order]
+    n_pos = float((y == 1).sum())
+    n_neg = float((y == 0).sum())
+    if n_pos == 0 or n_neg == 0:
+        return None
+    ranks = np.arange(1, y.size + 1, dtype=np.float64)
+    return float((ranks[y_sorted == 1].sum() - n_pos * (n_pos + 1) / 2.0) / (n_pos * n_neg))
+
+
+def heads_out(model, batch):
+    """A from tokens; C from GT geom so policy metrics match the training objective."""
+    a = model.perception(batch["tokens"])
+    c = model.policy(batch["geom"], batch["s_vec"], batch["cond"])
+    out = dict(a)
+    out.update(c)
+    return out
+
+
 def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cfg: dict, bearings) -> dict:
     import torch
 
-    try:
-        from sklearn.metrics import roc_auc_score
-    except ImportError:
-        roc_auc_score = None
-
     if not rows:
-        return {}
+        return {
+            "mode_acc": None,
+            "mode_acc_by_name": {name: None for name in MODE_NAMES},
+            "turn_acc": None,
+            "stop_f1": None,
+            "stop_auc": None,
+            "present_auc": None,
+            "log_dist_mae": None,
+            "n": 0,
+        }
     model.eval()
     rng = random.Random(0)
     y_mode, p_mode = [], []
@@ -407,7 +533,7 @@ def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cf
         for start in range(0, len(rows), bs):
             chunk = rows[start : start + bs]
             batch = _to_torch(collate(chunk, tokens, False, rng), device, bearings=bearings)
-            out = model(batch)
+            out = heads_out(model, batch)
             for i, row in enumerate(chunk):
                 if row.has_c and not row.used_wide:
                     y_mode.append(row.mode)
@@ -415,71 +541,52 @@ def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cf
                     y_turn.append(row.turn)
                     p_turn.append(int(out["turn"][i].argmax().item()))
                 if row.has_c:
-                    y_stop.append(row.stop)
+                    y_stop.append(int(row.stop))
                     p_stop.append(float(torch.sigmoid(out["stop"][i]).item()))
                 mask = row.ignore < 0.5
-                present_y.append(row.present[:, mask].reshape(-1))
-                present_p.append(out["present_p"][i].detach().cpu().numpy()[:, mask].reshape(-1))
-                exist = (row.present > 0.5) & mask
-                if exist.any():
-                    pred = out["log_dist"][i].detach().cpu().numpy()[exist]
-                    dist_err.append(float(np.mean(np.abs(pred - row.log_dist[exist]))))
+                if mask.any():
+                    present_y.append(row.present[:, mask].reshape(-1))
+                    present_p.append(out["present_p"][i].detach().cpu().numpy()[:, mask].reshape(-1))
+                    exist = (row.present > 0.5) & mask
+                    if exist.any():
+                        pred = out["log_dist"][i].detach().cpu().numpy()[exist]
+                        dist_err.append(float(np.mean(np.abs(pred - row.log_dist[exist]))))
     def acc(y, p):
         return None if not y else float(np.mean(np.asarray(y) == np.asarray(p)))
-    auc = None
-    try:
-        if roc_auc_score is not None and y_stop and len(set(y_stop)) > 1:
-            auc = float(roc_auc_score(y_stop, p_stop))
-    except Exception:
-        auc = None
     f1 = None
     if y_stop:
         pred = [1 if v >= 0.5 else 0 for v in p_stop]
         tp = sum(1 for a, b in zip(y_stop, pred) if a == 1 and b == 1)
         fp = sum(1 for a, b in zip(y_stop, pred) if a == 0 and b == 1)
         fn = sum(1 for a, b in zip(y_stop, pred) if a == 1 and b == 0)
-        prec = tp / max(tp + fp, 1)
-        rec = tp / max(tp + fn, 1)
-        f1 = 2 * prec * rec / max(prec + rec, 1e-9)
-    mode_acc = {}
+        if tp + fp + fn == 0:
+            f1 = None
+        else:
+            prec = tp / max(tp + fp, 1)
+            rec = tp / max(tp + fn, 1)
+            f1 = 2 * prec * rec / max(prec + rec, 1e-9)
+    mode_acc = {name: None for name in MODE_NAMES}
     if y_mode:
         y_mode_a = np.asarray(y_mode)
         p_mode_a = np.asarray(p_mode)
         for i, name in enumerate(MODE_NAMES):
             m = y_mode_a == i
             mode_acc[name] = None if not m.any() else float(np.mean(p_mode_a[m] == i))
-    try:
-        py = np.concatenate(present_y) if present_y else np.zeros(0)
-        pp = np.concatenate(present_p) if present_p else np.zeros(0)
-        present_auc = float(roc_auc_score(py > 0.5, pp)) if roc_auc_score is not None and py.size and len(set((py > 0.5).astype(int))) > 1 else None
-    except Exception:
-        present_auc = None
+    py = np.concatenate(present_y) if present_y else np.zeros(0)
+    pp = np.concatenate(present_p) if present_p else np.zeros(0)
     return {
         "mode_acc": acc(y_mode, p_mode),
         "mode_acc_by_name": mode_acc,
         "turn_acc": acc(y_turn, p_turn),
         "stop_f1": f1,
-        "stop_auc": auc,
-        "present_auc": present_auc,
+        "stop_auc": _binary_auc(y_stop, p_stop),
+        "present_auc": _binary_auc((py > 0.5).astype(int), pp) if py.size else None,
         "log_dist_mae": None if not dist_err else float(np.mean(dist_err)),
+        "pred_mode": {MODE_NAMES[i]: int(p_mode.count(i)) for i in range(len(MODE_NAMES))} if p_mode else None,
         "n": len(rows),
+        "n_mode": len(y_mode),
+        "n_stop": len(y_stop),
     }
-
-
-def submit_val(ckpt: Path, val_out: Path, cfg_path: Path | None = None) -> None:
-    script = _ROOT / "lfnav" / "eval" / "val_c2nav.sbatch"
-    if not script.is_file():
-        print(f"val script missing: {script}", flush=True)
-        return
-    export = f"ALL,CKPT={ckpt},VAL_OUT={val_out}"
-    if cfg_path is not None:
-        export += f",CFG={cfg_path}"
-    cmd = ["sbatch", f"--export={export}", str(script)]
-    try:
-        subprocess.run(cmd, check=False)
-        print(f"submitted val for {ckpt}", flush=True)
-    except FileNotFoundError:
-        print("sbatch not on PATH; skip val submit", flush=True)
 
 
 def save_checkpoint(path: Path, model, spec: dict, epoch: int, metrics: dict, extra: dict | None = None) -> None:
@@ -491,6 +598,51 @@ def save_checkpoint(path: Path, model, spec: dict, epoch: int, metrics: dict, ex
         payload["meta"].update(extra)
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(payload, path)
+
+
+def overfit_check(cfg: dict, feat_dir: Path, seed: int = 0) -> dict:
+    import torch
+
+    spec = spec_from_cfg(cfg)
+    spec["dropout"] = 0.0
+    train, _val, _stats = load_split(cfg, feat_dir)
+    if len(train) < 2:
+        raise RuntimeError("need training samples for overfit check")
+    rng = random.Random(seed)
+    subset = [train[i] for i in rng.sample(range(len(train)), k=min(64, len(train)))]
+    tokens, _, index = load_memmaps(feat_dir)
+    spec["dim"] = int(index.get("dim") or spec["dim"])
+    spec["grid"] = tuple(index.get("grid") or spec["grid"])
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    torch.manual_seed(seed)
+    model = C2NavNet(spec).to(device)
+    opt = torch.optim.AdamW(model.parameters(), lr=1e-2, weight_decay=0.0)
+    k = len(spec["objects"])
+    pos_w = torch.ones(k, device=device)
+    mode_w = torch.ones(len(MODE_NAMES), device=device)
+    turn_w = torch.ones(N_TURN, device=device)
+    fwd_w = torch.ones(len(FORWARD_BINS), device=device)
+    stop_pos = torch.tensor(1.0, device=device)
+    wts = {"a": 1.0, "mode": 1.0, "wp": 1.0, "stop": 1.0}
+    bearings = patch_bearings(spec["grid"][0], spec["grid"][1], cfg)
+    batch = _to_torch(collate(subset, tokens, False, random.Random(0)), device, bearings=bearings)
+    model.train()
+    out0 = heads_out(model, batch)
+    before, parts0 = nav_loss(out0, batch, wts, pos_w, mode_w, turn_w, fwd_w, stop_pos, 0.0)
+    before = float(before.item())
+    print(f"overfit loss_init {json.dumps(parts0)}", flush=True)
+    for step in range(200):
+        opt.zero_grad()
+        out_b = heads_out(model, batch)
+        loss, parts = nav_loss(out_b, batch, wts, pos_w, mode_w, turn_w, fwd_w, stop_pos, 0.0)
+        loss.backward()
+        opt.step()
+        if step in (0, 49, 99, 199):
+            print(f"overfit step={step} loss={float(loss.item()):.4f} parts={json.dumps(parts)}", flush=True)
+    metrics = offline_metrics(model, subset, tokens, device, spec, cfg, bearings)
+    after = float(parts["total"])
+    print(f"overfit done before={before:.4f} after={after:.4f} metrics={json.dumps(metrics, default=str)}", flush=True)
+    return {"before": before, "after": after, "metrics": metrics}
 
 
 def dry_run_torch() -> float:
@@ -569,42 +721,71 @@ def train_loop(cfg: dict, feat_dir: Path, out: Path, epochs: int, batch_size: in
     opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=float((cfg.get("c2nav") or {}).get("weight_decay") or 0.05))
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max(epochs, 1))
     pos_w = torch.as_tensor(_presence_pos_weight(train, len(spec["objects"])), device=device)
-    mode_w = torch.as_tensor(_class_weight([r.mode for r in train if r.has_c and not r.used_wide], len(MODE_NAMES)), device=device)
-    turn_w = torch.as_tensor(_class_weight([r.turn for r in train if r.has_c and not r.used_wide], N_TURN), device=device)
-    fwd_w = torch.as_tensor(_class_weight([r.forward for r in train if r.has_c and not r.used_wide], len(FORWARD_BINS)), device=device)
-    n_pos = sum(r.stop for r in train if r.has_c)
-    n_neg = sum(1 for r in train if r.has_c) - n_pos
-    stop_pos = torch.tensor(max(n_neg / max(n_pos, 1), 1.0), device=device)
+    usable = [r for r in train if r.has_c and not r.used_wide]
+    mode_w, mode_n = class_weights([r.mode for r in usable], len(MODE_NAMES))
+    turn_w, turn_n = class_weights([r.turn for r in usable], N_TURN)
+    fwd_w, fwd_n = class_weights([r.forward for r in usable], len(FORWARD_BINS))
+    mode_w = torch.as_tensor(mode_w, device=device)
+    turn_w = torch.as_tensor(turn_w, device=device)
+    fwd_w = torch.as_tensor(fwd_w, device=device)
+    stop_scale = stop_pos_weight(train)
+    stop_pos = torch.tensor(stop_scale, device=device)
     wts = dict((cfg.get("c2nav") or {}).get("loss_weights") or {"a": 1, "mode": 1, "wp": 1, "stop": 1})
     smooth = float((cfg.get("c2nav") or {}).get("label_smoothing") or 0.1)
     bearings = patch_bearings(spec["grid"][0], spec["grid"][1], cfg)
+    print(
+        "c2nav weights "
+        + json.dumps({
+            "present_pos": pos_w.detach().cpu().tolist(),
+            "mode": mode_w.detach().cpu().tolist(),
+            "mode_n": mode_n.tolist(),
+            "turn": turn_w.detach().cpu().tolist(),
+            "turn_n": turn_n.tolist(),
+            "forward": fwd_w.detach().cpu().tolist(),
+            "forward_n": fwd_n.tolist(),
+            "stop_pos_weight": stop_scale,
+        }),
+        flush=True,
+    )
     out.mkdir(parents=True, exist_ok=True)
     rng = random.Random(seed)
     last = out / "last.pt"
+    first_parts = None
+    last_parts = None
     for epoch in range(1, epochs + 1):
         model.train()
         order = list(range(len(train)))
         rng.shuffle(order)
         running = 0.0
+        part_sum = {}
         n_b = 0
         for start in range(0, len(order), batch_size):
             chunk = [train[i] for i in order[start : start + batch_size]]
             batch = _to_torch(collate(chunk, tokens, True, rng), device, bearings=bearings)
             opt.zero_grad()
-            out_b = model(batch)
+            out_b = heads_out(model, batch)
             loss, parts = nav_loss(out_b, batch, wts, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth)
             loss.backward()
             opt.step()
             running += float(loss.item())
             n_b += 1
+            for key, val in parts.items():
+                part_sum[key] = part_sum.get(key, 0.0) + float(val)
         sched.step()
+        avg_parts = {key: val / max(n_b, 1) for key, val in part_sum.items()}
+        if first_parts is None:
+            first_parts = avg_parts
+            print(f"c2nav loss epoch_1 {json.dumps(first_parts)}", flush=True)
+        last_parts = avg_parts
         metrics = offline_metrics(model, val or train[: min(64, len(train))], tokens, device, spec, cfg, bearings)
         metrics["train_loss"] = running / max(n_b, 1)
+        metrics["loss_parts"] = avg_parts
         ckpt = out / f"epoch_{epoch:02d}.pt"
         save_checkpoint(ckpt, model, spec, epoch, metrics, extra={"filter": stats})
         save_checkpoint(last, model, spec, epoch, metrics, extra={"filter": stats})
         print(f"epoch {epoch} loss={metrics['train_loss']:.4f} metrics={json.dumps(metrics, default=str)}", flush=True)
-        submit_val(ckpt, out / f"val_epoch_{epoch:02d}", cfg_path=cfg_path)
+    if last_parts is not None:
+        print(f"c2nav loss last_epoch {json.dumps(last_parts)}", flush=True)
     return last
 
 
@@ -618,12 +799,20 @@ def main():
     parser.add_argument("--lr", type=float, default=None)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--overfit", action="store_true", help="64 samples, 200 steps, expect loss~0 acc~1")
     args = parser.parse_args()
     if args.dry_run:
         try:
             dry_run_torch()
         except ImportError:
             print("dry-run c2nav skipped (no torch)", flush=True)
+        return
+    if args.overfit:
+        cfg_path = Path(args.config).resolve() if args.config else None
+        cfg = load_config(cfg_path) if cfg_path else load_config()
+        nav = cfg.get("c2nav") or {}
+        feat = Path(args.features) if args.features else Path(os.environ.get("SCR") or f"/scratch/{os.environ.get('USER', 'user')}") / "lfnav" / "features" / str(nav.get("features_version") or "nav_v3_easy")
+        overfit_check(cfg, feat, int(args.seed))
         return
     cfg_path = Path(args.config).resolve() if args.config else None
     cfg = load_config(cfg_path) if cfg_path else load_config()

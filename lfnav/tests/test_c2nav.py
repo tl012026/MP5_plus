@@ -207,6 +207,20 @@ class SmokeDemoTest(unittest.TestCase):
             self.assertEqual(len(noisy), 3)
 
 
+class WeightAndLabelTest(unittest.TestCase):
+    def test_class_weight_zeros_unseen(self):
+        from lfnav.policy.train_c2nav import class_weights, _label_int
+
+        w, counts = class_weights([0, 0, 1], 5)
+        self.assertGreater(float(w[0]), 0.0)
+        self.assertEqual(float(w[4]), 0.0)
+        self.assertEqual(int(counts[4]), 0)
+        seen = w[w > 0]
+        self.assertAlmostEqual(float(seen.mean()), 1.0, places=5)
+        self.assertEqual(_label_int({"forward_index": 0}, "forward_index", 1), 0)
+        self.assertEqual(_label_int({}, "forward_index", 1), 1)
+
+
 @unittest.skipUnless(HAS_TORCH, "torch not installed on this host")
 class ForwardSmokeTest(unittest.TestCase):
     def test_collate_train_step_and_infer_forward(self):
