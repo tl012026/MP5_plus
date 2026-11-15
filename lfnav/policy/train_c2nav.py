@@ -160,6 +160,17 @@ def _forward_class(labels: dict | None) -> tuple[int, bool]:
 _geom_from_obs = geom_from_obs
 
 
+def _obs_source_tag(gt: TargetObs, noisy: TargetObs) -> str:
+    """Tag C-obs noise so FP vs drop vs ordinary noisy GT can be counted."""
+    if gt.visible:
+        if noisy.visible:
+            return "gt_noisy"
+        return "gt_noisy_miss"
+    if noisy.visible:
+        return "gt_noisy_fp"
+    return "gt_noisy"
+
+
 def _pose_noise(noise: TrackerNoise | None) -> TrackerNoise | None:
     if noise is None:
         return None
@@ -210,7 +221,6 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
         observations=noisy_obs,
     )
     rows = []
-    source = "gt_noisy"
     last_feat = None
     for i, step, feat_row, present, log_d, ignore, obs_clean, vis, vis_ig in parsed:
         if feat_row is None:
@@ -255,7 +265,7 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
             episode_id=episode_id,
             branch="" if step.get("expert_branch") is None else str(step.get("expert_branch")),
             forward_clipped=fwd_clip,
-            obs_source=source,
+            obs_source=_obs_source_tag(obs_clean, obs),
             vis=vis,
             vis_ignore=vis_ig,
             a_only=False,
