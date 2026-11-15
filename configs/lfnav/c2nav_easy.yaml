@@ -28,6 +28,8 @@ c2nav:
   vis_tau: 0.5
   obs_source: pred
   stop_requires_visible: true
+  stop_policy: rule
+  forward_backward_weight_cap: 10
   torch_threads: 2
   ckpt_dir: c2nav_easy_r3
   a_extra_features: []

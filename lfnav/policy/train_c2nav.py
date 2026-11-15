@@ -37,6 +37,7 @@ from lfnav.policy.c2nav import (
     encode_match,
     encode_s,
     far_class_ignore,
+    forward_backward_weight_cap_of,
     geom_from_obs,
     gt_target_obs,
     horizontal_fov_deg,
@@ -597,14 +598,20 @@ def class_counts(values: list[int], n: int) -> np.ndarray:
 
 
 def class_weights(values: list[int], n: int, cap: float = 10.0) -> tuple[np.ndarray, np.ndarray]:
-    """w_c = min(cap, sqrt(N/(K n_c))), then mean 1. Empty class raises."""
+    """w_c = min(cap, sqrt(N/(K n_c))), then mean 1. Empty class raises. cap may be per-class."""
     counts = class_counts(values, n)
     total = float(counts.sum())
     empty = [i for i in range(int(n)) if counts[i] == 0]
     if len(empty) != 0 or total <= 0 or int(n) <= 0:
         raise RuntimeError(f"empty class counts={counts.tolist()} N={total} K={int(n)} empty={empty}")
     raw = np.sqrt(total / (float(n) * counts))
-    raw = np.minimum(raw, float(cap))
+    cap_arr = np.asarray(cap, dtype=np.float64).reshape(-1)
+    if cap_arr.size == 1:
+        raw = np.minimum(raw, float(cap_arr[0]))
+    else:
+        if int(cap_arr.size) != int(n):
+            raise RuntimeError(f"class weight cap size {int(cap_arr.size)} != K={int(n)}")
+        raw = np.minimum(raw, cap_arr)
     mean = float(raw.mean())
     if mean > 0:
         raw = raw / mean
@@ -1376,7 +1383,9 @@ def train_loop(
     usable = [r for r in train if policy_supervised(r)]
     mode_w, mode_n = class_weights([r.mode for r in usable], len(MODE_NAMES))
     turn_w, turn_n = class_weights([r.turn for r in usable], N_TURN, cap=TURN_WEIGHT_CAP)
-    fwd_w, fwd_n = class_weights([r.forward for r in usable], len(FORWARD_BINS), cap=TURN_WEIGHT_CAP)
+    fwd_caps = np.full(len(FORWARD_BINS), TURN_WEIGHT_CAP, np.float64)
+    fwd_caps[FORWARD_BINS.index(-1)] = forward_backward_weight_cap_of(cfg)
+    fwd_w, fwd_n = class_weights([r.forward for r in usable], len(FORWARD_BINS), cap=fwd_caps)
     mode_w = torch.as_tensor(mode_w, device=device)
     turn_w = torch.as_tensor(turn_w, device=device)
     fwd_w = torch.as_tensor(fwd_w, device=device)

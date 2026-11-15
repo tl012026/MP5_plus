@@ -27,6 +27,8 @@ STOP_GATE_NOT_VISIBLE = "blocked_not_visible"
 STOP_GATE_CONDITIONS = "blocked_conditions"
 STOP_GATE_TOO_FAR = "blocked_too_far"
 STOP_GATE_BELOW_TAU = "below_tau"
+STOP_POLICY_RULE = "rule"
+STOP_POLICY_HEAD = "head"
 PRESENT_POS_CAP = 5.0
 VIS_POS_CAP = 5.0
 PATCH_PRESENT_MIN = 0.3
@@ -188,6 +190,27 @@ def stop_requires_visible_of(cfg: dict | None = None) -> bool:
     return bool(raw)
 
 
+def stop_policy_of(cfg: dict | None = None) -> str:
+    nav = (cfg or {}).get("c2nav") or {}
+    raw = nav.get("stop_policy")
+    if raw is None:
+        return STOP_POLICY_RULE
+    name = str(raw)
+    if name not in (STOP_POLICY_RULE, STOP_POLICY_HEAD):
+        raise RuntimeError(f"c2nav.stop_policy must be {STOP_POLICY_RULE!r} or {STOP_POLICY_HEAD!r}, got {name!r}")
+    return name
+
+
+def forward_backward_weight_cap_of(cfg: dict | None = None) -> float:
+    nav = (cfg or {}).get("c2nav")
+    if nav is None:
+        nav = {}
+    raw = nav.get("forward_backward_weight_cap")
+    if raw is None:
+        return 10.0
+    return float(raw)
+
+
 def torch_threads_of(cfg: dict | None = None) -> int:
     nav = (cfg or {}).get("c2nav")
     if nav is None:
@@ -277,9 +300,13 @@ def infer_stop_gate(
     requires_visible: bool = True,
     dist=None,
     max_dist=None,
+    policy=None,
 ) -> str:
-    """Inference-only stop rule: tau, visible, B conditions, then distance."""
-    if float(p_stop) < float(tau):
+    """Inference stop: rule ignores p_stop; head requires p_stop >= tau, then the same gates."""
+    name = STOP_POLICY_RULE if policy is None else str(policy)
+    if name not in (STOP_POLICY_RULE, STOP_POLICY_HEAD):
+        raise RuntimeError(f"c2nav.stop_policy must be {STOP_POLICY_RULE!r} or {STOP_POLICY_HEAD!r}, got {name!r}")
+    if name == STOP_POLICY_HEAD and float(p_stop) < float(tau):
         return STOP_GATE_BELOW_TAU
     if requires_visible and not bool(visible):
         return STOP_GATE_NOT_VISIBLE
@@ -946,6 +973,7 @@ class C2NavAgent(Policy):
         self.obs_source = obs_source_of(self.cfg)
         self.stop_requires_visible = stop_requires_visible_of(self.cfg)
         self.stop_max_dist = stop_max_dist_of(self.cfg)
+        self.stop_policy = stop_policy_of(self.cfg)
         self.encode_calls = 0
         self._tokens = None
         self._scene = None
@@ -1269,8 +1297,10 @@ class C2NavAgent(Policy):
             requires_visible=self.stop_requires_visible,
             dist=dist,
             max_dist=self.stop_max_dist,
+            policy=self.stop_policy,
         )
         info["stop_gate"] = gate
+        info["stop_policy"] = self.stop_policy
         info["stop_max_dist"] = self.stop_max_dist
         if gate == STOP_GATE_NOT_VISIBLE:
             self.n_stop_blocked_not_visible += 1

@@ -108,6 +108,8 @@ c2nav:
   encoder: dinov2_vits14
   stop_tau: 0.5
   stop_requires_visible: true
+  stop_policy: rule
+  forward_backward_weight_cap: 10
   lr: 0.0003
   weight_decay: 0.05
   epochs: 15

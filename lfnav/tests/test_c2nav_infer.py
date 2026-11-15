@@ -14,10 +14,13 @@ from lfnav.policy.c2_data import demo_roots, iter_success_episodes, load_task
 from lfnav.policy.c2nav import (
     C2NavAgent,
     OBS_GT,
+    STOP_GATE_BELOW_TAU,
     STOP_GATE_CONDITIONS,
     STOP_GATE_NOT_VISIBLE,
     STOP_GATE_STOP,
     STOP_GATE_TOO_FAR,
+    STOP_POLICY_HEAD,
+    STOP_POLICY_RULE,
     encode_s,
     geom_from_obs,
     gt_target_obs,
@@ -27,6 +30,7 @@ from lfnav.policy.c2nav import (
     patch_targets,
     spec_from_cfg,
     stop_max_dist_of,
+    stop_policy_of,
     stop_requires_visible_of,
 )
 from lfnav.policy.state_tracker import STEPS_NORM, TargetObs, replay
@@ -253,6 +257,38 @@ class StopGateTest(unittest.TestCase):
         self.assertTrue(stop_requires_visible_of({"c2nav": {}}))
         self.assertTrue(stop_requires_visible_of({"c2nav": {"stop_requires_visible": None}}))
         self.assertFalse(stop_requires_visible_of({"c2nav": {"stop_requires_visible": False}}))
+
+    def test_stop_policy_defaults_rule(self):
+        self.assertEqual(stop_policy_of({}), STOP_POLICY_RULE)
+        self.assertEqual(stop_policy_of({"c2nav": {}}), STOP_POLICY_RULE)
+        self.assertEqual(stop_policy_of({"c2nav": {"stop_policy": None}}), STOP_POLICY_RULE)
+        self.assertEqual(stop_policy_of({"c2nav": {"stop_policy": "head"}}), STOP_POLICY_HEAD)
+        self.assertEqual(_gt_agent().stop_policy, STOP_POLICY_RULE)
+
+    def test_rule_stops_when_p_stop_is_zero(self):
+        self.assertEqual(
+            infer_stop_gate(0.0, 0.5, True, FOUND_MATCH, True, dist=2.5, max_dist=2.7, policy=STOP_POLICY_RULE),
+            STOP_GATE_STOP,
+        )
+        agent = _gt_agent({"c2nav": {"obs_source": "gt", "stop_policy": "rule"}})
+        _force_p_stop(agent, 0.01)
+        out = _act(agent, visible=True, match=FOUND_MATCH, dist_num=2.5)
+        self.assertTrue(out.stop)
+        self.assertEqual(out.info.get("stop_gate"), STOP_GATE_STOP)
+        self.assertEqual(out.info.get("stop_policy"), STOP_POLICY_RULE)
+
+    def test_head_below_tau_does_not_stop(self):
+        self.assertEqual(
+            infer_stop_gate(0.1, 0.5, True, FOUND_MATCH, True, dist=2.5, max_dist=2.7, policy=STOP_POLICY_HEAD),
+            STOP_GATE_BELOW_TAU,
+        )
+        agent = _gt_agent({"c2nav": {"obs_source": "gt", "stop_policy": "head"}})
+        _force_p_stop(agent, 0.1)
+        out = _act(agent, visible=True, match=FOUND_MATCH, dist_num=2.5)
+        self.assertFalse(out.stop)
+        self.assertTrue(out.action_chunk)
+        self.assertEqual(out.info.get("stop_gate"), STOP_GATE_BELOW_TAU)
+        self.assertEqual(out.info.get("stop_policy"), STOP_POLICY_HEAD)
 
     def test_high_p_stop_not_visible_does_not_stop(self):
         self.assertEqual(infer_stop_gate(0.9, 0.5, False, FOUND_MATCH, True), STOP_GATE_NOT_VISIBLE)

@@ -13,6 +13,7 @@ import numpy as np
 from lfnav.policy.c2nav import (
     a_extra_per_epoch_of,
     far_class_ignore,
+    forward_backward_weight_cap_of,
     obs_from_present_head,
     spec_from_cfg,
     stop_max_dist_of,
@@ -157,6 +158,21 @@ class ClassWeightCapTest(unittest.TestCase):
         self.assertAlmostEqual(float(capped[1]), 3.0)
         mean = float(capped.mean())
         np.testing.assert_allclose(w, capped / mean, atol=1e-5)
+        self.assertAlmostEqual(float(w.mean()), 1.0, places=5)
+
+    def test_backward_cap_ten_others_three(self):
+        self.assertEqual(float(forward_backward_weight_cap_of({})), 10.0)
+        self.assertEqual(float(forward_backward_weight_cap_of({"c2nav": {}})), 10.0)
+        self.assertEqual(float(forward_backward_weight_cap_of({"c2nav": {"forward_backward_weight_cap": None}})), 10.0)
+        self.assertEqual(float(forward_backward_weight_cap_of({"c2nav": {"forward_backward_weight_cap": 0}})), 0.0)
+        values = [0] + [1] * 999
+        caps = np.asarray([10.0, 3.0], np.float64)
+        w, counts = class_weights(values, 2, cap=caps)
+        raw = np.sqrt(float(counts.sum()) / (2.0 * counts))
+        self.assertGreater(float(raw[0]), 10.0)
+        self.assertLess(float(raw[1]), 3.0)
+        capped = np.asarray([10.0, float(raw[1])], np.float64)
+        np.testing.assert_allclose(w, capped / capped.mean(), atol=1e-5)
         self.assertAlmostEqual(float(w.mean()), 1.0, places=5)
 
 
