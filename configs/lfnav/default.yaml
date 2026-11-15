@@ -110,6 +110,8 @@ c2nav:
   stop_requires_visible: true
   stop_policy: rule
   forward_backward_weight_cap: 10
+  explore_sample: true
+  explore_temp: 1.0
   lr: 0.0003
   weight_decay: 0.05
   epochs: 15

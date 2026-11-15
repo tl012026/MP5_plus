@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import random
 import time
 
 import numpy as np
@@ -209,6 +210,70 @@ def forward_backward_weight_cap_of(cfg: dict | None = None) -> float:
     if raw is None:
         return 10.0
     return float(raw)
+
+
+def explore_sample_of(cfg: dict | None = None) -> bool:
+    nav = (cfg or {}).get("c2nav") or {}
+    raw = nav.get("explore_sample")
+    if raw is None:
+        return True
+    return bool(raw)
+
+
+def explore_temp_of(cfg: dict | None = None) -> float:
+    nav = (cfg or {}).get("c2nav")
+    if nav is None:
+        nav = {}
+    raw = nav.get("explore_temp")
+    if raw is None:
+        return 1.0
+    return float(raw)
+
+
+def softmax_turn(logits, temp: float = 1.0) -> np.ndarray:
+    x = np.asarray(logits, dtype=np.float64).reshape(-1)
+    if x.size < 1:
+        return np.zeros((0,), dtype=np.float64)
+    t = float(temp)
+    if (not np.isfinite(t)) or t <= 0:
+        p = np.zeros(x.shape[0], dtype=np.float64)
+        p[int(np.argmax(x))] = 1.0
+        return p
+    z = x / t
+    z = z - np.max(z)
+    e = np.exp(z)
+    s = float(e.sum())
+    if (not np.isfinite(s)) or s <= 0:
+        p = np.zeros(x.shape[0], dtype=np.float64)
+        p[int(np.argmax(x))] = 1.0
+        return p
+    return e / s
+
+
+def sample_turn_index(logits, rng, temp: float = 1.0) -> int:
+    p = softmax_turn(logits, temp)
+    n = int(p.shape[0])
+    if n < 1:
+        return 0
+    return int(rng.choices(range(n), weights=[float(v) for v in p], k=1)[0])
+
+
+def top_k_turn_probs(logits, k: int = 3, temp: float = 1.0) -> list:
+    p = softmax_turn(logits, temp)
+    n = int(p.shape[0])
+    if n < 1:
+        return []
+    take = min(int(k), n)
+    order = np.argsort(-p)[:take]
+    out = []
+    for i in order:
+        idx = int(i)
+        out.append({
+            "index": idx,
+            "turn_deg": float(turn_center(idx)),
+            "p": float(p[idx]),
+        })
+    return out
 
 
 def torch_threads_of(cfg: dict | None = None) -> int:
@@ -974,6 +1039,10 @@ class C2NavAgent(Policy):
         self.stop_requires_visible = stop_requires_visible_of(self.cfg)
         self.stop_max_dist = stop_max_dist_of(self.cfg)
         self.stop_policy = stop_policy_of(self.cfg)
+        self.explore_sample = explore_sample_of(self.cfg)
+        self.explore_temp = explore_temp_of(self.cfg)
+        self._episode_seed = None
+        self._rng = random.Random(0)
         self.encode_calls = 0
         self._tokens = None
         self._scene = None
@@ -1065,6 +1134,31 @@ class C2NavAgent(Policy):
         self.time_encode = 0.0
         self.time_policy = 0.0
         self.last_info = {}
+        self._episode_seed = None
+        self._rng = random.Random(self._seed_from_cfg())
+
+    def _seed_from_cfg(self) -> int:
+        raw = self.cfg.get("seed")
+        if raw is None:
+            return 0
+        return int(raw)
+
+    def _episode_seed_from_input(self, policy_input: PolicyInput):
+        mem = policy_input.memory if policy_input.memory is not None else {}
+        task = policy_input.task if policy_input.task is not None else {}
+        ep = task.get("episode") if isinstance(task.get("episode"), dict) else {}
+        for raw in (mem.get("seed"), task.get("seed"), ep.get("seed"), self.cfg.get("seed")):
+            if raw is not None:
+                return int(raw)
+        return None
+
+    def _ensure_episode_rng(self, policy_input: PolicyInput) -> None:
+        seed = self._episode_seed_from_input(policy_input)
+        if seed is None:
+            return
+        if self._episode_seed != seed:
+            self._episode_seed = seed
+            self._rng = random.Random(seed)
 
     def gt_obs_from_scene(self, scene: dict, target: str, dist_num) -> TargetObs:
         objects = list(self.spec["objects"])
@@ -1198,6 +1292,7 @@ class C2NavAgent(Policy):
         from lfnav.types import PolicyOutput
 
         t_pol = time.perf_counter()
+        self._ensure_episode_rng(policy_input)
         mem = policy_input.memory if policy_input.memory is not None else {}
         pos = [0.0, 0.0, 0.0] if mem.get("pos") is None else list(mem.get("pos"))
         yaw = 0.0 if mem.get("yaw") is None else float(mem.get("yaw"))
@@ -1209,6 +1304,7 @@ class C2NavAgent(Policy):
         geom_np = geom_from_obs(obs)
         mode_i = turn_i = fwd_i = 0
         p_stop = 0.0
+        turn_logits = None
         vis_tau = float(self.spec["vis_tau"] if self.spec.get("vis_tau") is not None else 0.5)
 
         if self.obs_source == OBS_GT:
@@ -1256,18 +1352,36 @@ class C2NavAgent(Policy):
                 cond_t = torch.from_numpy(encode_match(match, objects)).unsqueeze(0).to(device)
                 out = self.model.policy(geom_t, s_t, cond_t)
             mode_i = int(out["mode"][0].argmax().item())
-            turn_i = int(out["turn"][0].argmax().item())
+            turn_logits = out["turn"][0].detach().cpu().numpy()
             fwd_i = int(out["forward"][0].argmax().item())
             p_stop = float(torch.sigmoid(out["stop"][0]).item())
 
         feat = self._s.features()
+        mode_name = MODE_NAMES[mode_i] if 0 <= mode_i < len(MODE_NAMES) else str(mode_i)
+        is_explore = mode_name == "explore"
+        turn_sampled = bool(is_explore and self.explore_sample)
+        if turn_logits is not None:
+            if turn_sampled:
+                turn_i = sample_turn_index(turn_logits, self._rng, self.explore_temp)
+            else:
+                turn_i = int(np.argmax(np.asarray(turn_logits, dtype=np.float64).reshape(-1)))
+            topk_temp = self.explore_temp if is_explore else 1.0
+            turn_topk = top_k_turn_probs(turn_logits, 3, topk_temp)
+        else:
+            turn_topk = []
         turn_deg = turn_center(turn_i)
         forward = FORWARD_BINS[fwd_i] if 0 <= fwd_i < len(FORWARD_BINS) else 0
         dist = None if (not obs.visible or obs.log_distance is None) else math.exp(float(obs.log_distance))
         bearing = 0.0 if (not obs.visible or obs.bearing_deg is None) else float(obs.bearing_deg)
         info = {
-            "mode": MODE_NAMES[mode_i] if 0 <= mode_i < len(MODE_NAMES) else str(mode_i),
+            "mode": mode_name,
             "waypoint": {"turn_deg": turn_deg, "forward": forward},
+            "turn_index": turn_i,
+            "turn_deg": turn_deg,
+            "turn_sampled": turn_sampled,
+            "turn_topk": turn_topk,
+            "explore_sample": self.explore_sample,
+            "explore_temp": self.explore_temp,
             "p_stop": p_stop,
             "visible": bool(obs.visible),
             "bearing": bearing,

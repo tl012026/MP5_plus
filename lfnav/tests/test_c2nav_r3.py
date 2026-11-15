@@ -12,6 +12,8 @@ import numpy as np
 
 from lfnav.policy.c2nav import (
     a_extra_per_epoch_of,
+    explore_sample_of,
+    explore_temp_of,
     far_class_ignore,
     forward_backward_weight_cap_of,
     obs_from_present_head,
@@ -189,6 +191,8 @@ class ConfigZeroTest(unittest.TestCase):
         self.assertEqual(int(torch_threads_of({"c2nav": {"torch_threads": 0}})), 0)
         self.assertEqual(int(a_extra_per_epoch_of({"c2nav": {"a_extra_per_epoch": 0}})), 0)
         self.assertEqual(float(stop_max_dist_of({"c2nav": {"stop_max_dist": 0}})), 0.0)
+        self.assertEqual(float(explore_temp_of({"c2nav": {"explore_temp": 0}})), 0.0)
+        self.assertFalse(explore_sample_of({"c2nav": {"explore_sample": False}}))
 
 
 class PresentArgmaxTest(unittest.TestCase):

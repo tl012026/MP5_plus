@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -22,19 +23,24 @@ from lfnav.policy.c2nav import (
     STOP_POLICY_HEAD,
     STOP_POLICY_RULE,
     encode_s,
+    explore_sample_of,
+    explore_temp_of,
     geom_from_obs,
     gt_target_obs,
     infer_stop_gate,
     obs_source_of,
     patch_bearings,
     patch_targets,
+    sample_turn_index,
+    softmax_turn,
     spec_from_cfg,
     stop_max_dist_of,
     stop_policy_of,
     stop_requires_visible_of,
+    top_k_turn_probs,
 )
 from lfnav.policy.state_tracker import STEPS_NORM, TargetObs, replay
-from lfnav.policy.c2nav_labels import FORWARD_BINS, TURN_BINS, invert_waypoint, turn_index
+from lfnav.policy.c2nav_labels import FORWARD_BINS, MODE_NAMES, N_TURN, TURN_BINS, invert_waypoint, turn_center, turn_index
 from lfnav.types import PolicyInput
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -231,11 +237,12 @@ def _force_p_stop(agent, p=0.9):
     agent.model.policy = wrapped
 
 
-def _act(agent, visible, match, dist_num=2.5):
+def _act(agent, visible, match, dist_num=2.5, seed=None, reset=True):
     raw = np.zeros((16, 26), np.float32)
     if visible:
         raw[:, 10:12] = 1.0
-    agent.reset()
+    if reset:
+        agent.reset()
     agent.perceive({
         "patches": {"pig": raw.tolist()},
         "ignore": np.zeros((16, 26), np.float32).tolist(),
@@ -243,12 +250,38 @@ def _act(agent, visible, match, dist_num=2.5):
     scene = {}
     if dist_num is not None:
         scene["target_distance_num"] = dist_num
+    mem = {"pos": [0.0, 64.0, 0.0], "yaw": 0.0}
+    if seed is not None:
+        mem["seed"] = seed
     return agent.act(PolicyInput(
         task={"target": "pig"},
         match=match,
         scene=scene,
-        memory={"pos": [0.0, 64.0, 0.0], "yaw": 0.0},
+        memory=mem,
     ))
+
+
+def _force_mode_turn(agent, mode_name, turn_logits, p_stop=0.01):
+    import math
+
+    import torch
+
+    logit_stop = math.log(p_stop / (1.0 - p_stop))
+    real = agent.model.policy
+    mode_i = MODE_NAMES.index(mode_name)
+    t = np.asarray(turn_logits, np.float32)
+
+    def wrapped(geom, s_vec, cond):
+        out = dict(real(geom, s_vec, cond))
+        m = torch.full_like(out["mode"], -20.0)
+        m[0, mode_i] = 20.0
+        tr = torch.as_tensor(t, dtype=out["turn"].dtype, device=out["turn"].device).view(1, -1)
+        out["mode"] = m
+        out["turn"] = tr
+        out["stop"] = torch.full_like(out["stop"], logit_stop)
+        return out
+
+    agent.model.policy = wrapped
 
 
 class StopGateTest(unittest.TestCase):
@@ -373,6 +406,87 @@ class StopGateTest(unittest.TestCase):
         self.assertEqual(out.info.get("stop_gate"), STOP_GATE_CONDITIONS)
         self.assertTrue(out.info.get("visible"))
         self.assertEqual(int(agent.n_stop_blocked), 1)
+
+
+PEAKED_TURN = np.asarray([0.0, 1.0, 0.5, 2.0, 0.1, 0.2, 3.0, 0.0, 0.0, 0.4], np.float64)
+UNIFORM_TURN = np.zeros(N_TURN, np.float64)
+
+
+class ExploreTurnSampleTest(unittest.TestCase):
+    def test_explore_sample_defaults(self):
+        self.assertTrue(explore_sample_of({}))
+        self.assertTrue(explore_sample_of({"c2nav": {}}))
+        self.assertTrue(explore_sample_of({"c2nav": {"explore_sample": None}}))
+        self.assertFalse(explore_sample_of({"c2nav": {"explore_sample": False}}))
+        self.assertEqual(float(explore_temp_of({})), 1.0)
+        self.assertEqual(float(explore_temp_of({"c2nav": {}})), 1.0)
+        self.assertEqual(float(explore_temp_of({"c2nav": {"explore_temp": None}})), 1.0)
+        self.assertEqual(float(explore_temp_of({"c2nav": {"explore_temp": 0}})), 0.0)
+        agent = _gt_agent()
+        self.assertTrue(agent.explore_sample)
+        self.assertEqual(float(agent.explore_temp), 1.0)
+
+    def test_fixed_seed_and_logits_is_reproducible(self):
+        rng_a = random.Random(7)
+        rng_b = random.Random(7)
+        a = [sample_turn_index(PEAKED_TURN, rng_a, 1.0) for _ in range(20)]
+        b = [sample_turn_index(PEAKED_TURN, rng_b, 1.0) for _ in range(20)]
+        self.assertEqual(a, b)
+        agent_a = _gt_agent({"c2nav": {"obs_source": "gt", "explore_sample": True}, "seed": 7})
+        agent_b = _gt_agent({"c2nav": {"obs_source": "gt", "explore_sample": True}, "seed": 7})
+        _force_mode_turn(agent_a, "explore", PEAKED_TURN)
+        _force_mode_turn(agent_b, "explore", PEAKED_TURN)
+        seq_a = []
+        seq_b = []
+        for i in range(20):
+            seq_a.append(int(_act(agent_a, visible=False, match={}, seed=7, reset=(i == 0)).info["turn_index"]))
+            seq_b.append(int(_act(agent_b, visible=False, match={}, seed=7, reset=(i == 0)).info["turn_index"]))
+        self.assertEqual(seq_a, seq_b)
+        self.assertEqual(seq_a, a)
+        out = _act(agent_a, visible=False, match={}, seed=7, reset=True)
+        self.assertEqual(out.info["mode"], "explore")
+        self.assertTrue(out.info["turn_sampled"])
+        self.assertEqual(out.info["turn_deg"], turn_center(out.info["turn_index"]))
+        self.assertEqual(out.info["waypoint"]["turn_deg"], out.info["turn_deg"])
+        topk = out.info["turn_topk"]
+        ref = top_k_turn_probs(PEAKED_TURN, 3, 1.0)
+        self.assertEqual(len(topk), 3)
+        self.assertEqual([row["index"] for row in topk], [row["index"] for row in ref])
+        self.assertEqual([row["turn_deg"] for row in topk], [row["turn_deg"] for row in ref])
+        for got, want in zip(topk, ref):
+            self.assertAlmostEqual(float(got["p"]), float(want["p"]), places=5)
+
+    def test_uniform_covers_support(self):
+        rng = random.Random(0)
+        seen = {sample_turn_index(UNIFORM_TURN, rng, 1.0) for _ in range(1000)}
+        self.assertEqual(seen, set(range(N_TURN)))
+        agent = _gt_agent({"c2nav": {"obs_source": "gt", "explore_sample": True}, "seed": 0})
+        _force_mode_turn(agent, "explore", UNIFORM_TURN)
+        drawn = set()
+        for i in range(1000):
+            out = _act(agent, visible=False, match={}, seed=0, reset=(i == 0))
+            self.assertEqual(out.info["mode"], "explore")
+            self.assertTrue(out.info["turn_sampled"])
+            drawn.add(int(out.info["turn_index"]))
+        self.assertEqual(drawn, set(range(N_TURN)))
+
+    def test_non_explore_uses_argmax(self):
+        argmax_i = int(np.argmax(PEAKED_TURN))
+        for mode in ("scan", "approach", "reacquire"):
+            agent = _gt_agent({"c2nav": {"obs_source": "gt", "explore_sample": True}, "seed": 0})
+            _force_mode_turn(agent, mode, PEAKED_TURN)
+            turns = []
+            for i in range(20):
+                out = _act(agent, visible=False, match={}, seed=11, reset=(i == 0))
+                self.assertEqual(out.info["mode"], mode)
+                self.assertFalse(out.info["turn_sampled"])
+                self.assertEqual(int(out.info["turn_index"]), argmax_i)
+                self.assertEqual(out.info["turn_deg"], turn_center(argmax_i))
+                topk = out.info["turn_topk"]
+                self.assertEqual(len(topk), 3)
+                self.assertEqual(int(topk[0]["index"]), argmax_i)
+                turns.append(int(out.info["turn_index"]))
+            self.assertEqual(turns, [argmax_i] * 20)
 
 
 if __name__ == "__main__":

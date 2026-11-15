@@ -311,6 +311,7 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         mem["stuck"] = last_stuck
         mem["blocked"] = last_stuck
         mem["env_steps"] = env_steps
+        mem["seed"] = seed
         gt_frame = scene_state_from_obs(obs, cfg)
         if rec is not None:
             rec.set_info(match.to_dict(), extra={"obs_source": obs_source_of(cfg) if getattr(policy, "name", None) == "c2nav" else None})
@@ -350,6 +351,8 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
                 "mode": info.get("mode"),
                 "pred_turn": wp.get("turn_deg"),
                 "pred_fwd": wp.get("forward"),
+                "turn_sampled": info.get("turn_sampled"),
+                "turn_topk": info.get("turn_topk"),
                 "p_stop": info.get("p_stop"),
                 "visible": info.get("visible"),
                 "bearing": info.get("bearing"),
@@ -463,6 +466,8 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
             "mode": info.get("mode"),
             "pred_turn": wp.get("turn_deg"),
             "pred_fwd": wp.get("forward"),
+            "turn_sampled": info.get("turn_sampled"),
+            "turn_topk": info.get("turn_topk"),
             "p_stop": info.get("p_stop"),
             "visible": info.get("visible"),
             "bearing": info.get("bearing"),
