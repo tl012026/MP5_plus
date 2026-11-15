@@ -7,6 +7,7 @@ import time
 
 import numpy as np
 
+from lfnav.aggregate import argmax_name, column_direction, distance_bin
 from lfnav.policy.base import Policy
 from lfnav.policy.c2nav_labels import FORWARD_BINS, MODE_NAMES, N_TURN, invert_waypoint, turn_center
 from lfnav.policy.state_tracker import LOG_DIST_UNSEEN, STEPS_NORM, TargetObs, TrackerState, update, wrap_deg
@@ -14,6 +15,10 @@ from lfnav.policy.state_tracker import LOG_DIST_UNSEEN, STEPS_NORM, TargetObs, T
 VERSION = "c2nav_v1"
 CHANNELS = 64
 S_DIM = 18
+DIR_LCR_NAMES = ("left", "center", "right")
+DIST_BIN_NAMES = ("near", "mid", "far")
+GEOM_DIM = 4 + len(DIR_LCR_NAMES) + len(DIST_BIN_NAMES)
+NATIVE_PATCH_HW = (16, 26)
 OBS_PRED = "pred"
 OBS_GT = "gt"
 DECISION_ACTION_CAP = 12
@@ -113,6 +118,7 @@ def spec_from_cfg(cfg: dict | None = None) -> dict:
         "n_turn": int(N_TURN),
         "forward_bins": list(FORWARD_BINS),
         "s_dim": S_DIM,
+        "geom_dim": GEOM_DIM,
         "cond_dim": 1 + len(objects) + 4,
         "version": VERSION if version is None else str(version),
     }
@@ -398,13 +404,139 @@ def patch_targets(scene: dict, objects: list[str], pool: int, grid: tuple[int, i
     return present, log_d, ignore
 
 
-def geom_from_obs(obs: TargetObs) -> np.ndarray:
+def distance_bins_of(cfg: dict | None = None) -> tuple[float, float]:
+    bins = (cfg or {}).get("distance_bins")
+    if bins is None:
+        bins = {}
+    near = 3.0 if bins.get("near") is None else float(bins["near"])
+    mid = 10.0 if bins.get("mid") is None else float(bins["mid"])
+    return near, mid
+
+
+def upsample_nearest(arr, out_hw) -> np.ndarray:
+    """Nearest-neighbor upsample a 2D map (8x13 present_p → 16x26)."""
+    a = np.asarray(arr, dtype=np.float32)
+    oh, ow = int(out_hw[0]), int(out_hw[1])
+    if a.ndim != 2:
+        return np.zeros((oh, ow), np.float32)
+    h, w = int(a.shape[0]), int(a.shape[1])
+    if h == oh and w == ow:
+        return a
+    if h < 1 or w < 1:
+        return np.zeros((oh, ow), np.float32)
+    ys = np.minimum((np.arange(oh) * h / float(oh)).astype(np.int64), h - 1)
+    xs = np.minimum((np.arange(ow) * w / float(ow)).astype(np.int64), w - 1)
+    return np.asarray(a[np.ix_(ys, xs)], dtype=np.float32)
+
+
+def dir_lcr_from_present(present_hw, ignore_hw=None, native_hw=NATIVE_PATCH_HW) -> str | None:
+    """Mass per image third via column_direction. Upsample to native 16x26 if needed."""
+    p = np.asarray(present_hw, dtype=np.float32)
+    if p.ndim != 2:
+        return None
+    native = (int(native_hw[0]), int(native_hw[1]))
+    if (int(p.shape[0]), int(p.shape[1])) != native:
+        p = upsample_nearest(p, native)
+    ig = None if ignore_hw is None else np.asarray(ignore_hw, dtype=np.float32)
+    if ig is not None and ig.ndim == 2 and tuple(int(x) for x in ig.shape) != tuple(p.shape):
+        ig = upsample_nearest(ig, p.shape)
+    n_h, n_w = int(p.shape[0]), int(p.shape[1])
+    mass = {"left": 0.0, "center": 0.0, "right": 0.0}
+    for i in range(n_h):
+        for j in range(n_w):
+            if ig is not None and ig.ndim == 2 and float(ig[i, j]) >= 0.5:
+                continue
+            mass[column_direction(j, n_w)] += float(p[i, j])
+    if sum(mass.values()) <= 0.0:
+        return None
+    return argmax_name(mass)
+
+
+def dist_bin_from_num(dist_num, cfg: dict | None = None) -> str | None:
+    if dist_num is None:
+        return None
+    near, mid = distance_bins_of(cfg)
+    return distance_bin(float(dist_num), near, mid)
+
+
+def dist_bin_from_mass(dist_mass) -> str | None:
+    if not dist_mass:
+        return None
+    packed = {str(k): float(v) for k, v in dict(dist_mass).items()}
+    name = argmax_name(packed)
+    if name in DIST_BIN_NAMES:
+        return name
+    return None
+
+
+def dist_bin_from_present_log(present_hw, log_dist_hw, ignore_hw=None, cfg: dict | None = None, native_hw=NATIVE_PATCH_HW) -> str | None:
+    p = np.asarray(present_hw, dtype=np.float32)
+    d = None if log_dist_hw is None else np.asarray(log_dist_hw, dtype=np.float32)
+    if p.ndim != 2 or d is None or d.ndim != 2:
+        return None
+    native = (int(native_hw[0]), int(native_hw[1]))
+    if (int(p.shape[0]), int(p.shape[1])) != native:
+        p = upsample_nearest(p, native)
+    if (int(d.shape[0]), int(d.shape[1])) != tuple(p.shape):
+        d = upsample_nearest(d, p.shape)
+    ig = None if ignore_hw is None else np.asarray(ignore_hw, dtype=np.float32)
+    if ig is not None and ig.ndim == 2 and tuple(int(x) for x in ig.shape) != tuple(p.shape):
+        ig = upsample_nearest(ig, p.shape)
+    near, mid = distance_bins_of(cfg)
+    mass = {name: 0.0 for name in DIST_BIN_NAMES}
+    n_h, n_w = int(p.shape[0]), int(p.shape[1])
+    for i in range(n_h):
+        for j in range(n_w):
+            if ig is not None and ig.ndim == 2 and float(ig[i, j]) >= 0.5:
+                continue
+            w = float(p[i, j])
+            if w <= 0.0:
+                continue
+            mass[distance_bin(math.exp(float(d[i, j])), near, mid)] += w
+    if sum(mass.values()) <= 0.0:
+        return None
+    return argmax_name(mass)
+
+
+def dist_bin_from_log(log_d, cfg: dict | None = None) -> str | None:
+    if log_d is None:
+        return None
+    return dist_bin_from_num(math.exp(float(log_d)), cfg)
+
+
+def attach_lcr_dist(obs: TargetObs, present_hw, ignore_hw, dist_num, cfg: dict | None = None, dist_mass=None, log_dist_hw=None) -> TargetObs:
     if not obs.visible:
-        return np.asarray([0.0, 0.0, 1.0, math.log(32.0)], np.float32)
+        obs.dir_lcr = None
+        obs.dist_bin = None
+        return obs
+    obs.dir_lcr = dir_lcr_from_present(present_hw, ignore_hw)
+    obs.dist_bin = dist_bin_from_mass(dist_mass)
+    if obs.dist_bin is None and log_dist_hw is not None:
+        obs.dist_bin = dist_bin_from_present_log(present_hw, log_dist_hw, ignore_hw, cfg)
+    if obs.dist_bin is None and dist_num is not None:
+        obs.dist_bin = dist_bin_from_num(dist_num, cfg)
+    if obs.dist_bin is None:
+        obs.dist_bin = dist_bin_from_log(obs.log_distance, cfg)
+    return obs
+
+
+def geom_from_obs(obs: TargetObs) -> np.ndarray:
+    lcr = np.zeros(len(DIR_LCR_NAMES), np.float32)
+    dbin = np.zeros(len(DIST_BIN_NAMES), np.float32)
+    if not obs.visible:
+        return np.concatenate([
+            np.asarray([0.0, 0.0, 1.0, math.log(32.0)], np.float32), lcr, dbin,
+        ])
     yaw = 0.0 if obs.bearing_deg is None else float(obs.bearing_deg)
     rad = math.radians(yaw)
     log_d = float(obs.log_distance if obs.log_distance is not None else math.log(32.0))
-    return np.asarray([1.0, math.sin(rad), math.cos(rad), log_d], np.float32)
+    if obs.dir_lcr in DIR_LCR_NAMES:
+        lcr[DIR_LCR_NAMES.index(obs.dir_lcr)] = 1.0
+    if obs.dist_bin in DIST_BIN_NAMES:
+        dbin[DIST_BIN_NAMES.index(obs.dist_bin)] = 1.0
+    return np.concatenate([
+        np.asarray([1.0, math.sin(rad), math.cos(rad), log_d], np.float32), lcr, dbin,
+    ])
 
 
 def gt_target_obs(present: np.ndarray, ignore: np.ndarray, target_index: int, bearings: np.ndarray, dist_num) -> TargetObs:
@@ -541,12 +673,22 @@ def encode_match(match: dict | None, objects: list[str]) -> np.ndarray:
     return np.asarray(vec, dtype=np.float32)
 
 
-def encode_s(state: TrackerState | dict | list[float]) -> np.ndarray:
+def encode_s(state: TrackerState | dict | list[float], sector8=None) -> np.ndarray:
     if isinstance(state, TrackerState):
-        return np.asarray(state.vector(), dtype=np.float32)
-    if isinstance(state, dict):
-        return np.asarray(TrackerState.from_dict(state).vector(), dtype=np.float32)
-    return np.asarray(state, dtype=np.float32).reshape(-1)
+        vec = list(state.vector())
+    elif isinstance(state, dict):
+        vec = list(TrackerState.from_dict(state).vector())
+    else:
+        vec = list(np.asarray(state, dtype=np.float32).reshape(-1))
+    if sector8 is not None:
+        counts = [float(x) for x in list(sector8)[:8]]
+        if len(counts) < 8:
+            counts = counts + [0.0] * (8 - len(counts))
+        total = sum(counts) or 1.0
+        if len(vec) < 15:
+            vec = vec + [0.0] * (15 - len(vec))
+        vec[7:15] = [c / total for c in counts]
+    return np.asarray(vec, dtype=np.float32)
 
 
 FORWARD_KEYS = ("tokens", "s_vec", "cond", "target_index", "bearings")
@@ -647,7 +789,8 @@ def C2NavNet(spec: dict):
     n_fwd = len(spec["forward_bins"])
     cond_dim = int(spec["cond_dim"])
     s_dim = int(spec["s_dim"])
-    c_in = 4 + s_dim + cond_dim
+    geom_dim = int(spec["geom_dim"] if spec.get("geom_dim") is not None else GEOM_DIM)
+    c_in = geom_dim + s_dim + cond_dim
 
     class _Net(nn.Module):
         def __init__(self):
@@ -716,6 +859,10 @@ def C2NavNet(spec: dict):
                 vis_tau=vis_tau, ignore=batch.get("ignore"), cfg=None,
             )
             geom_from_a = torch.stack([vis, sn, cs, log_d], dim=-1)
+            gdim = int(self.spec["geom_dim"] if self.spec.get("geom_dim") is not None else GEOM_DIM)
+            if geom_from_a.shape[-1] < gdim:
+                pad = geom_from_a.new_zeros(geom_from_a.shape[0], gdim - geom_from_a.shape[-1])
+                geom_from_a = torch.cat([geom_from_a, pad], dim=-1)
             if self.training and batch.get("geom") is not None:
                 geom = batch["geom"]
                 vis_out = geom[:, 0]
@@ -897,7 +1044,15 @@ class C2NavAgent(Policy):
         grid = tuple(self.spec["grid"])
         pool = int(self.spec["token_pool"] if self.spec.get("token_pool") is not None else 2)
         present, _log_d, ignore = patch_targets(scene or {}, objects, pool, grid)
-        return gt_target_obs(present, ignore, t_i, self.bearings, dist_num)
+        obs = gt_target_obs(present, ignore, t_i, self.bearings, dist_num)
+        patches = (scene or {}).get("patches") or {}
+        raw = np.asarray(patches.get(target) or present[t_i], np.float32)
+        raw_ig = (scene or {}).get("ignore")
+        bel = ((scene or {}).get("objects") or {}).get(target) if isinstance((scene or {}).get("objects"), dict) else None
+        dist_mass = (bel or {}).get("distance") if isinstance(bel, dict) else None
+        return attach_lcr_dist(
+            obs, raw, raw_ig if raw_ig is not None else ignore, dist_num, self.cfg, dist_mass=dist_mass,
+        )
 
     def features(self, frame, force: bool = False) -> dict:
         from lfnav.data.demo_format import preprocess_frame
@@ -1055,6 +1210,11 @@ class C2NavAgent(Policy):
                     present_np, dist_np, t_i, self.bearings, float(vis_logit.detach().cpu()),
                     vis_tau, ignore=self._ignore_hw, patch_min=PATCH_PRESENT_MIN,
                 )
+                dist_num_a = None if (not obs.visible or obs.log_distance is None) else math.exp(float(obs.log_distance))
+                obs = attach_lcr_dist(
+                    obs, present_np[t_i], self._ignore_hw, dist_num_a, self.cfg,
+                    log_dist_hw=dist_np[t_i],
+                )
                 geom_np = geom_from_obs(obs)
 
         self._s = update(self._s, pos, yaw, self._prev_actions, obs, max_steps=self._s.max_steps)
@@ -1064,7 +1224,7 @@ class C2NavAgent(Policy):
             device = next(self.model.parameters()).device
             with torch.no_grad():
                 geom_t = torch.from_numpy(np.asarray(geom_np, np.float32)).unsqueeze(0).to(device)
-                s_t = torch.from_numpy(encode_s(self._s)).unsqueeze(0).to(device)
+                s_t = torch.from_numpy(encode_s(self._s, sector8=mem.get("sector8"))).unsqueeze(0).to(device)
                 cond_t = torch.from_numpy(encode_match(match, objects)).unsqueeze(0).to(device)
                 out = self.model.policy(geom_t, s_t, cond_t)
             mode_i = int(out["mode"][0].argmax().item())

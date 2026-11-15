@@ -5,6 +5,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field, replace
 
+from lfnav.aggregate import column_direction, distance_bin
+
 N_SECTORS = 8
 DISP_WINDOW = 60
 UNSEEN_HORIZON = 40.0
@@ -33,17 +35,36 @@ def _norm(x: float) -> float:
     return 1.0 if abs(x) < 1e-9 else x
 
 
+def dir_lcr_from_bearing(bearing_deg, n_w: int = 26, hfov_deg: float = 97.378) -> str:
+    """Map a signed yaw to an image column, then call column_direction."""
+    half = math.radians(float(hfov_deg) / 2.0)
+    yaw = math.radians(float(bearing_deg))
+    denom = 2.0 * math.tan(half)
+    if abs(denom) < 1e-12:
+        u = 0.5
+    else:
+        u = 0.5 + math.tan(yaw) / denom
+    u = min(max(u, 0.0), 0.999999)
+    col = int(u * int(n_w))
+    col = min(max(col, 0), int(n_w) - 1)
+    return column_direction(col, int(n_w))
+
+
 @dataclass
 class TargetObs:
     visible: bool = False
     bearing_deg: float | None = None
     log_distance: float | None = None
+    dir_lcr: str | None = None
+    dist_bin: str | None = None
 
     def to_dict(self) -> dict:
         return {
             "visible": bool(self.visible),
             "bearing_deg": None if self.bearing_deg is None else float(self.bearing_deg),
             "log_distance": None if self.log_distance is None else float(self.log_distance),
+            "dir_lcr": None if self.dir_lcr is None else str(self.dir_lcr),
+            "dist_bin": None if self.dist_bin is None else str(self.dist_bin),
         }
 
     @classmethod
@@ -55,6 +76,8 @@ class TargetObs:
             visible=bool(data.get("visible")),
             bearing_deg=None if bearing is None else float(bearing),
             log_distance=None if log_d is None else float(log_d),
+            dir_lcr=None if data.get("dir_lcr") is None else str(data.get("dir_lcr")),
+            dist_bin=None if data.get("dist_bin") is None else str(data.get("dist_bin")),
         )
 
 
@@ -71,6 +94,14 @@ class TrackerNoise:
     fp_duration_max: int = 8
     hfov_deg: float = 97.0
     log_dist_bank: list = field(default_factory=list)
+    near: float = 3.0
+    mid: float = 10.0
+    n_w: int = 26
+
+    def bins_from_bearing_dist(self, bearing: float, log_d: float) -> tuple[str, str]:
+        lcr = dir_lcr_from_bearing(bearing, n_w=int(self.n_w), hfov_deg=float(self.hfov_deg))
+        dbin = distance_bin(math.exp(float(log_d)), float(self.near), float(self.mid))
+        return lcr, dbin
 
     def apply_obs(self, obs: TargetObs, rng) -> TargetObs:
         visible = bool(obs.visible)
@@ -84,7 +115,10 @@ class TrackerNoise:
             bearing = wrap_deg(bearing + rng.gauss(0.0, float(self.bearing_std)))
         if self.log_dist_std:
             log_d = log_d + rng.gauss(0.0, float(self.log_dist_std))
-        return TargetObs(visible=True, bearing_deg=bearing, log_distance=log_d)
+        lcr, dbin = self.bins_from_bearing_dist(bearing, log_d)
+        return TargetObs(
+            visible=True, bearing_deg=bearing, log_distance=log_d, dir_lcr=lcr, dist_bin=dbin,
+        )
 
     def apply_pose(self, pos, yaw: float, rng) -> tuple[list[float], float]:
         disp = float(self.disp_std) if self.disp_std else float(self.odom_std)
@@ -261,7 +295,6 @@ def _step_one(
     nrm = _norm(math.hypot(nxt.belief_sin, nxt.belief_cos))
     nxt.belief_sin /= nrm
     nxt.belief_cos /= nrm
-    nxt.sector_raw = rotate_sectors(nxt.sector_raw, dyaw)
 
     moved = math.hypot(pose[0] - nxt.pos[0], pose[-1] - nxt.pos[-1])
     if moved > 0.05:
@@ -376,6 +409,20 @@ def _fp_obs(pos, yaw: float, x: float, z: float) -> TargetObs:
     return TargetObs(visible=True, bearing_deg=bearing, log_distance=log_d)
 
 
+def _with_bins(obs: TargetObs, noise: TrackerNoise | None) -> TargetObs:
+    if not obs.visible:
+        return TargetObs(visible=False)
+    if noise is None:
+        return obs
+    bearing = 0.0 if obs.bearing_deg is None else float(obs.bearing_deg)
+    log_d = float(obs.log_distance if obs.log_distance is not None else LOG_DIST_UNSEEN)
+    lcr, dbin = noise.bins_from_bearing_dist(bearing, log_d)
+    return TargetObs(
+        visible=True, bearing_deg=obs.bearing_deg, log_distance=obs.log_distance,
+        dir_lcr=lcr, dist_bin=dbin,
+    )
+
+
 def apply_c_obs_noise(
     gt_obs: list[TargetObs],
     steps: list[dict],
@@ -403,7 +450,7 @@ def apply_c_obs_noise(
             out.append(noise.apply_obs(gt, rng))
             continue
         if remain > 0:
-            out.append(_fp_obs(pos, yaw, fx, fz))
+            out.append(_with_bins(_fp_obs(pos, yaw, fx, fz), noise))
             remain -= 1
             continue
         if float(noise.p_fp_start) > 0.0 and rng.random() < float(noise.p_fp_start):
@@ -411,7 +458,7 @@ def apply_c_obs_noise(
             log_d = float(bank[rng.randrange(len(bank))])
             fx, fz = _fp_world_pos(pos, yaw, rel, log_d)
             remain = int(rng.randint(dmin, dmax))
-            out.append(_fp_obs(pos, yaw, fx, fz))
+            out.append(_with_bins(_fp_obs(pos, yaw, fx, fz), noise))
             remain -= 1
             continue
         out.append(TargetObs(visible=False))

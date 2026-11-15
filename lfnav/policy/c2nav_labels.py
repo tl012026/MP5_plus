@@ -134,6 +134,46 @@ def flip_turn_index(index: int) -> int:
     return turn_index(-turn_center(int(index)))
 
 
+def explore_turn_soft(sector8, n_turn: int | None = None, extra_turn=None):
+    """Uniform mass over turn classes of the least-visited sectors (C1 _face_sector)."""
+    import numpy as np
+
+    from lfnav.policy.c1 import N_SECTORS, _face_sector
+
+    n = int(N_TURN if n_turn is None else n_turn)
+    counts = [float(x) for x in list(sector8 or [])[:N_SECTORS]]
+    if len(counts) < N_SECTORS:
+        counts = counts + [0.0] * (N_SECTORS - len(counts))
+    lo = min(counts)
+    tied = [i for i, val in enumerate(counts) if val == lo]
+    if not tied:
+        tied = [0]
+    soft = np.zeros(n, np.float32)
+    for k in tied:
+        wp = compose_waypoint(_face_sector(k))
+        idx = int(wp["turn_index"])
+        if 0 <= idx < n:
+            soft[idx] += 1.0
+    if extra_turn is not None:
+        idx = int(extra_turn)
+        if 0 <= idx < n and float(soft[idx]) <= 0.0:
+            soft[idx] += 1.0
+    total = float(soft.sum())
+    if total > 0:
+        soft /= total
+    return soft
+
+
+def flip_turn_soft(soft):
+    import numpy as np
+
+    src = np.asarray(soft, np.float32).reshape(-1)
+    out = np.zeros_like(src)
+    for i, mass in enumerate(src):
+        out[flip_turn_index(i)] += float(mass)
+    return out
+
+
 def gt_stop(step: dict, radius: float = 3.0) -> bool:
     """Target visible, nearest numeric distance <= radius, every condition holds."""
     match = step.get("match") or {}

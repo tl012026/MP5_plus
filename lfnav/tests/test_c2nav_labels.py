@@ -7,7 +7,10 @@ import unittest
 from lfnav.policy.c2nav_labels import (
     FORWARD_BINS,
     MODE_NAMES,
+    N_TURN,
     TURN_BINS,
+    compose_waypoint,
+    explore_turn_soft,
     flip_turn_index,
     forward_index,
     turn_center,
@@ -45,6 +48,21 @@ class TurnLabelTest(unittest.TestCase):
         self.assertEqual(flip_turn_index(idx), idx)
         for i in range(len(TURN_BINS)):
             self.assertEqual(flip_turn_index(flip_turn_index(i)), i, TURN_BINS[i])
+
+
+class ExploreSoftTest(unittest.TestCase):
+    def test_tied_min_sectors_uniform_over_turns(self):
+        from lfnav.policy.c1 import _face_sector
+
+        counts = [5.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+        soft = explore_turn_soft(counts, N_TURN)
+        self.assertAlmostEqual(float(soft.sum()), 1.0, places=5)
+        t1 = compose_waypoint(_face_sector(1))["turn_index"]
+        t2 = compose_waypoint(_face_sector(2))["turn_index"]
+        self.assertGreater(float(soft[t1]), 0.0)
+        self.assertGreater(float(soft[t2]), 0.0)
+        self.assertAlmostEqual(float(soft[t1]), float(soft[t2]), places=5)
+        self.assertAlmostEqual(float(soft[t1] + soft[t2]), 1.0, places=5)
 
 
 class ForwardLabelTest(unittest.TestCase):

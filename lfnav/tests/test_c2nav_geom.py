@@ -9,12 +9,14 @@ import numpy as np
 
 from lfnav.policy.c2nav import (
     C2NavAgent,
+    dir_lcr_from_present,
     gt_target_obs,
     patch_bearings,
     patch_targets,
     pool_gt_to_grid,
     pool_to_grid,
     target_geometry,
+    upsample_nearest,
     vis_labels,
 )
 
@@ -181,6 +183,27 @@ class GtPoolRulesTest(unittest.TestCase):
         }
         _pres, log_d, _ig = patch_targets(scene, ["pig"], 2, (8, 13))
         self.assertAlmostEqual(float(log_d[0, 0, 0]), math.log(5.0), places=5)
+
+
+class DirLcrTest(unittest.TestCase):
+    def test_column_direction_on_right_third(self):
+        present = np.zeros((16, 26), np.float32)
+        present[:, 24] = 1.0
+        self.assertEqual(dir_lcr_from_present(present), "right")
+        present[:, :] = 0.0
+        present[:, 0] = 1.0
+        self.assertEqual(dir_lcr_from_present(present), "left")
+        present[:, :] = 0.0
+        present[:, 13] = 1.0
+        self.assertEqual(dir_lcr_from_present(present), "center")
+
+    def test_upsample_8x13_then_lcr(self):
+        coarse = np.zeros((8, 13), np.float32)
+        coarse[:, 12] = 1.0
+        up = upsample_nearest(coarse, (16, 26))
+        self.assertEqual(tuple(up.shape), (16, 26))
+        self.assertEqual(dir_lcr_from_present(coarse), "right")
+        self.assertEqual(dir_lcr_from_present(up), "right")
 
 
 class StopTauConfigTest(unittest.TestCase):

@@ -25,12 +25,15 @@ from lfnav.perception.extract_features import episode_feature_name
 from lfnav.policy.c2_data import demo_roots, iter_success_episodes, load_task, select_training_episodes
 from lfnav.policy.c2nav import (
     C2NavNet,
+    GEOM_DIM,
     PRESENT_POS_CAP,
     VIS_POS_CAP,
     a_extra_demos_of,
     a_extra_features_of,
     a_extra_per_epoch_of,
+    attach_lcr_dist,
     ckpt_dir_of,
+    distance_bins_of,
     encode_match,
     encode_s,
     far_class_ignore,
@@ -51,7 +54,9 @@ from lfnav.policy.c2nav_labels import (
     MODE_NAMES,
     N_TURN,
     branch_is_mapped,
+    explore_turn_soft,
     flip_turn_index,
+    flip_turn_soft,
     forward_index,
     labels_from_step,
     mode_from_branch,
@@ -125,6 +130,7 @@ class NavSample:
     vis_ignore: np.ndarray | None = None
     a_only: bool = False
     feat_store: int = 0
+    turn_soft: np.ndarray | None = None
 
 
 def _label_int(labels: dict | None, key: str, default: int) -> int:
@@ -207,6 +213,17 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
         class_ig = far_class_ignore(step, objects, hfov)
         vis, vis_ig = vis_labels(present, ignore, class_ig)
         obs_clean = gt_target_obs(present, ignore, target_index, bearings, step.get("target_distance_num"))
+        patches = scene.get("patches") if scene.get("patches") is not None else {}
+        raw = np.asarray(patches.get(target) if isinstance(patches, dict) else present[target_index], np.float32)
+        if raw.ndim != 2:
+            raw = present[target_index]
+        raw_ig = scene.get("ignore")
+        bel = (scene.get("objects") or {}).get(target) if isinstance(scene.get("objects"), dict) else None
+        dist_mass = (bel or {}).get("distance") if isinstance(bel, dict) else None
+        obs_clean = attach_lcr_dist(
+            obs_clean, raw, raw_ig if raw_ig is not None else ignore,
+            step.get("target_distance_num"), cfg, dist_mass=dist_mass,
+        )
         gt_obs.append(obs_clean)
         parsed.append((i, step, feat_row, present, log_d, ignore, obs_clean, vis, vis_ig))
     if noise is None:
@@ -236,10 +253,19 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
         if labels is not None:
             fwd_clip = bool(labels.get("forward_clipped")) or fwd_clip
         obs = noisy_obs[i]
-        s_vec = encode_s(states[i] if i < len(states) else states[-1])
+        mem = step.get("memory") if isinstance(step.get("memory"), dict) else {}
+        s_vec = encode_s(states[i] if i < len(states) else states[-1], sector8=mem.get("sector8"))
         geom = _geom_from_obs(obs)
         geom_clean = _geom_from_obs(obs_clean)
         scene = step.get("scene") if step.get("scene") is not None else {}
+        mode_i = _label_int(labels, "mode", 0)
+        turn_i = _label_int(labels, "turn_index", 0)
+        if labels is not None and mode_i == MODE_NAMES.index("explore"):
+            turn_soft = explore_turn_soft(mem.get("sector8"), N_TURN, extra_turn=turn_i)
+        else:
+            turn_soft = np.zeros(N_TURN, np.float32)
+            if 0 <= turn_i < N_TURN:
+                turn_soft[turn_i] = 1.0
         rows.append(NavSample(
             row=int(feat_row),
             present=present,
@@ -254,8 +280,9 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
             geom=geom,
             geom_clean=geom_clean,
             target_index=target_index,
-            mode=_label_int(labels, "mode", 0),
-            turn=_label_int(labels, "turn_index", 0),
+            mode=mode_i,
+            turn=turn_i,
+            turn_soft=turn_soft,
             forward=fwd_i,
             stop=_label_int(labels, "stop", 0),
             used_wide=used_wide,
@@ -302,6 +329,9 @@ def _noise_from_cfg(cfg: dict) -> TrackerNoise:
         disp_std=float(noise_cfg["disp_std"] if noise_cfg.get("disp_std") is not None else 0.05),
         p_fp_start=0.03 if p_fp is None else float(p_fp),
         hfov_deg=float(horizontal_fov_deg(cfg)),
+        near=distance_bins_of(cfg)[0],
+        mid=distance_bins_of(cfg)[1],
+        n_w=26,
     )
 
 
@@ -589,6 +619,25 @@ def stop_pos_weight(rows: list[NavSample]) -> float:
     return float(min(10.0, n_neg / float(n_pos)))
 
 
+def _as_geom(geom) -> np.ndarray:
+    g = np.asarray(geom, np.float32).reshape(-1)
+    if int(g.shape[0]) >= GEOM_DIM:
+        return np.asarray(g[:GEOM_DIM], np.float32)
+    out = np.zeros(GEOM_DIM, np.float32)
+    out[: int(g.shape[0])] = g
+    return out
+
+
+def _flip_geom(geom) -> np.ndarray:
+    g = np.asarray(geom, np.float32).copy()
+    if g.shape[0] < 3:
+        return g
+    g[1] = -g[1]
+    if g.shape[0] >= 7:
+        g[4], g[6] = g[6], g[4]
+    return g
+
+
 def flip_sample(sample: NavSample) -> NavSample:
     return NavSample(
         row=sample.row,
@@ -601,7 +650,7 @@ def flip_sample(sample: NavSample) -> NavSample:
         brightness=sample.brightness,
         s_vec=np.asarray(flip_vector(list(sample.s_vec)), np.float32),
         cond=sample.cond,
-        geom=np.asarray([sample.geom[0], -sample.geom[1], sample.geom[2], sample.geom[3]], np.float32),
+        geom=_flip_geom(sample.geom),
         target_index=sample.target_index,
         mode=sample.mode,
         turn=flip_turn_index(sample.turn),
@@ -614,12 +663,13 @@ def flip_sample(sample: NavSample) -> NavSample:
         episode_id=sample.episode_id,
         branch=sample.branch,
         forward_clipped=sample.forward_clipped,
-        geom_clean=None if sample.geom_clean is None else np.asarray(sample.geom_clean, np.float32).copy(),
+        geom_clean=None if sample.geom_clean is None else _flip_geom(sample.geom_clean),
         obs_source=sample.obs_source,
         vis=None if sample.vis is None else np.flip(np.asarray(sample.vis), axis=-1).copy() if np.asarray(sample.vis).ndim == 2 else np.asarray(sample.vis).copy(),
         vis_ignore=None if sample.vis_ignore is None else np.asarray(sample.vis_ignore).copy(),
         a_only=sample.a_only,
         feat_store=sample.feat_store,
+        turn_soft=None if sample.turn_soft is None else flip_turn_soft(sample.turn_soft),
     )
 
 
@@ -648,17 +698,21 @@ def collate(rows: list[NavSample], tokens, flip: bool, rng: random.Random) -> di
         "brightness": np.asarray([r.brightness for r in chosen], np.int64),
         "s_vec": np.stack([r.s_vec for r in chosen]),
         "cond": np.stack([r.cond for r in chosen]),
-        "geom": np.stack([r.geom for r in chosen]),
+        "geom": np.stack([_as_geom(r.geom) for r in chosen]),
         "target_index": np.asarray([r.target_index for r in chosen], np.int64),
         "mode": np.asarray([r.mode for r in chosen], np.int64),
         "turn": np.asarray([r.turn for r in chosen], np.int64),
+        "turn_soft": np.stack([
+            r.turn_soft if r.turn_soft is not None else np.eye(N_TURN, dtype=np.float32)[int(r.turn)]
+            for r in chosen
+        ]),
         "forward": np.asarray([r.forward for r in chosen], np.int64),
         "stop": np.asarray([r.stop for r in chosen], np.float32),
         "used_wide": np.asarray([r.used_wide for r in chosen], np.float32),
         "has_c": np.asarray([r.has_c for r in chosen], np.float32),
         "obs_source": [r.obs_source for r in chosen],
         "geom_clean": np.stack([
-            r.geom if r.geom_clean is None else r.geom_clean for r in chosen
+            _as_geom(r.geom if r.geom_clean is None else r.geom_clean) for r in chosen
         ]),
         "vis": np.stack([_row_vis(r, chosen[0].present.shape[0])[0] for r in chosen]),
         "vis_ignore": np.stack([_row_vis(r, chosen[0].present.shape[0])[1] for r in chosen]),
@@ -726,7 +780,21 @@ def nav_loss(out, batch, weights, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth
         turn_logits = _mask_unseen_logits(out["turn"][c_ok], turn_w)
         fwd_logits = _mask_unseen_logits(out["forward"][c_ok], fwd_w)
         loss_mode = F.cross_entropy(mode_logits, batch["mode"][c_ok], weight=mode_w, label_smoothing=smooth)
-        loss_turn = F.cross_entropy(turn_logits, batch["turn"][c_ok], weight=turn_w, label_smoothing=smooth)
+        y_turn = batch.get("turn_soft")
+        if y_turn is None:
+            loss_turn = F.cross_entropy(turn_logits, batch["turn"][c_ok], weight=turn_w, label_smoothing=smooth)
+        else:
+            y_turn = y_turn[c_ok].to(dtype=turn_logits.dtype)
+            n_t = int(turn_logits.shape[-1])
+            n_pos = (y_turn > 1e-6).sum(dim=-1, keepdim=True)
+            hard = F.one_hot(batch["turn"][c_ok], n_t).to(dtype=turn_logits.dtype)
+            if float(smooth) > 0:
+                hard = hard * (1.0 - float(smooth)) + float(smooth) / float(n_t)
+            y_use = torch.where(n_pos > 1, y_turn, hard)
+            logp = F.log_softmax(turn_logits, dim=-1)
+            w = turn_w.to(dtype=logp.dtype).view(1, -1)
+            nll = -(y_use * logp * w).sum(dim=-1) / (y_use * w).sum(dim=-1).clamp_min(1e-8)
+            loss_turn = nll.mean()
         loss_fwd = F.cross_entropy(fwd_logits, batch["forward"][c_ok], weight=fwd_w, label_smoothing=smooth)
         loss_wp = (loss_turn + loss_fwd) / 2.0
     else:
@@ -864,6 +932,7 @@ def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cf
             "stop_auc": _metric(None, 0),
             "present_auc": _metric(None, 0),
             "log_dist_mae": _metric(None, 0),
+            "explore_support": _metric(None, 0),
             "n": 0,
         }
     model.eval()
@@ -874,6 +943,7 @@ def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cf
     y_fwd, p_fwd = [], []
     y_turn_by_mode = {name: ([], []) for name in MODE_NAMES}
     y_fwd_by_mode = {name: ([], []) for name in MODE_NAMES}
+    n_ex = n_ex_hit = 0
     present_y, present_p = [], []
     vis_y, vis_p = [], []
     vis_y_tgt, vis_p_tgt = [], []
@@ -896,10 +966,18 @@ def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cf
                     p_fwd.append(int(out["forward"][i].argmax().item()))
                     name = MODE_NAMES[row.mode] if 0 <= row.mode < len(MODE_NAMES) else None
                     if name is not None:
+                        pred_t = int(out["turn"][i].argmax().item())
                         y_turn_by_mode[name][0].append(row.turn)
-                        y_turn_by_mode[name][1].append(int(out["turn"][i].argmax().item()))
+                        y_turn_by_mode[name][1].append(pred_t)
                         y_fwd_by_mode[name][0].append(row.forward)
                         y_fwd_by_mode[name][1].append(int(out["forward"][i].argmax().item()))
+                        if name == "explore":
+                            n_ex += 1
+                            soft = row.turn_soft
+                            if soft is not None and 0 <= pred_t < len(soft) and float(soft[pred_t]) > 0:
+                                n_ex_hit += 1
+                            elif soft is None and pred_t == int(row.turn):
+                                n_ex_hit += 1
                 if row.has_c and not row.a_only:
                     y_stop.append(int(row.stop))
                     p_stop.append(float(torch.sigmoid(out["stop"][i]).item()))
@@ -997,6 +1075,7 @@ def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cf
         "n_stop": n_stop,
         "n_stop_pos": n_pos,
         "vis_fpr_0.5": vis_fpr_05,
+        "explore_support": _metric(None if n_ex == 0 else n_ex_hit / float(n_ex), n_ex),
     }
 
 
@@ -1080,7 +1159,7 @@ def dry_run_torch() -> float:
         "brightness": torch.zeros(b, dtype=torch.long),
         "s_vec": torch.zeros(b, spec["s_dim"]),
         "cond": torch.zeros(b, spec["cond_dim"]),
-        "geom": torch.zeros(b, 4),
+        "geom": torch.zeros(b, GEOM_DIM),
         "target_index": torch.zeros(b, dtype=torch.long),
         "bearings": torch.zeros(h, w),
         "mode": torch.zeros(b, dtype=torch.long),
@@ -1147,6 +1226,7 @@ def _brief_val(metrics: dict, extra_a=None) -> dict:
         "turn_acc_by_mode": metrics.get("turn_acc_by_mode"),
         "forward_acc_by_mode": metrics.get("forward_acc_by_mode"),
         "stop_best_f1": metrics.get("stop_best_f1"),
+        "explore_support": metrics.get("explore_support"),
     }
     if extra_a is not None:
         brief["a_extra_val"] = {
@@ -1423,6 +1503,19 @@ def train_loop(
         diag_rows = val if val else train
         diag = c_only_diag(model, diag_rows, token_arg, device, spec, cfg, bearings)
         print("c2nav c_only_diag " + json.dumps(diag, default=str), flush=True)
+        used = metrics
+        turn_m = used.get("turn_acc_by_mode") if used.get("turn_acc_by_mode") is not None else {}
+        fwd_m = used.get("forward_acc_by_mode") if used.get("forward_acc_by_mode") is not None else {}
+        app_t = turn_m.get("approach") if isinstance(turn_m, dict) else None
+        app_f = fwd_m.get("approach") if isinstance(fwd_m, dict) else None
+        stop = used.get("stop_best_f1") if used.get("stop_best_f1") is not None else {}
+        print("c2nav c_only_summary " + json.dumps({
+            "approach_turn": None if not isinstance(app_t, dict) else app_t.get("value"),
+            "approach_forward": None if not isinstance(app_f, dict) else app_f.get("value"),
+            "explore_support": None if not isinstance(used.get("explore_support"), dict) else used["explore_support"].get("value"),
+            "stop_best_f1": None if not isinstance(stop, dict) else stop.get("f1"),
+            "backward_recall": diag.get("backward_recall"),
+        }, default=str), flush=True)
     return last
 
 

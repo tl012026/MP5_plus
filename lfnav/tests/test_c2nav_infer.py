@@ -91,7 +91,9 @@ class ObsSourceGtTest(unittest.TestCase):
         }
         ti = objects.index("cow")
         p, _, ig = patch_targets(scene, objects, int(spec["token_pool"]), grid)
-        train_obs = gt_target_obs(p, ig, ti, bearings, 6.0)
+        from lfnav.policy.c2nav import attach_lcr_dist
+
+        train_obs = attach_lcr_dist(gt_target_obs(p, ig, ti, bearings, 6.0), raw, scene.get("ignore"), 6.0, cfg)
         agent = _gt_agent({"c2nav": {"obs_source": "gt"}, "image_hw": [224, 364], "fov_deg": 70, "labels": cfg.get("labels")})
         infer_obs = agent.gt_obs_from_scene(scene, "cow", 6.0)
         self.assertEqual(bool(train_obs.visible), bool(infer_obs.visible))
