@@ -26,6 +26,7 @@ c2nav:
   dropout: 0.3
   label_smoothing: 0.1
   vis_tau: 0.5
+  obs_source: pred
   augment:
     flip: false
   train_difficulties: [easy]

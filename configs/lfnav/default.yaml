@@ -103,7 +103,8 @@ c2nav:
   dim: 384
   grid: [8, 13]
   token_pool: 2
-  chunk_max_steps: 8
+  chunk_max_steps: 12
+  obs_source: pred
   encoder: dinov2_vits14
   stop_tau: 0.5
   lr: 0.0003

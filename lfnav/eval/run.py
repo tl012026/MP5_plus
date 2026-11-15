@@ -36,6 +36,7 @@ from lfnav.perception.gt import GTPerception
 from lfnav.policy.c0 import RandomWalk
 from lfnav.policy.c1 import RuleBased
 from lfnav.policy.joint import belief_aligned_distance
+from lfnav.policy.c2nav import DECISION_ACTION_CAP, obs_source_of
 from lfnav.types import PolicyInput, TaskSpec
 
 
@@ -248,6 +249,7 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
             "hostile_seen": 0,
             "peaceful_sent": peaceful_command_sent(meta),
             "peaceful_ok": peaceful_command_sent(meta),
+            "obs_source": obs_source_of(cfg) if cfg.get("policy_name") == "c2nav" else None,
         }
         return verdict, []
     if "initial_target_distance" not in meta:
@@ -293,7 +295,7 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         mem["env_steps"] = env_steps
         gt_frame = scene_state_from_obs(obs, cfg)
         if rec is not None:
-            rec.set_info(match.to_dict())
+            rec.set_info(match.to_dict(), extra={"obs_source": obs_source_of(cfg) if getattr(policy, "name", None) == "c2nav" else None})
         policy_owns_stop = getattr(policy, "name", None) == "c2nav"
         if match.stop and not policy_owns_stop:
             if rec is not None:
@@ -319,11 +321,24 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         output = policy.act(pin)
         t3 = time.perf_counter()
         if output.stop:
+            info = dict(output.info or {})
+            wp = info.get("waypoint") or {}
             if rec is not None:
-                rec.set_info(match.to_dict(), action="stop", extra=(output.info or {}))
+                rec.set_info(match.to_dict(), action="stop", extra=info)
                 rec.capture(obs, tag="stop", keyframe=True)
             row = {
                 "decision": len(events),
+                "step": env_steps,
+                "mode": info.get("mode"),
+                "pred_turn": wp.get("turn_deg"),
+                "pred_fwd": wp.get("forward"),
+                "p_stop": info.get("p_stop"),
+                "visible": info.get("visible"),
+                "bearing": info.get("bearing"),
+                "dist": info.get("dist"),
+                "obs_source": info.get("obs_source"),
+                "pos": list(pos) if pos is not None else None,
+                "yaw": yaw,
                 "scene": scene.to_dict(),
                 "perception": scene.to_dict(),
                 "gt": gt_frame.to_dict(),
@@ -339,53 +354,32 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
             break
         control_rows = []
         remain = max_steps - env_steps
-        chunk_budget = remain
-        if getattr(policy, "name", None) == "c2nav":
-            chunk_budget = min(remain, int(getattr(policy, "chunk_max", 8)))
-        if output.waypoints:
-            if rec is not None:
-                rec.set_info(match.to_dict(), extra=(output.info or {}))
-            result = controller.execute_waypoints(output.waypoints, budget=chunk_budget)
-            executed = list(result.executed or [])
-            if rec is not None:
-                rec.set_info(match.to_dict(), action=",".join(executed) or "waypoint", extra=(output.info or {}))
-            if privileged_ray_distance(result.obs, cfg, task.target) is not None:
-                seen_gt = True
-            hostile_seen += count_hostile_hits(result.obs, cfg)
-            result.obs = _hide_wide(result.obs, cfg)
-            env_steps += result.env_steps
-            new_pos = position_of(result.obs, cfg)
-            if prev is not None and new_pos is not None:
-                path += math.hypot(new_pos[0] - prev[0], new_pos[-1] - prev[-1])
-            prev = new_pos or prev
-            skip_stuck = bool((cfg.get("policy") or {}).get("skip_visits_when_stuck", True))
-            memory.observe(
-                new_pos,
-                yaw_of(result.obs, cfg),
-                (executed[-1] if executed else "forward"),
-                match.to_dict(),
-                increment_visits=not (skip_stuck and result.stuck),
-            )
-            last_stuck = result.stuck
-            obs = result.obs
-            packed = result.to_dict()
-            packed["executed"] = executed
-            control_rows.append(packed)
-            if getattr(policy, "_prev_actions", None) is not None:
-                policy._prev_actions = executed
-        else:
+        is_c2nav = getattr(policy, "name", None) == "c2nav"
+        extra_info = dict(output.info or {})
+        extra_info["obs_source"] = obs_source_of(cfg) if is_c2nav else extra_info.get("obs_source")
+        extra_info["step"] = env_steps
+        if rec is not None:
+            rec.set_info(match.to_dict(), extra=extra_info)
+        executed_all: list[str] = []
+        chunk_cap = remain
+        if is_c2nav:
+            chunk_cap = min(remain, DECISION_ACTION_CAP)
+        if output.action_chunk:
+            used = 0
             for action in output.action_chunk:
-                remain = max_steps - env_steps
-                if remain <= 0:
+                left = remain - used
+                if left <= 0 or used >= chunk_cap:
                     break
                 if rec is not None:
-                    rec.set_info(match.to_dict(), action=action, extra=(output.info or {}))
-                result = controller.execute(action, budget=remain)
+                    rec.set_info(match.to_dict(), action=action, extra=extra_info)
+                result = controller.execute(action, budget=left)
                 if privileged_ray_distance(result.obs, cfg, task.target) is not None:
                     seen_gt = True
                 hostile_seen += count_hostile_hits(result.obs, cfg)
                 result.obs = _hide_wide(result.obs, cfg)
                 env_steps += result.env_steps
+                used += result.env_steps
+                executed_all.extend(result.executed or [action])
                 new_pos = position_of(result.obs, cfg)
                 if prev is not None and new_pos is not None:
                     path += math.hypot(new_pos[0] - prev[0], new_pos[-1] - prev[-1])
@@ -400,11 +394,55 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
                 )
                 last_stuck = result.stuck
                 obs = result.obs
-                control_rows.append(result.to_dict())
+                packed = result.to_dict()
+                packed["executed"] = list(result.executed or [action])
+                control_rows.append(packed)
                 if env_steps >= max_steps:
                     break
+        elif output.waypoints:
+            result = controller.execute_waypoints(output.waypoints, budget=chunk_cap)
+            executed_all = list(result.executed or [])
+            if rec is not None:
+                rec.set_info(match.to_dict(), action=",".join(executed_all) or "waypoint", extra=extra_info)
+            if privileged_ray_distance(result.obs, cfg, task.target) is not None:
+                seen_gt = True
+            hostile_seen += count_hostile_hits(result.obs, cfg)
+            result.obs = _hide_wide(result.obs, cfg)
+            env_steps += result.env_steps
+            new_pos = position_of(result.obs, cfg)
+            if prev is not None and new_pos is not None:
+                path += math.hypot(new_pos[0] - prev[0], new_pos[-1] - prev[-1])
+            prev = new_pos or prev
+            skip_stuck = bool((cfg.get("policy") or {}).get("skip_visits_when_stuck", True))
+            memory.observe(
+                new_pos,
+                yaw_of(result.obs, cfg),
+                (executed_all[-1] if executed_all else "forward"),
+                match.to_dict(),
+                increment_visits=not (skip_stuck and result.stuck),
+            )
+            last_stuck = result.stuck
+            obs = result.obs
+            packed = result.to_dict()
+            packed["executed"] = executed_all
+            control_rows.append(packed)
+        if getattr(policy, "_prev_actions", None) is not None:
+            policy._prev_actions = executed_all
+        info = extra_info
+        wp = info.get("waypoint") or {}
         row = {
             "decision": len(events),
+            "step": info.get("step", env_steps),
+            "mode": info.get("mode"),
+            "pred_turn": wp.get("turn_deg"),
+            "pred_fwd": wp.get("forward"),
+            "p_stop": info.get("p_stop"),
+            "visible": info.get("visible"),
+            "bearing": info.get("bearing"),
+            "dist": info.get("dist"),
+            "obs_source": info.get("obs_source"),
+            "pos": list(pos) if pos is not None else None,
+            "yaw": yaw,
             "scene": scene.to_dict(),
             "perception": scene.to_dict(),
             "gt": gt_frame.to_dict(),
@@ -473,6 +511,7 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         "peaceful_sent": peaceful_command_sent(meta),
         "peaceful_ok": peaceful_command_sent(meta),
         "hostile_seen": int(hostile_seen),
+        "obs_source": obs_source_of(cfg) if cfg.get("policy_name") == "c2nav" else None,
         "spawn_underground": bool(meta.get("spawn_underground", False)),
         "underground_rerolls": int(meta.get("underground_rerolls") or 0),
         "can_see_sky": bool(meta.get("can_see_sky", True)),

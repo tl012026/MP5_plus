@@ -7,12 +7,15 @@ import math
 import numpy as np
 
 from lfnav.policy.base import Policy
-from lfnav.policy.c2nav_labels import FORWARD_BINS, MODE_NAMES, N_TURN
-from lfnav.policy.state_tracker import STEPS_NORM, TrackerState
+from lfnav.policy.c2nav_labels import FORWARD_BINS, MODE_NAMES, N_TURN, invert_waypoint, turn_center
+from lfnav.policy.state_tracker import LOG_DIST_UNSEEN, STEPS_NORM, TargetObs, TrackerState, update
 
 VERSION = "c2nav_v1"
 CHANNELS = 64
 S_DIM = 18
+OBS_PRED = "pred"
+OBS_GT = "gt"
+DECISION_ACTION_CAP = 12
 CKPT_STRUCTURE = (
     "version",
     "hidden",
@@ -50,9 +53,10 @@ def spec_from_cfg(cfg: dict | None = None) -> dict:
         "channels": int(nav.get("channels") or CHANNELS),
         "dim": int(nav.get("dim") or 384),
         "grid": tuple(nav.get("grid") or (8, 13)),
-        "token_pool": int(nav.get("token_pool") or ((cfg.get("joint") or {}).get("token_pool") or 2)),
-        "dropout": float(nav.get("dropout") or 0.3),
-        "chunk_max_steps": int(nav.get("chunk_max_steps") or 8),
+        "token_pool": int(nav.get("token_pool") if nav.get("token_pool") is not None else ((cfg.get("joint") or {}).get("token_pool") if (cfg.get("joint") or {}).get("token_pool") is not None else 2)),
+        "dropout": float(nav.get("dropout") if nav.get("dropout") is not None else 0.3),
+        "chunk_max_steps": int(nav.get("chunk_max_steps") if nav.get("chunk_max_steps") is not None else DECISION_ACTION_CAP),
+        "obs_source": str(nav.get("obs_source") if nav.get("obs_source") is not None else OBS_PRED),
         "vis_tau": float(nav["vis_tau"] if nav.get("vis_tau") is not None else 0.5),
         "modes": list(MODE_NAMES),
         "n_turn": int(N_TURN),
@@ -106,6 +110,102 @@ def align_hw(arr, height: int, width: int, how: str = "max") -> np.ndarray:
     if how == "min":
         return np.asarray(blocks.min(axis=(1, 3)), dtype=np.float32)
     return np.asarray(blocks.mean(axis=(1, 3)), dtype=np.float32)
+
+
+def obs_source_of(cfg: dict | None = None) -> str:
+    nav = (cfg or {}).get("c2nav") or {}
+    src = nav.get("obs_source")
+    if src is None:
+        return OBS_PRED
+    name = str(src)
+    if name not in (OBS_PRED, OBS_GT):
+        raise RuntimeError(f"c2nav.obs_source must be {OBS_PRED!r} or {OBS_GT!r}, got {name!r}")
+    return name
+
+
+def pool2d(arr: np.ndarray, k: int, how: str) -> np.ndarray:
+    a = np.asarray(arr)
+    k = max(int(k), 1)
+    if k <= 1:
+        return a
+    h, w = a.shape
+    nh, nw = h // k, w // k
+    if nh == 0 or nw == 0:
+        return a
+    blocks = a[: nh * k, : nw * k].reshape(nh, k, nw, k)
+    if how == "max":
+        return blocks.max(axis=(1, 3))
+    if how == "min":
+        return blocks.min(axis=(1, 3))
+    return blocks.mean(axis=(1, 3))
+
+
+def pool_to_grid(arr: np.ndarray, grid: tuple[int, int], how: str = "max") -> np.ndarray:
+    """Pool or keep a 2D map so it matches grid. 16x26 patches become 8x13 with factor 2."""
+    gh, gw = int(grid[0]), int(grid[1])
+    a = np.asarray(arr, dtype=np.float32)
+    if a.ndim != 2:
+        return np.zeros((gh, gw), np.float32)
+    h, w = int(a.shape[0]), int(a.shape[1])
+    if h == gh and w == gw:
+        return a
+    kh = h // gh
+    kw = w // gw
+    if kh < 1 or kw < 1:
+        return np.zeros((gh, gw), np.float32)
+    k = kh if kh == kw else kh
+    pooled = pool2d(a, k, how)
+    if pooled.shape != (gh, gw):
+        return np.zeros((gh, gw), np.float32)
+    return np.asarray(pooled, dtype=np.float32)
+
+
+def patch_targets(scene: dict, objects: list[str], pool: int, grid: tuple[int, int]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    del pool
+    gh, gw = int(grid[0]), int(grid[1])
+    k = len(objects)
+    present = np.zeros((k, gh, gw), np.float32)
+    log_d = np.zeros((k, gh, gw), np.float32)
+    ignore = np.zeros((gh, gw), np.float32)
+    raw_ignore = (scene or {}).get("ignore") or []
+    if raw_ignore:
+        ig = np.asarray(raw_ignore, dtype=np.float32)
+        if ig.ndim == 2:
+            ignore = pool_to_grid(ig, grid, "max")
+    patches = (scene or {}).get("patches") or {}
+    for i, name in enumerate(objects):
+        grid_p = np.asarray(patches.get(name) or [], dtype=np.float32)
+        if grid_p.ndim != 2:
+            continue
+        pooled = pool_to_grid(grid_p, grid, "max")
+        present[i] = pooled
+        log_d[i] = np.where(pooled > 0.5, math.log(8.0), 0.0)
+    return present, log_d, ignore
+
+
+def geom_from_obs(obs: TargetObs) -> np.ndarray:
+    if not obs.visible:
+        return np.asarray([0.0, 0.0, 1.0, math.log(32.0)], np.float32)
+    yaw = 0.0 if obs.bearing_deg is None else float(obs.bearing_deg)
+    rad = math.radians(yaw)
+    log_d = float(obs.log_distance if obs.log_distance is not None else math.log(32.0))
+    return np.asarray([1.0, math.sin(rad), math.cos(rad), log_d], np.float32)
+
+
+def gt_target_obs(present: np.ndarray, ignore: np.ndarray, target_index: int, bearings: np.ndarray, dist_num) -> TargetObs:
+    """Visible if the target has at least one non-ignore positive patch. Bearing is mean column yaw."""
+    p = np.asarray(present[int(target_index)], np.float32)
+    valid = np.asarray(ignore, np.float32) < 0.5
+    hit = (p > 0.5) & valid
+    if not np.any(hit):
+        return TargetObs(visible=False)
+    yaw_map = np.asarray(bearings, np.float32)
+    yaw = float(yaw_map[hit].mean())
+    if dist_num is None:
+        log_d = float(LOG_DIST_UNSEEN)
+    else:
+        log_d = math.log(max(float(dist_num), 0.05))
+    return TargetObs(visible=True, bearing_deg=yaw, log_distance=log_d)
 
 
 def encode_match(match: dict | None, objects: list[str]) -> np.ndarray:
@@ -370,14 +470,19 @@ class C2NavAgent(Policy):
         nav = self.cfg.get("c2nav") or {}
         stop_tau = nav.get("stop_tau")
         self.tau = 0.5 if stop_tau is None else float(stop_tau)
-        self.chunk_max = int(nav.get("chunk_max_steps") or 8)
+        chunk = nav.get("chunk_max_steps")
+        self.chunk_max = DECISION_ACTION_CAP if chunk is None else int(chunk)
+        self.obs_source = obs_source_of(self.cfg)
         self._tokens = None
         self._scene = None
         self._last_a = None
+        self._last_frame = None
+        self._gt_obs = None
         self._s = TrackerState(max_steps=STEPS_NORM)
         self._prev_actions: list[str] = []
         self.last_info: dict = {}
         self.model = None
+        self.encoder = None
         self.spec = spec_from_cfg(self.cfg)
         self.bearings = patch_bearings(self.spec["grid"][0], self.spec["grid"][1], self.cfg)
         self._ignore_hw = self._hud_ignore_map()
@@ -388,7 +493,7 @@ class C2NavAgent(Policy):
         self._torch = torch
         ckpt = nav.get("checkpoint")
         payload = None
-        if ckpt:
+        if ckpt is not None:
             if torch is None:
                 raise RuntimeError("c2nav checkpoint requires torch")
             payload = torch.load(ckpt, map_location="cpu")
@@ -399,14 +504,20 @@ class C2NavAgent(Policy):
             self.bearings = patch_bearings(self.spec["grid"][0], self.spec["grid"][1], self.cfg)
             if self.spec.get("vis_tau") is None:
                 self.spec["vis_tau"] = float(nav["vis_tau"] if nav.get("vis_tau") is not None else 0.5)
+            self.spec["obs_source"] = self.obs_source
             self._ignore_hw = self._hud_ignore_map()
-        from lfnav.perception.encoder import FakeEncoder, load_encoder
+        if self.obs_source != OBS_GT:
+            from lfnav.perception.encoder import FakeEncoder, load_encoder
 
-        enc_name = nav.get("encoder") or ((self.cfg.get("perception") or {}).get("encoder") or "fake")
-        if self.cfg.get("dry_run") or enc_name in ("fake", "dry-run") or torch is None:
-            self.encoder = FakeEncoder(dim=int(self.spec["dim"]), grid=tuple(self.spec["grid"]))
-        else:
-            self.encoder = load_encoder(enc_name, self.cfg)
+            enc_name = nav.get("encoder")
+            if enc_name is None:
+                enc_name = (self.cfg.get("perception") or {}).get("encoder")
+            if enc_name is None:
+                enc_name = "fake"
+            if self.cfg.get("dry_run") or enc_name in ("fake", "dry-run") or torch is None:
+                self.encoder = FakeEncoder(dim=int(self.spec["dim"]), grid=tuple(self.spec["grid"]))
+            else:
+                self.encoder = load_encoder(enc_name, self.cfg)
         if torch is not None and self.model is None:
             self.model = C2NavNet(self.spec)
             self.model.eval()
@@ -426,14 +537,28 @@ class C2NavAgent(Policy):
         self._tokens = None
         self._scene = None
         self._last_a = None
+        self._last_frame = None
+        self._gt_obs = None
         self._s = TrackerState(max_steps=STEPS_NORM)
         self._prev_actions = []
         self.last_info = {}
+
+    def gt_obs_from_scene(self, scene: dict, target: str, dist_num) -> TargetObs:
+        objects = list(self.spec["objects"])
+        t_i = objects.index(target) if target in objects else 0
+        grid = tuple(self.spec["grid"])
+        pool = int(self.spec["token_pool"] if self.spec.get("token_pool") is not None else 2)
+        present, _log_d, ignore = patch_targets(scene or {}, objects, pool, grid)
+        return gt_target_obs(present, ignore, t_i, self.bearings, dist_num)
 
     def features(self, frame, force: bool = False) -> dict:
         from lfnav.data.demo_format import preprocess_frame
         from lfnav.perception.joint_features import encode_joint_tokens
 
+        if self.obs_source == OBS_GT:
+            return {"tokens": None, "obs_source": OBS_GT}
+        if self.encoder is None:
+            raise RuntimeError("c2nav pred path requires an encoder")
         if not force and self._tokens is not None:
             return {"tokens": self._tokens}
         rgb = frame
@@ -444,7 +569,8 @@ class C2NavAgent(Policy):
             if rgb is None:
                 rgb = frame.get("rgb")
         rgb = preprocess_frame(rgb)
-        encoded = encode_joint_tokens(rgb, self.encoder, int(self.spec["token_pool"] or 1))
+        pool = int(self.spec["token_pool"] if self.spec.get("token_pool") is not None else 1)
+        encoded = encode_joint_tokens(rgb, self.encoder, pool)
         tokens = np.asarray(encoded["tokens"], dtype=np.float32)
         gh, gw = int(self.spec["grid"][0]), int(self.spec["grid"][1])
         if tokens.ndim == 3 and (int(tokens.shape[0]), int(tokens.shape[1])) != (gh, gw) and gh > 0:
@@ -457,6 +583,18 @@ class C2NavAgent(Policy):
         return encoded
 
     def numeric_distance(self, target: str):
+        if self.obs_source == OBS_GT:
+            obs = self._gt_obs
+            if obs is None and self._scene is not None:
+                dist = None
+                if self._last_frame is not None:
+                    from lfnav.gt.initial import privileged_ray_distance
+
+                    dist = privileged_ray_distance(self._last_frame, self.cfg, target)
+                obs = self.gt_obs_from_scene(self._scene.to_dict(), target, dist)
+            if obs is None or not obs.visible or obs.log_distance is None:
+                return None
+            return math.exp(float(obs.log_distance))
         if self._last_a is None or self._torch is None:
             return None
         objects = list(self.spec["objects"])
@@ -472,7 +610,22 @@ class C2NavAgent(Policy):
         return math.exp(float(log_d))
 
     def perceive(self, frame):
+        from lfnav.gt.scene_state import scene_state_from_obs
         from lfnav.types import SceneState
+
+        if self.obs_source == OBS_GT:
+            if hasattr(frame, "to_dict") and hasattr(frame, "patches"):
+                self._last_frame = None
+                self._scene = frame
+            elif isinstance(frame, dict) and (frame.get("patches") is not None or frame.get("ignore") is not None):
+                self._last_frame = None
+                self._scene = SceneState.from_dict(frame)
+            elif isinstance(frame, dict):
+                self._last_frame = frame
+                self._scene = scene_state_from_obs(frame, self.cfg)
+            else:
+                raise TypeError("c2nav obs_source=gt expects a full observation or a GT scene dict")
+            return self._scene
 
         self.features(frame, force=True)
         if self.model is None or self._torch is None or self._tokens is None:
@@ -494,55 +647,84 @@ class C2NavAgent(Policy):
         return self._scene
 
     def act(self, policy_input: PolicyInput) -> PolicyOutput:
-        from lfnav.policy.c2nav_labels import FORWARD_BINS, MODE_NAMES, invert_waypoint, turn_center
-        from lfnav.policy.state_tracker import TargetObs, update
+        from lfnav.gt.initial import privileged_ray_distance
         from lfnav.types import PolicyOutput
 
         mem = policy_input.memory or {}
-        pos = mem.get("pos") or [0.0, 0.0, 0.0]
-        yaw = float(mem.get("yaw") or 0.0)
+        pos = [0.0, 0.0, 0.0] if mem.get("pos") is None else list(mem.get("pos"))
+        yaw = 0.0 if mem.get("yaw") is None else float(mem.get("yaw"))
         match = policy_input.match or {}
         target = str((policy_input.task or {}).get("target") or "")
         objects = list(self.spec["objects"])
         t_i = objects.index(target) if target in objects else 0
         obs = TargetObs(visible=False)
-        geom_np = np.zeros(4, np.float32)
+        geom_np = geom_from_obs(obs)
         mode_i = turn_i = fwd_i = 0
         p_stop = 0.0
-        if self.model is not None and self._torch is not None and self._tokens is not None:
+        vis_tau = float(self.spec["vis_tau"] if self.spec.get("vis_tau") is not None else 0.5)
+
+        if self.obs_source == OBS_GT:
+            scene_d = {} if self._scene is None else self._scene.to_dict()
+            dist_num = None
+            if self._last_frame is not None:
+                dist_num = privileged_ray_distance(self._last_frame, self.cfg, target)
+            elif (policy_input.scene or {}).get("target_distance_num") is not None:
+                dist_num = policy_input.scene.get("target_distance_num")
+            obs = self.gt_obs_from_scene(scene_d, target, dist_num)
+            self._gt_obs = obs
+            geom_np = geom_from_obs(obs)
+        elif self.model is not None and self._torch is not None and self._tokens is not None:
             torch = self._torch
             device = next(self.model.parameters()).device
             with torch.no_grad():
-                batch = {
-                    "tokens": torch.from_numpy(np.asarray(self._tokens, np.float32)).unsqueeze(0).to(device),
-                    "s_vec": torch.from_numpy(encode_s(self._s)).unsqueeze(0).to(device),
-                    "cond": torch.from_numpy(encode_match(match, objects)).unsqueeze(0).to(device),
-                    "target_index": torch.tensor([t_i], device=device, dtype=torch.long),
-                    "bearings": torch.as_tensor(self.bearings, device=device, dtype=torch.float32),
-                    "ignore": torch.as_tensor(self._ignore_hw, device=device, dtype=torch.float32),
-                }
-                out = self.model(batch)
-            vis_f = float(out["vis"][0])
-            sn = float(out["geom"][0, 1])
-            cs = float(out["geom"][0, 2])
-            log_d = float(out["geom"][0, 3])
-            vis_tau = float(self.spec["vis_tau"] if self.spec.get("vis_tau") is not None else 0.5)
+                tokens = torch.from_numpy(np.asarray(self._tokens, np.float32)).unsqueeze(0).to(device)
+                a = self.model.perception(tokens)
+                vis, sn, cs, log_d = target_geometry(
+                    a["present_p"], a["log_dist"], t_i, self.bearings,
+                    vis_tau=vis_tau, ignore=self._ignore_hw, cfg=self.cfg,
+                )
+            vis_f = float(vis[0])
+            sn_f = float(sn[0])
+            cs_f = float(cs[0])
+            log_f = float(log_d[0])
             obs = TargetObs(
                 visible=vis_f >= vis_tau,
-                bearing_deg=math.degrees(math.atan2(sn, cs)),
-                log_distance=log_d,
+                bearing_deg=math.degrees(math.atan2(sn_f, cs_f)),
+                log_distance=log_f,
             )
-            geom_np = np.asarray([vis_f, sn, cs, log_d], np.float32)
+            geom_np = np.asarray([vis_f, sn_f, cs_f, log_f], np.float32)
+            self._last_a = a
+
+        self._s = update(self._s, pos, yaw, self._prev_actions, obs, max_steps=self._s.max_steps)
+
+        if self.model is not None and self._torch is not None:
+            torch = self._torch
+            device = next(self.model.parameters()).device
+            with torch.no_grad():
+                geom_t = torch.from_numpy(np.asarray(geom_np, np.float32)).unsqueeze(0).to(device)
+                s_t = torch.from_numpy(encode_s(self._s)).unsqueeze(0).to(device)
+                cond_t = torch.from_numpy(encode_match(match, objects)).unsqueeze(0).to(device)
+                out = self.model.policy(geom_t, s_t, cond_t)
             mode_i = int(out["mode"][0].argmax().item())
             turn_i = int(out["turn"][0].argmax().item())
             fwd_i = int(out["forward"][0].argmax().item())
             p_stop = float(torch.sigmoid(out["stop"][0]).item())
-        self._s = update(self._s, pos, yaw, self._prev_actions, obs, max_steps=self._s.max_steps)
+
         feat = self._s.features()
+        turn_deg = turn_center(turn_i)
+        forward = FORWARD_BINS[fwd_i] if 0 <= fwd_i < len(FORWARD_BINS) else 0
+        dist = None if (not obs.visible or obs.log_distance is None) else math.exp(float(obs.log_distance))
+        bearing = 0.0 if (not obs.visible or obs.bearing_deg is None) else float(obs.bearing_deg)
         info = {
             "mode": MODE_NAMES[mode_i] if 0 <= mode_i < len(MODE_NAMES) else str(mode_i),
-            "waypoint": {"turn_deg": turn_center(turn_i), "forward": FORWARD_BINS[fwd_i] if 0 <= fwd_i < len(FORWARD_BINS) else 0},
+            "waypoint": {"turn_deg": turn_deg, "forward": forward},
             "p_stop": p_stop,
+            "visible": bool(obs.visible),
+            "bearing": bearing,
+            "dist": dist,
+            "obs_source": self.obs_source,
+            "pos": list(pos),
+            "yaw": float(yaw),
             "belief": {
                 "bearing_sin": feat["bearing_sin"],
                 "bearing_cos": feat["bearing_cos"],
@@ -551,14 +733,13 @@ class C2NavAgent(Policy):
             },
             "tau": self.tau,
         }
+        cap = DECISION_ACTION_CAP if self.chunk_max is None else min(int(self.chunk_max), DECISION_ACTION_CAP)
+        if cap < 1:
+            cap = DECISION_ACTION_CAP
+        actions = invert_waypoint(turn_i, fwd_i)[:cap] or ["noop"]
+        self._prev_actions = list(actions)
+        info["action_chunk"] = actions
         self.last_info = info
         if p_stop > self.tau:
             return PolicyOutput(stop=True, info=info)
-        dyaw = turn_center(turn_i)
-        forward = FORWARD_BINS[fwd_i] if 0 <= fwd_i < len(FORWARD_BINS) else 0
-        actions = invert_waypoint(turn_i, fwd_i)[: self.chunk_max]
-        self._prev_actions = list(actions)
-        info["action_chunk"] = actions
-        if forward < 0:
-            return PolicyOutput(action_chunk=actions, info=info)
-        return PolicyOutput(waypoints=[(dyaw, forward)], info=info)
+        return PolicyOutput(action_chunk=actions, info=info)

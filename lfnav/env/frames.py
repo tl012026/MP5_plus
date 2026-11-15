@@ -159,7 +159,8 @@ class FrameRecorder:
             ]
             if extra:
                 lines.extend([
-                    f"mode={extra.get('mode')} wp={wp.get('turn_deg')}/{wp.get('forward')} p_stop={extra.get('p_stop')}",
+                    f"obs_source={extra.get('obs_source')} mode={extra.get('mode')} wp={wp.get('turn_deg')}/{wp.get('forward')} p_stop={extra.get('p_stop')}",
+                    f"visible={extra.get('visible')} bearing={extra.get('bearing')} dist={extra.get('dist')}",
                     f"belief yaw_sin={belief.get('bearing_sin')} dist={belief.get('log_distance')} conf={belief.get('confidence')}",
                 ])
             _draw_caption(image, lines)

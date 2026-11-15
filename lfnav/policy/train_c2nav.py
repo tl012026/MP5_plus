@@ -27,7 +27,11 @@ from lfnav.policy.c2nav import (
     C2NavNet,
     encode_match,
     encode_s,
+    geom_from_obs,
+    gt_target_obs,
     patch_bearings,
+    patch_targets,
+    pool_to_grid,
     spec_from_cfg,
     structure_record,
 )
@@ -42,7 +46,6 @@ from lfnav.policy.c2nav_labels import (
     mode_from_branch,
 )
 from lfnav.policy.state_tracker import (
-    LOG_DIST_UNSEEN,
     STEPS_NORM,
     TargetObs,
     TrackerNoise,
@@ -70,64 +73,6 @@ def _argmax_index(table, names, empty=0) -> int:
     return int(np.argmax(vals))
 
 
-def pool2d(arr: np.ndarray, k: int, how: str) -> np.ndarray:
-    a = np.asarray(arr)
-    k = max(int(k), 1)
-    if k <= 1:
-        return a
-    h, w = a.shape
-    nh, nw = h // k, w // k
-    if nh == 0 or nw == 0:
-        return a
-    blocks = a[: nh * k, : nw * k].reshape(nh, k, nw, k)
-    if how == "max":
-        return blocks.max(axis=(1, 3))
-    if how == "min":
-        return blocks.min(axis=(1, 3))
-    return blocks.mean(axis=(1, 3))
-
-
-def pool_to_grid(arr: np.ndarray, grid: tuple[int, int], how: str = "max") -> np.ndarray:
-    """Pool or keep a 2D map so it matches grid. 16x26 patches become 8x13 with factor 2."""
-    gh, gw = int(grid[0]), int(grid[1])
-    a = np.asarray(arr, dtype=np.float32)
-    if a.ndim != 2:
-        return np.zeros((gh, gw), np.float32)
-    h, w = int(a.shape[0]), int(a.shape[1])
-    if h == gh and w == gw:
-        return a
-    kh = h // gh
-    kw = w // gw
-    if kh < 1 or kw < 1:
-        return np.zeros((gh, gw), np.float32)
-    k = kh if kh == kw else kh
-    pooled = pool2d(a, k, how)
-    if pooled.shape != (gh, gw):
-        return np.zeros((gh, gw), np.float32)
-    return np.asarray(pooled, dtype=np.float32)
-
-
-def patch_targets(scene: dict, objects: list[str], pool: int, grid: tuple[int, int]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    del pool
-    gh, gw = int(grid[0]), int(grid[1])
-    k = len(objects)
-    present = np.zeros((k, gh, gw), np.float32)
-    log_d = np.zeros((k, gh, gw), np.float32)
-    ignore = np.zeros((gh, gw), np.float32)
-    raw_ignore = scene.get("ignore") or []
-    if raw_ignore:
-        ig = np.asarray(raw_ignore, dtype=np.float32)
-        if ig.ndim == 2:
-            ignore = pool_to_grid(ig, grid, "max")
-    patches = scene.get("patches") or {}
-    for i, name in enumerate(objects):
-        grid_p = np.asarray(patches.get(name) or [], dtype=np.float32)
-        if grid_p.ndim != 2:
-            continue
-        pooled = pool_to_grid(grid_p, grid, "max")
-        present[i] = pooled
-        log_d[i] = np.where(pooled > 0.5, math.log(8.0), 0.0)
-    return present, log_d, ignore
 
 
 def _index_lookup(index: dict) -> dict[tuple[str, int], int]:
@@ -196,29 +141,7 @@ def _forward_class(labels: dict | None) -> tuple[int, bool]:
     return idx, False
 
 
-def _geom_from_obs(obs) -> np.ndarray:
-    if not obs.visible:
-        return np.asarray([0.0, 0.0, 1.0, math.log(32.0)], np.float32)
-    yaw = 0.0 if obs.bearing_deg is None else float(obs.bearing_deg)
-    rad = math.radians(yaw)
-    log_d = float(obs.log_distance if obs.log_distance is not None else math.log(32.0))
-    return np.asarray([1.0, math.sin(rad), math.cos(rad), log_d], np.float32)
-
-
-def gt_target_obs(present: np.ndarray, ignore: np.ndarray, target_index: int, bearings: np.ndarray, dist_num) -> TargetObs:
-    """Visible if the target has at least one non-ignore positive patch. Bearing is mean column yaw."""
-    p = np.asarray(present[int(target_index)], np.float32)
-    valid = np.asarray(ignore, np.float32) < 0.5
-    hit = (p > 0.5) & valid
-    if not np.any(hit):
-        return TargetObs(visible=False)
-    yaw_map = np.asarray(bearings, np.float32)
-    yaw = float(yaw_map[hit].mean())
-    if dist_num is None:
-        log_d = float(LOG_DIST_UNSEEN)
-    else:
-        log_d = math.log(max(float(dist_num), 0.05))
-    return TargetObs(visible=True, bearing_deg=yaw, log_distance=log_d)
+_geom_from_obs = geom_from_obs
 
 
 def _pose_noise(noise: TrackerNoise | None) -> TrackerNoise | None:
