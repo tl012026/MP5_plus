@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import random
 import time
@@ -33,6 +34,12 @@ STOP_POLICY_HEAD = "head"
 PRESENT_POS_CAP = 5.0
 VIS_POS_CAP = 5.0
 PATCH_PRESENT_MIN = 0.3
+DIST_BIN_LOSS_CAP = 5.0
+# No real per-patch distance label: scene.patches is only 0/1, and the filled
+# target is a constant log 8. Keep the head for old checkpoints, but do not train it.
+PATCH_LOG_DIST_LOSS_WEIGHT = 0.0
+C_PARAM_PREFIX = ("c1", "c2", "mode", "turn", "fwd", "stop")
+NEW_A_PREFIXES = ("dist_bin_head.", "target_dist_head.")
 WIDE_RADAR_KEYS = ("wide_rays", "lfnav_wide_rays", "wide_lidar", "radar_360")
 CKPT_STRUCTURE = (
     "version",
@@ -220,6 +227,39 @@ def explore_sample_of(cfg: dict | None = None) -> bool:
     return bool(raw)
 
 
+def train_a_only_of(cfg: dict | None = None) -> bool:
+    nav = (cfg or {}).get("c2nav")
+    if nav is None:
+        nav = {}
+    raw = nav.get("train_a_only")
+    if raw is None:
+        return False
+    return bool(raw)
+
+
+def init_checkpoint_of(cfg: dict | None = None):
+    nav = (cfg or {}).get("c2nav")
+    if nav is None:
+        nav = {}
+    raw = nav.get("init_checkpoint")
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if text == "":
+        return None
+    return text
+
+
+def stop_near_tau_of(cfg: dict | None = None) -> float:
+    nav = (cfg or {}).get("c2nav")
+    if nav is None:
+        nav = {}
+    raw = nav.get("stop_near_tau")
+    if raw is None:
+        return 0.5
+    return float(raw)
+
+
 def explore_temp_of(cfg: dict | None = None) -> float:
     nav = (cfg or {}).get("c2nav")
     if nav is None:
@@ -366,6 +406,8 @@ def infer_stop_gate(
     dist=None,
     max_dist=None,
     policy=None,
+    p_near=None,
+    near_tau=None,
 ) -> str:
     """Inference stop: rule ignores p_stop; head requires p_stop >= tau, then the same gates."""
     name = STOP_POLICY_RULE if policy is None else str(policy)
@@ -379,6 +421,9 @@ def infer_stop_gate(
         return STOP_GATE_CONDITIONS
     if dist is None or max_dist is None or float(dist) > float(max_dist):
         return STOP_GATE_TOO_FAR
+    if near_tau is not None and float(near_tau) > 0.0:
+        if p_near is None or float(p_near) < float(near_tau):
+            return STOP_GATE_TOO_FAR
     return STOP_GATE_STOP
 
 
@@ -561,6 +606,77 @@ def dist_bin_from_mass(dist_mass) -> str | None:
     return None
 
 
+def dist_bin_labels_from_objects(scene, objects) -> tuple[np.ndarray, np.ndarray]:
+    """Per-class near/mid/far from scene.objects. Invisible classes (present not true) are masked out."""
+    names = list(objects)
+    bins = np.zeros((len(names),), np.int64)
+    mask = np.zeros((len(names),), np.float32)
+    raw = scene.get("objects") if isinstance(scene, dict) else None
+    if not isinstance(raw, dict):
+        return bins, mask
+    for i, name in enumerate(names):
+        bel = raw.get(name)
+        if not isinstance(bel, dict):
+            continue
+        present = bel.get("present")
+        if present is None or float(present) <= 0.5:
+            continue
+        mass = bel.get("distance") or {}
+        if not isinstance(mass, dict) or sum(float(v) for v in mass.values()) <= 0.0:
+            continue
+        chosen = dist_bin_from_mass(mass)
+        if chosen is None:
+            continue
+        bins[i] = DIST_BIN_NAMES.index(chosen)
+        mask[i] = 1.0
+    return bins, mask
+
+
+def target_log_dist_label(dist_num) -> tuple[float, float]:
+    """Smooth-L1 target. Empty target_distance_num is not supervised."""
+    if dist_num is None:
+        return 0.0, 0.0
+    return math.log(max(float(dist_num), 0.05)), 1.0
+
+
+def vis_is_positive(vis_logit, vis_tau: float) -> bool:
+    prob = 1.0 / (1.0 + math.exp(-float(vis_logit)))
+    return prob >= float(vis_tau)
+
+
+def softmax_last(logits) -> np.ndarray:
+    x = np.asarray(logits, dtype=np.float64)
+    flat = x.reshape(-1, x.shape[-1]) if x.ndim >= 1 else x.reshape(1, -1)
+    z = flat - np.max(flat, axis=-1, keepdims=True)
+    e = np.exp(z)
+    prob = e / np.maximum(e.sum(axis=-1, keepdims=True), 1e-12)
+    return prob.reshape(x.shape)
+
+
+def freeze_c_params(model) -> int:
+    """Freeze policy C. Returns the number of parameters that stay trainable."""
+    n = 0
+    for name, param in model.named_parameters():
+        head = name.split(".", 1)[0]
+        if head in C_PARAM_PREFIX:
+            param.requires_grad_(False)
+        else:
+            n += int(param.numel())
+    return n
+
+
+def load_compatible_state(model, state: dict) -> tuple[list, list]:
+    """Load with strict=False. New heads stay at their random initialization."""
+    own = model.state_dict()
+    filtered = {}
+    for key, value in state.items():
+        if key not in own or tuple(own[key].shape) != tuple(getattr(value, "shape", ())):
+            continue
+        filtered[key] = value
+    missing, _unexpected = model.load_state_dict(filtered, strict=False)
+    return sorted(filtered.keys()), list(missing)
+
+
 def dist_bin_from_present_log(present_hw, log_dist_hw, ignore_hw=None, cfg: dict | None = None, native_hw=NATIVE_PATCH_HW) -> str | None:
     p = np.asarray(present_hw, dtype=np.float32)
     d = None if log_dist_hw is None else np.asarray(log_dist_hw, dtype=np.float32)
@@ -723,8 +839,7 @@ def obs_from_present_head(
     patch_min: float = PATCH_PRESENT_MIN,
 ) -> TargetObs:
     """A5: vis_head decides visible; bearing/dist from present patches (argmax if none ≥ 0.3)."""
-    vis_p = 1.0 / (1.0 + math.exp(-float(vis_logit)))
-    visible = vis_p >= float(vis_tau)
+    visible = vis_is_positive(vis_logit, vis_tau)
     p = np.asarray(present_p[int(target_index)], np.float32)
     dmap = np.asarray(log_dist[int(target_index)], np.float32)
     yaw_map = np.asarray(bearings, np.float32)
@@ -899,6 +1014,16 @@ def C2NavNet(spec: dict):
             self.brightness = nn.Linear(pooled, len(spec["brightness"]))
             self.vis_fc1 = nn.Linear(pooled, pooled)
             self.vis_fc2 = nn.Linear(pooled, n_obj)
+            self.dist_bin_head = nn.Sequential(
+                nn.Linear(pooled, pooled),
+                nn.ReLU(),
+                nn.Linear(pooled, n_obj * 3),
+            )
+            self.target_dist_head = nn.Sequential(
+                nn.Linear(pooled, pooled),
+                nn.ReLU(),
+                nn.Linear(pooled, n_obj),
+            )
             self.c1 = nn.Linear(c_in, hidden)
             self.c2 = nn.Linear(hidden, hidden)
             self.drop = nn.Dropout(drop)
@@ -914,12 +1039,17 @@ def C2NavNet(spec: dict):
             log_d = self.log_dist(nn.functional.relu(self.dist_conv(h)))
             pooled = h.mean(dim=(2, 3))
             vis_logit = self.vis_fc2(nn.functional.relu(self.vis_fc1(pooled)))
+            b = int(pooled.shape[0])
+            dist_bin_logit = self.dist_bin_head(pooled).view(b, n_obj, 3)
+            target_log_dist = self.target_dist_head(pooled)
             return {
                 "present_logit": present_logit,
                 "present_p": torch.sigmoid(present_logit),
                 "log_dist": log_d,
                 "vis_logit": vis_logit,
                 "vis_p": torch.sigmoid(vis_logit),
+                "dist_bin_logit": dist_bin_logit,
+                "target_log_dist": target_log_dist,
                 "biome": self.biome(pooled),
                 "time": self.time(pooled),
                 "weather": self.weather(pooled),
@@ -992,36 +1122,46 @@ def load_net(payload: dict, map_location="cpu"):
     state = payload.get("model")
     if not isinstance(state, dict):
         raise RuntimeError("checkpoint missing model")
-    net.load_state_dict(state)
+    loaded, missing = load_compatible_state(net, state)
+    print("c2nav loaded_params " + json.dumps(loaded), flush=True)
+    print("c2nav missing_params " + json.dumps(missing), flush=True)
     net.eval()
     return net, spec
 
 
-def _scene_from_present(present_p, log_dist, spec: dict, bearings: np.ndarray, ignore=None, cfg: dict | None = None):
+def scene_from_perception(a, spec: dict, bearings: np.ndarray, ignore=None, cfg: dict | None = None):
+    """B's object present is the same frame-level vis_head decision C uses, not max patch probability."""
     import torch
 
-    from lfnav.aggregate import distance_bin
     from lfnav.types import ObjectBelief, SceneState
 
-    objects = {}
+    present_p = a["present_p"][0].detach().cpu().numpy()
+    log_dist = a["log_dist"][0].detach().cpu().numpy()
+    vis_logit = a["vis_logit"][0].detach().cpu().numpy()
+    dist_logit = a["dist_bin_logit"][0].detach().cpu().numpy()
+    vis_tau = float(spec["vis_tau"] if spec.get("vis_tau") is not None else 0.5)
     t_p = torch.from_numpy(np.asarray(present_p, np.float32)).unsqueeze(0)
     t_d = torch.from_numpy(np.asarray(log_dist, np.float32)).unsqueeze(0)
+    objects = {}
     for i, name in enumerate(spec["objects"]):
-        pmap = present_p[i]
-        p = float(np.clip(pmap.max() if pmap.size else 0.0, 0.0, 1.0))
-        vis_tau = float(spec["vis_tau"] if spec.get("vis_tau") is not None else 0.5)
-        vis, sn, cs, log_d = target_geometry(t_p, t_d, i, bearings, vis_tau=vis_tau, ignore=ignore, cfg=cfg)
-        yaw = math.degrees(math.atan2(float(sn), float(cs))) if float(vis) > 0.05 else 0.0
-        if yaw < -20:
-            direction = {"left": 1.0, "center": 0.0, "right": 0.0}
-        elif yaw > 20:
-            direction = {"left": 0.0, "center": 0.0, "right": 1.0}
+        visible = vis_is_positive(vis_logit[i], vis_tau)
+        _patch_vis, sn, cs, _log_d = target_geometry(
+            t_p, t_d, i, bearings, vis_tau=PATCH_PRESENT_MIN, ignore=ignore, cfg=cfg,
+        )
+        yaw = math.degrees(math.atan2(float(sn), float(cs))) if visible else 0.0
+        if not visible:
+            direction = {"left": 0.0, "center": 0.0, "right": 0.0}
+            distance = {key: 0.0 for key in DIST_BIN_NAMES}
         else:
-            direction = {"left": 0.0, "center": 1.0, "right": 0.0}
-        dist_m = math.exp(float(log_d))
-        name_bin = distance_bin(dist_m)
-        distance = {key: 1.0 if key == name_bin else 0.0 for key in ("near", "mid", "far")}
-        objects[name] = ObjectBelief(present=p, direction=direction, distance=distance)
+            if yaw < -20:
+                direction = {"left": 1.0, "center": 0.0, "right": 0.0}
+            elif yaw > 20:
+                direction = {"left": 0.0, "center": 0.0, "right": 1.0}
+            else:
+                direction = {"left": 0.0, "center": 1.0, "right": 0.0}
+            probs = softmax_last(dist_logit[i])
+            distance = {DIST_BIN_NAMES[j]: float(probs[j]) for j in range(len(DIST_BIN_NAMES))}
+        objects[name] = ObjectBelief(present=1.0 if visible else 0.0, direction=direction, distance=distance)
     return SceneState(objects=objects)
 
 
@@ -1039,6 +1179,7 @@ class C2NavAgent(Policy):
         self.stop_requires_visible = stop_requires_visible_of(self.cfg)
         self.stop_max_dist = stop_max_dist_of(self.cfg)
         self.stop_policy = stop_policy_of(self.cfg)
+        self.stop_near_tau = stop_near_tau_of(self.cfg)
         self.explore_sample = explore_sample_of(self.cfg)
         self.explore_temp = explore_temp_of(self.cfg)
         self._episode_seed = None
@@ -1229,26 +1370,14 @@ class C2NavAgent(Policy):
         if target not in objects:
             return None
         vis_tau = float(self.spec["vis_tau"] if self.spec.get("vis_tau") is not None else 0.5)
-        vis, _sn, _cs, log_d = target_geometry(
-            self._last_a["present_p"], self._last_a["log_dist"], objects.index(target), self.bearings,
-            vis_tau=vis_tau, ignore=self._ignore_hw, cfg=self.cfg,
-        )
+        idx = objects.index(target)
         vis_logit = self._last_a.get("vis_logit")
-        if vis_logit is None:
+        target_log = self._last_a.get("target_log_dist")
+        if vis_logit is None or target_log is None:
             return None
-        vis_p = 1.0 / (1.0 + math.exp(-float(vis_logit[0, objects.index(target)].detach().cpu())))
-        if vis_p < vis_tau:
+        if not vis_is_positive(float(vis_logit[0, idx].detach().cpu()), vis_tau):
             return None
-        present_np = self._last_a["present_p"][0].detach().cpu().numpy()
-        dist_np = self._last_a["log_dist"][0].detach().cpu().numpy()
-        obs = obs_from_present_head(
-            present_np, dist_np, objects.index(target), self.bearings,
-            float(vis_logit[0, objects.index(target)].detach().cpu()),
-            vis_tau, ignore=self._ignore_hw, patch_min=PATCH_PRESENT_MIN,
-        )
-        if not obs.visible or obs.log_distance is None:
-            return None
-        return math.exp(float(obs.log_distance))
+        return math.exp(float(target_log[0, idx].detach().cpu()))
 
     def perceive(self, frame):
         from lfnav.gt.scene_state import scene_state_from_obs
@@ -1277,13 +1406,8 @@ class C2NavAgent(Policy):
             tokens = torch.from_numpy(np.asarray(self._tokens, np.float32)).unsqueeze(0)
             a = self.model.perception(tokens)
         self._last_a = a
-        self._scene = _scene_from_present(
-            a["present_p"][0].cpu().numpy(),
-            a["log_dist"][0].cpu().numpy(),
-            self.spec,
-            self.bearings,
-            ignore=self._ignore_hw,
-            cfg=self.cfg,
+        self._scene = scene_from_perception(
+            a, self.spec, self.bearings, ignore=self._ignore_hw, cfg=self.cfg,
         )
         return self._scene
 
@@ -1304,6 +1428,7 @@ class C2NavAgent(Policy):
         geom_np = geom_from_obs(obs)
         mode_i = turn_i = fwd_i = 0
         p_stop = 0.0
+        p_near = None
         turn_logits = None
         vis_tau = float(self.spec["vis_tau"] if self.spec.get("vis_tau") is not None else 0.5)
 
@@ -1334,10 +1459,15 @@ class C2NavAgent(Policy):
                     present_np, dist_np, t_i, self.bearings, float(vis_logit.detach().cpu()),
                     vis_tau, ignore=self._ignore_hw, patch_min=PATCH_PRESENT_MIN,
                 )
-                dist_num_a = None if (not obs.visible or obs.log_distance is None) else math.exp(float(obs.log_distance))
+                bin_prob = softmax_last(a["dist_bin_logit"][0, t_i].detach().cpu().numpy())
+                p_near = float(bin_prob[DIST_BIN_NAMES.index("near")])
+                dist_mass = {DIST_BIN_NAMES[j]: float(bin_prob[j]) for j in range(len(DIST_BIN_NAMES))}
+                if obs.visible and a.get("target_log_dist") is not None:
+                    obs.log_distance = float(a["target_log_dist"][0, t_i].detach().cpu())
                 obs = attach_lcr_dist(
-                    obs, present_np[t_i], self._ignore_hw, dist_num_a, self.cfg,
-                    log_dist_hw=dist_np[t_i],
+                    obs, present_np[t_i], self._ignore_hw,
+                    None if obs.log_distance is None else math.exp(float(obs.log_distance)),
+                    self.cfg, dist_mass=dist_mass,
                 )
                 geom_np = geom_from_obs(obs)
 
@@ -1383,6 +1513,8 @@ class C2NavAgent(Policy):
             "explore_sample": self.explore_sample,
             "explore_temp": self.explore_temp,
             "p_stop": p_stop,
+            "p_near": p_near,
+            "stop_near_tau": None if self.obs_source == OBS_GT else self.stop_near_tau,
             "visible": bool(obs.visible),
             "bearing": bearing,
             "dist": dist,
@@ -1412,6 +1544,8 @@ class C2NavAgent(Policy):
             dist=dist,
             max_dist=self.stop_max_dist,
             policy=self.stop_policy,
+            p_near=None if self.obs_source == OBS_GT else p_near,
+            near_tau=None if self.obs_source == OBS_GT else self.stop_near_tau,
         )
         info["stop_gate"] = gate
         info["stop_policy"] = self.stop_policy
