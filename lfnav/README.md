@@ -131,8 +131,15 @@ Frozen targets, natural mobs removed, tall grass cleared, not peaceful. Not comp
 | Policy | SR-b (animal) | easy / medium / hard | SPL |
 |---|---|---|---|
 | C1 + GT | 0.80 | 1.00 / 0.93 / 0.69 | — |
-| C2 (joint) | | | |
+| C2 + GT observations (c2nav, r3 epoch 13) | 1.00 (10/10, easy only) | 1.00 / — / — | — |
+| C2 + learned perception (A) | pending | | |
 | C3 | | | |
+
+C2 + GT observations: perception is replaced by ground truth, so this row measures the policy alone.
+Evaluated on 1-3 easy and 1-4 easy, eval seeds 9/19/29/39/49 (10 episodes).
+On the same 10 episodes, C1 + GT also scores 10/10; median steps C2 36 vs C1 29 (total 507 vs 436).
+Stop is decided by rule (target visible, conditions met, distance ≤ 2.8 blocks); explore turns are sampled.
+SPL is not reported because the initial distance is not yet logged correctly.
 
 ---
 
