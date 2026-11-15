@@ -203,6 +203,71 @@ class PresentArgmaxTest(unittest.TestCase):
         self.assertAlmostEqual(float(obs.bearing_deg), 12.0, places=3)
 
 
+class AExtraLoadTest(unittest.TestCase):
+    def test_old_demo_without_c_fields_still_builds_a_sample(self):
+        from lfnav.data.demo_format import write_episode
+        from lfnav.perception.extract_features import episode_feature_name
+        from lfnav.policy.train_c2nav import a_extra_samples_from_episode
+
+        spec = spec_from_cfg({})
+        patch = np.zeros((16, 26), np.float32)
+        patch[4, 10] = 1.0
+        ignore = np.zeros((16, 26), np.float32)
+        record = {"task_name": "1-1", "difficulty": "easy", "seed": 7, "success": True}
+        step = {
+            "decision": 0,
+            "scene": {
+                "patches": {"pig": patch.tolist()},
+                "ignore": ignore.tolist(),
+                "biome": {"plains": 1.0},
+                "time": {"day": 1.0},
+                "weather": {"clear": 1.0},
+                "brightness": {"sufficient": 1.0},
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = write_episode(tmp, "success", "1-1", "easy", 7, record, [step])
+            stem = episode_feature_name(record, folder).removesuffix(".npy")
+            rows = a_extra_samples_from_episode(folder, {(stem, 0): 42}, spec, {})
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0].a_only)
+        self.assertFalse(rows[0].has_c)
+        self.assertEqual(int(rows[0].row), 42)
+        self.assertEqual(int(rows[0].seed), 7)
+        self.assertGreater(float(rows[0].present[spec["objects"].index("pig")].max()), 0.5)
+
+    def test_unset_features_returns_empty(self):
+        from lfnav.policy.train_c2nav import load_a_extra
+
+        train, val = load_a_extra({"c2nav": {}}, spec_from_cfg({}))
+        self.assertEqual(train, [])
+        self.assertEqual(val, [])
+        train2, val2 = load_a_extra({"c2nav": {"a_extra_features": []}}, spec_from_cfg({}))
+        self.assertEqual(train2, [])
+        self.assertEqual(val2, [])
+
+    def test_features_set_zero_samples_raises(self):
+        import json
+
+        from lfnav.policy.train_c2nav import load_a_extra
+
+        spec = spec_from_cfg({})
+        with tempfile.TemporaryDirectory() as tmp:
+            feat = Path(tmp) / "feat"
+            feat.mkdir()
+            tokens = np.zeros((1, 8, 13, 384), np.float16)
+            np.save(feat / "tokens.npy", tokens)
+            np.save(feat / "pooled.npy", np.zeros((1, 384), np.float16))
+            (feat / "index.json").write_text(json.dumps({
+                "n": 1, "grid": [8, 13], "dim": 384, "token_pool": 2, "rows": [],
+            }))
+            demos = Path(tmp) / "demos"
+            demos.mkdir()
+            cfg = {"c2nav": {"a_extra_features": [str(feat)], "a_extra_demos": [str(demos)]}}
+            with self.assertRaisesRegex(RuntimeError, "loaded 0 extra samples"):
+                load_a_extra(cfg, spec)
+
+
 @unittest.skipUnless(HAS_TORCH, "torch not installed on this host")
 class ResumeTest(unittest.TestCase):
     def test_resume_starts_at_next_epoch(self):

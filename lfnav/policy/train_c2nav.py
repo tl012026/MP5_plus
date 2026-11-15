@@ -1,4 +1,4 @@
-"""Train C2Nav. A and C share demo_dirs from the config. --dry-run needs no features."""
+"""Train C2Nav. A and C share demo_dirs from the config. --dry-run still loads a_extra if configured."""
 
 from __future__ import annotations
 
@@ -455,6 +455,60 @@ def _assert_old_patch_hw(scene: dict, folder: Path) -> None:
         raise RuntimeError(f"old demo ignore shape {ig.shape}, expected (16, 26) in {folder}")
 
 
+def a_extra_samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict) -> list[NavSample]:
+    """A-only rows from old demos. Index row, patches, ignore, globals, seed. No C labels."""
+    del cfg
+    packed = read_episode(folder)
+    record = packed["record"]
+    stem = episode_feature_name(record, Path(folder)).removesuffix(".npy")
+    seed = int(record.get("seed") if record.get("seed") is not None else Path(folder).name)
+    task_id = str(record.get("task_name") or record.get("task") or Path(folder).parts[-3])
+    difficulty = str(record.get("difficulty") or Path(folder).parts[-2])
+    episode_id = f"{task_id}/{difficulty}/{seed}"
+    objects = list(spec["objects"])
+    grid = tuple(spec["grid"])
+    pool = int(spec["token_pool"])
+    s_dim = int(spec["s_dim"] if spec.get("s_dim") is not None else 18)
+    cond_dim = int(spec["cond_dim"] if spec.get("cond_dim") is not None else 1 + len(objects) + 4)
+    rows = []
+    for i, step in enumerate(packed["steps"]):
+        decision = int(step["decision"] if step.get("decision") is not None else i)
+        feat_row = lookup.get((stem, decision))
+        if feat_row is None:
+            continue
+        scene = step.get("scene") if step.get("scene") is not None else {}
+        _assert_old_patch_hw(scene, Path(folder))
+        present, log_d, ignore = patch_targets(scene, objects, pool, grid)
+        vis, vis_ig = vis_labels(present, ignore)
+        rows.append(NavSample(
+            row=int(feat_row),
+            present=present,
+            log_dist=log_d,
+            ignore=ignore,
+            biome=_argmax_index(scene.get("biome"), spec["biomes"]),
+            time=_argmax_index(scene.get("time"), spec["times"]),
+            weather=_argmax_index(scene.get("weather"), spec["weathers"]),
+            brightness=_argmax_index(scene.get("brightness"), spec["brightness"]),
+            s_vec=np.zeros(s_dim, np.float32),
+            cond=np.zeros(cond_dim, np.float32),
+            geom=np.zeros(GEOM_DIM, np.float32),
+            target_index=0,
+            mode=0,
+            turn=0,
+            forward=0,
+            stop=0,
+            used_wide=False,
+            has_c=False,
+            seed=seed,
+            world_seed=seed,
+            episode_id=episode_id,
+            vis=vis,
+            vis_ignore=vis_ig,
+            a_only=True,
+        ))
+    return rows
+
+
 def load_a_extra(cfg: dict, spec: dict) -> tuple[list[NavSample], list[NavSample]]:
     feat_dirs = a_extra_features_of(cfg)
     if not feat_dirs:
@@ -466,6 +520,7 @@ def load_a_extra(cfg: dict, spec: dict) -> tuple[list[NavSample], list[NavSample
     val_raw = nav.get("val_seeds")
     val_seeds = {int(s) for s in (VAL_SEEDS_DEFAULT if val_raw is None else val_raw)}
     train, val = [], []
+    n_ep = 0
     for feat_dir in feat_dirs:
         path = Path(feat_dir)
         check_a_extra_format(path, spec)
@@ -480,17 +535,22 @@ def load_a_extra(cfg: dict, spec: dict) -> tuple[list[NavSample], list[NavSample
             packed = read_episode(folder)
             rec = packed["record"]
             seed = int(rec.get("seed") if rec.get("seed") is not None else Path(folder).name)
-            for step in packed["steps"]:
-                scene = step.get("scene") if step.get("scene") is not None else {}
-                _assert_old_patch_hw(scene, Path(folder))
-            rows = samples_from_episode(folder, lookup, spec, cfg, None)
+            rows = a_extra_samples_from_episode(Path(folder), lookup, spec, cfg)
+            if not rows:
+                continue
+            n_ep += 1
             store_i = 1 + feat_dirs.index(feat_dir)
             for row in rows:
-                row.a_only = True
                 row.feat_store = store_i
             dest = val if seed in val_seeds else train
             dest.extend(rows)
-    print(f"c2nav a_extra train={len(train)} val={len(val)}", flush=True)
+    print(
+        f"a_extra loaded episodes={n_ep} samples_train={len(train)} samples_val={len(val)} "
+        f"per_epoch={a_extra_per_epoch_of(cfg)}",
+        flush=True,
+    )
+    if len(train) + len(val) == 0:
+        raise RuntimeError("c2nav.a_extra_features is set but loaded 0 extra samples")
     return train, val
 
 
@@ -1430,9 +1490,13 @@ def train_loop(
     for epoch in range(start_epoch, epochs + 1):
         model.train()
         epoch_rows = list(train)
+        n_extra_sampled = 0
         if extra_train and extra_n > 0:
-            take = extra_n if extra_n <= len(extra_train) else len(extra_train)
-            epoch_rows.extend(rng.sample(extra_train, k=take) if take < len(extra_train) else list(extra_train))
+            n_extra_sampled = extra_n if extra_n <= len(extra_train) else len(extra_train)
+            epoch_rows.extend(
+                rng.sample(extra_train, k=n_extra_sampled) if n_extra_sampled < len(extra_train) else list(extra_train)
+            )
+        print(f"a_extra epoch {epoch} sampled={n_extra_sampled}", flush=True)
         order = list(range(len(epoch_rows)))
         rng.shuffle(order)
         running = 0.0
@@ -1485,6 +1549,9 @@ def train_loop(
         metrics["loss_parts"] = avg_parts
         brief = _brief_val(metrics, extra_metrics)
         print(f"c2nav val epoch {epoch} {json.dumps(brief, default=str)}", flush=True)
+        vis_extra = None if extra_metrics is None else extra_metrics.get("vis_auc")
+        vis_extra_v = vis_extra.get("value") if isinstance(vis_extra, dict) else vis_extra
+        print(f"a_extra val vis_auc={vis_extra_v}", flush=True)
         ok, score, vis_tau, stop_tau = _epoch_score(metrics)
         extra_meta = {
             "filter": stats,
@@ -1545,6 +1612,9 @@ def main():
     args = parser.parse_args()
     if args.dry_run:
         try:
+            cfg_path = Path(args.config).resolve() if args.config else None
+            cfg = load_config(cfg_path) if cfg_path else load_config()
+            load_a_extra(cfg, spec_from_cfg(cfg))
             dry_run_torch()
         except ImportError:
             print("dry-run c2nav skipped (no torch)", flush=True)
