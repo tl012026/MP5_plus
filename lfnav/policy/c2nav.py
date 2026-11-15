@@ -19,6 +19,7 @@ DECISION_ACTION_CAP = 12
 STOP_GATE_STOP = "stop"
 STOP_GATE_NOT_VISIBLE = "blocked_not_visible"
 STOP_GATE_CONDITIONS = "blocked_conditions"
+STOP_GATE_TOO_FAR = "blocked_too_far"
 STOP_GATE_BELOW_TAU = "below_tau"
 CKPT_STRUCTURE = (
     "version",
@@ -135,6 +136,22 @@ def stop_requires_visible_of(cfg: dict | None = None) -> bool:
     return bool(raw)
 
 
+def stop_max_dist_of(cfg: dict | None = None) -> float:
+    nav = (cfg or {}).get("c2nav")
+    if nav is None:
+        nav = {}
+    raw = nav.get("stop_max_dist")
+    if raw is not None:
+        return float(raw)
+    judge = (cfg or {}).get("judge")
+    if judge is None:
+        judge = {}
+    radius = judge.get("radius")
+    if radius is None:
+        radius = 3.0
+    return float(radius) - 0.3
+
+
 def conditions_satisfied(match: dict | None) -> bool:
     """B reports every required condition holds (status found, nothing missing)."""
     data = {} if match is None else dict(match)
@@ -150,14 +167,24 @@ def conditions_satisfied(match: dict | None) -> bool:
     return False
 
 
-def infer_stop_gate(p_stop, tau, visible, match, requires_visible: bool = True) -> str:
-    """Inference-only stop rule. below_tau, then not-visible, then B conditions."""
+def infer_stop_gate(
+    p_stop,
+    tau,
+    visible,
+    match,
+    requires_visible: bool = True,
+    dist=None,
+    max_dist=None,
+) -> str:
+    """Inference-only stop rule: tau, visible, B conditions, then distance."""
     if float(p_stop) < float(tau):
         return STOP_GATE_BELOW_TAU
     if requires_visible and not bool(visible):
         return STOP_GATE_NOT_VISIBLE
     if not conditions_satisfied(match):
         return STOP_GATE_CONDITIONS
+    if dist is None or max_dist is None or float(dist) > float(max_dist):
+        return STOP_GATE_TOO_FAR
     return STOP_GATE_STOP
 
 
@@ -512,6 +539,7 @@ class C2NavAgent(Policy):
         self.chunk_max = DECISION_ACTION_CAP if chunk is None else int(chunk)
         self.obs_source = obs_source_of(self.cfg)
         self.stop_requires_visible = stop_requires_visible_of(self.cfg)
+        self.stop_max_dist = stop_max_dist_of(self.cfg)
         self._tokens = None
         self._scene = None
         self._last_a = None
@@ -520,6 +548,9 @@ class C2NavAgent(Policy):
         self._s = TrackerState(max_steps=STEPS_NORM)
         self._prev_actions: list[str] = []
         self.n_stop_blocked = 0
+        self.n_stop_blocked_not_visible = 0
+        self.n_stop_blocked_conditions = 0
+        self.n_stop_blocked_too_far = 0
         self.last_info: dict = {}
         self.model = None
         self.encoder = None
@@ -582,6 +613,9 @@ class C2NavAgent(Policy):
         self._s = TrackerState(max_steps=STEPS_NORM)
         self._prev_actions = []
         self.n_stop_blocked = 0
+        self.n_stop_blocked_not_visible = 0
+        self.n_stop_blocked_conditions = 0
+        self.n_stop_blocked_too_far = 0
         self.last_info = {}
 
     def gt_obs_from_scene(self, scene: dict, target: str, dist_num) -> TargetObs:
@@ -781,10 +815,24 @@ class C2NavAgent(Policy):
         self._prev_actions = list(actions)
         info["action_chunk"] = actions
         gate = infer_stop_gate(
-            p_stop, self.tau, obs.visible, match, requires_visible=self.stop_requires_visible,
+            p_stop,
+            self.tau,
+            obs.visible,
+            match,
+            requires_visible=self.stop_requires_visible,
+            dist=dist,
+            max_dist=self.stop_max_dist,
         )
         info["stop_gate"] = gate
-        if gate in (STOP_GATE_NOT_VISIBLE, STOP_GATE_CONDITIONS):
+        info["stop_max_dist"] = self.stop_max_dist
+        if gate == STOP_GATE_NOT_VISIBLE:
+            self.n_stop_blocked_not_visible += 1
+            self.n_stop_blocked += 1
+        elif gate == STOP_GATE_CONDITIONS:
+            self.n_stop_blocked_conditions += 1
+            self.n_stop_blocked += 1
+        elif gate == STOP_GATE_TOO_FAR:
+            self.n_stop_blocked_too_far += 1
             self.n_stop_blocked += 1
         self.last_info = info
         if gate == STOP_GATE_STOP:

@@ -17,6 +17,7 @@ from lfnav.policy.c2nav import (
     STOP_GATE_CONDITIONS,
     STOP_GATE_NOT_VISIBLE,
     STOP_GATE_STOP,
+    STOP_GATE_TOO_FAR,
     encode_s,
     geom_from_obs,
     gt_target_obs,
@@ -25,10 +26,11 @@ from lfnav.policy.c2nav import (
     patch_bearings,
     patch_targets,
     spec_from_cfg,
+    stop_max_dist_of,
     stop_requires_visible_of,
 )
+from lfnav.policy.state_tracker import STEPS_NORM, TargetObs, replay
 from lfnav.policy.c2nav_labels import FORWARD_BINS, TURN_BINS, invert_waypoint, turn_index
-from lfnav.policy.state_tracker import STEPS_NORM, replay
 from lfnav.types import PolicyInput
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -223,7 +225,7 @@ def _force_p_stop(agent, p=0.9):
     agent.model.policy = wrapped
 
 
-def _act(agent, visible, match):
+def _act(agent, visible, match, dist_num=2.5):
     raw = np.zeros((16, 26), np.float32)
     if visible:
         raw[:, 10:12] = 1.0
@@ -232,10 +234,13 @@ def _act(agent, visible, match):
         "patches": {"pig": raw.tolist()},
         "ignore": np.zeros((16, 26), np.float32).tolist(),
     })
+    scene = {}
+    if dist_num is not None:
+        scene["target_distance_num"] = dist_num
     return agent.act(PolicyInput(
         task={"target": "pig"},
         match=match,
-        scene={"target_distance_num": 2.0},
+        scene=scene,
         memory={"pos": [0.0, 64.0, 0.0], "yaw": 0.0},
     ))
 
@@ -259,14 +264,66 @@ class StopGateTest(unittest.TestCase):
         self.assertEqual(int(agent.n_stop_blocked), 1)
 
     def test_high_p_stop_visible_and_conditions_stops(self):
-        self.assertEqual(infer_stop_gate(0.9, 0.5, True, FOUND_MATCH, True), STOP_GATE_STOP)
+        self.assertEqual(
+            infer_stop_gate(0.9, 0.5, True, FOUND_MATCH, True, dist=2.5, max_dist=2.7),
+            STOP_GATE_STOP,
+        )
         agent = _gt_agent()
         _force_p_stop(agent, 0.9)
-        out = _act(agent, visible=True, match=FOUND_MATCH)
+        out = _act(agent, visible=True, match=FOUND_MATCH, dist_num=2.5)
         self.assertTrue(out.stop)
         self.assertEqual(out.info.get("stop_gate"), STOP_GATE_STOP)
         self.assertTrue(out.info.get("visible"))
         self.assertEqual(int(agent.n_stop_blocked), 0)
+
+    def test_too_far_does_not_stop(self):
+        self.assertEqual(
+            infer_stop_gate(0.9, 0.5, True, FOUND_MATCH, True, dist=3.1, max_dist=2.7),
+            STOP_GATE_TOO_FAR,
+        )
+        agent = _gt_agent()
+        _force_p_stop(agent, 0.9)
+        out = _act(agent, visible=True, match=FOUND_MATCH, dist_num=3.1)
+        self.assertFalse(out.stop)
+        self.assertTrue(out.action_chunk)
+        self.assertEqual(out.info.get("stop_gate"), STOP_GATE_TOO_FAR)
+        self.assertTrue(out.info.get("visible"))
+        self.assertAlmostEqual(float(out.info.get("dist")), 3.1, places=5)
+        self.assertEqual(int(agent.n_stop_blocked_too_far), 1)
+        self.assertEqual(int(agent.n_stop_blocked), 1)
+
+    def test_close_enough_stops(self):
+        agent = _gt_agent()
+        _force_p_stop(agent, 0.9)
+        out = _act(agent, visible=True, match=FOUND_MATCH, dist_num=2.5)
+        self.assertTrue(out.stop)
+        self.assertEqual(out.info.get("stop_gate"), STOP_GATE_STOP)
+        self.assertAlmostEqual(float(out.info.get("dist")), 2.5, places=5)
+        self.assertEqual(int(agent.n_stop_blocked_too_far), 0)
+
+    def test_none_dist_does_not_stop(self):
+        self.assertEqual(
+            infer_stop_gate(0.9, 0.5, True, FOUND_MATCH, True, dist=None, max_dist=2.7),
+            STOP_GATE_TOO_FAR,
+        )
+        agent = _gt_agent()
+        _force_p_stop(agent, 0.9)
+        agent.gt_obs_from_scene = lambda scene, target, dist_num: TargetObs(
+            visible=True, bearing_deg=0.0, log_distance=None,
+        )
+        out = _act(agent, visible=True, match=FOUND_MATCH, dist_num=None)
+        self.assertFalse(out.stop)
+        self.assertTrue(out.action_chunk)
+        self.assertEqual(out.info.get("stop_gate"), STOP_GATE_TOO_FAR)
+        self.assertIsNone(out.info.get("dist"))
+        self.assertEqual(int(agent.n_stop_blocked_too_far), 1)
+
+    def test_stop_max_dist_zero_is_kept(self):
+        self.assertEqual(float(stop_max_dist_of({"c2nav": {"stop_max_dist": 0}})), 0.0)
+        self.assertAlmostEqual(float(stop_max_dist_of({"judge": {"radius": 3.0}})), 2.7)
+        self.assertAlmostEqual(float(stop_max_dist_of({"c2nav": {"stop_max_dist": None}, "judge": {"radius": 3.0}})), 2.7)
+        agent = _gt_agent({"c2nav": {"obs_source": "gt", "stop_max_dist": 0}})
+        self.assertEqual(float(agent.stop_max_dist), 0.0)
 
     def test_high_p_stop_visible_but_conditions_fail_does_not_stop(self):
         self.assertEqual(infer_stop_gate(0.9, 0.5, True, MISSING_COND, True), STOP_GATE_CONDITIONS)

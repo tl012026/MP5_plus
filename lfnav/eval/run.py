@@ -251,6 +251,9 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
             "peaceful_ok": peaceful_command_sent(meta),
             "obs_source": obs_source_of(cfg) if cfg.get("policy_name") == "c2nav" else None,
             "n_stop_blocked": 0,
+            "n_stop_blocked_not_visible": 0,
+            "n_stop_blocked_conditions": 0,
+            "n_stop_blocked_too_far": 0,
         }
         return verdict, []
     if "initial_target_distance" not in meta:
@@ -516,6 +519,9 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         "hostile_seen": int(hostile_seen),
         "obs_source": obs_source_of(cfg) if cfg.get("policy_name") == "c2nav" else None,
         "n_stop_blocked": 0 if getattr(policy, "n_stop_blocked", None) is None else int(policy.n_stop_blocked),
+        "n_stop_blocked_not_visible": 0 if getattr(policy, "n_stop_blocked_not_visible", None) is None else int(policy.n_stop_blocked_not_visible),
+        "n_stop_blocked_conditions": 0 if getattr(policy, "n_stop_blocked_conditions", None) is None else int(policy.n_stop_blocked_conditions),
+        "n_stop_blocked_too_far": 0 if getattr(policy, "n_stop_blocked_too_far", None) is None else int(policy.n_stop_blocked_too_far),
         "spawn_underground": bool(meta.get("spawn_underground", False)),
         "underground_rerolls": int(meta.get("underground_rerolls") or 0),
         "can_see_sky": bool(meta.get("can_see_sky", True)),
