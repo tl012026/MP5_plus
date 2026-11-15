@@ -105,7 +105,7 @@ class EasyTrainConfigTest(unittest.TestCase):
         self.assertEqual(nav["features_version"], "nav_v3_easy")
         self.assertEqual(nav["train_difficulties"], ["easy"])
         self.assertEqual(nav["val_seeds"], [1, 13, 23, 26, 37, 45])
-        self.assertEqual(nav["epochs"], 20)
+        self.assertEqual(nav["epochs"], 15)
         self.assertAlmostEqual(float(nav["lr"]), 3e-4)
         self.assertAlmostEqual(float(nav["weight_decay"]), 0.05)
         self.assertAlmostEqual(float(nav["dropout"]), 0.3)

@@ -18,6 +18,7 @@ from pathlib import Path
 from lfnav.config import load_config
 from lfnav.control.controller import Controller
 from lfnav.env.fake import FakeMineDojoEnv
+from lfnav.env.frames import frames_cfg
 from lfnav.data.demo_format import config_name
 from lfnav.env.minedojo_env import count_hostile_hits, mob_ring_box, peaceful_command_sent
 from lfnav.env.scene import make_scene_env
@@ -179,6 +180,14 @@ def _recorder(env):
     return getattr(env, "frames", None)
 
 
+def _slim_gt(gt_dict: dict, env_steps: int, every: int) -> dict:
+    if every <= 0 or env_steps % every == 0:
+        return gt_dict
+    slim = dict(gt_dict)
+    slim.pop("patches", None)
+    return slim
+
+
 def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, seed: int = 0, obs=None, episode_meta=None, on_decision=None) -> tuple[dict, list]:
     perception = perception or make_perception(cfg)
     policy = policy or make_policy(cfg)
@@ -199,8 +208,13 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
     if obs is None:
         obs = env.reset(seed=seed, task=task)
     rec = _recorder(env)
+    t_record = 0.0
+    t_env = 0.0
+    frames_every = int(frames_cfg(cfg)["every"])
     if rec is not None:
+        t_r0 = time.perf_counter()
         rec.capture(obs, tag="start", keyframe=True)
+        t_record += time.perf_counter() - t_r0
     meta = dict(episode_meta or {})
     if meta.get("spawn_underground"):
         pos = position_of(obs, cfg) if obs is not None else None
@@ -309,7 +323,7 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
                 "decision": len(events),
                 "scene": scene.to_dict(),
                 "perception": scene.to_dict(),
-                "gt": gt_frame.to_dict(),
+                "gt": _slim_gt(gt_frame.to_dict(), env_steps, frames_every),
                 "match": match.to_dict(),
                 "policy": None,
                 "control": None,
@@ -346,7 +360,7 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
                 "yaw": yaw,
                 "scene": scene.to_dict(),
                 "perception": scene.to_dict(),
-                "gt": gt_frame.to_dict(),
+                "gt": _slim_gt(gt_frame.to_dict(), env_steps, frames_every),
                 "match": match.to_dict(),
                 "policy": output.to_dict(),
                 "control": None,
@@ -376,8 +390,12 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
                 if left <= 0 or used >= chunk_cap:
                     break
                 if rec is not None:
+                    t_r0 = time.perf_counter()
                     rec.set_info(match.to_dict(), action=action, extra=extra_info)
+                    t_record += time.perf_counter() - t_r0
+                t_e0 = time.perf_counter()
                 result = controller.execute(action, budget=left)
+                t_env += time.perf_counter() - t_e0
                 if privileged_ray_distance(result.obs, cfg, task.target) is not None:
                     seen_gt = True
                 hostile_seen += count_hostile_hits(result.obs, cfg)
@@ -405,10 +423,14 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
                 if env_steps >= max_steps:
                     break
         elif output.waypoints:
+            t_e0 = time.perf_counter()
             result = controller.execute_waypoints(output.waypoints, budget=chunk_cap)
+            t_env += time.perf_counter() - t_e0
             executed_all = list(result.executed or [])
             if rec is not None:
+                t_r0 = time.perf_counter()
                 rec.set_info(match.to_dict(), action=",".join(executed_all) or "waypoint", extra=extra_info)
+                t_record += time.perf_counter() - t_r0
             if privileged_ray_distance(result.obs, cfg, task.target) is not None:
                 seen_gt = True
             hostile_seen += count_hostile_hits(result.obs, cfg)
@@ -451,7 +473,7 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
             "yaw": yaw,
             "scene": scene.to_dict(),
             "perception": scene.to_dict(),
-            "gt": gt_frame.to_dict(),
+            "gt": _slim_gt(gt_frame.to_dict(), int(info.get("step") if info.get("step") is not None else env_steps), frames_every),
             "match": match.to_dict(),
             "policy": output.to_dict(),
             "control": control_rows,
@@ -461,7 +483,9 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         if on_decision is not None:
             on_decision(row, decision_obs, mem)
     if rec is not None:
+        t_r0 = time.perf_counter()
         rec.capture(obs, tag="end", keyframe=True)
+        t_record += time.perf_counter() - t_r0
     live = env.observation() if hasattr(env, "observation") else obs
     if privileged_ray_distance(live, cfg, task.target) is not None:
         seen_gt = True
@@ -522,6 +546,12 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         "n_stop_blocked_not_visible": 0 if getattr(policy, "n_stop_blocked_not_visible", None) is None else int(policy.n_stop_blocked_not_visible),
         "n_stop_blocked_conditions": 0 if getattr(policy, "n_stop_blocked_conditions", None) is None else int(policy.n_stop_blocked_conditions),
         "n_stop_blocked_too_far": 0 if getattr(policy, "n_stop_blocked_too_far", None) is None else int(policy.n_stop_blocked_too_far),
+        "timing": {
+            "env.step": (t_env / float(env_steps)) if env_steps > 0 else t_env,
+            "encode": ((0.0 if getattr(perception, "time_encode", None) is None else float(perception.time_encode)) / float(env_steps)) if env_steps > 0 else 0.0,
+            "policy": ((0.0 if getattr(policy, "time_policy", None) is None else float(policy.time_policy)) / float(env_steps)) if env_steps > 0 else 0.0,
+            "record": (t_record / float(env_steps)) if env_steps > 0 else t_record,
+        },
         "spawn_underground": bool(meta.get("spawn_underground", False)),
         "underground_rerolls": int(meta.get("underground_rerolls") or 0),
         "can_see_sky": bool(meta.get("can_see_sky", True)),

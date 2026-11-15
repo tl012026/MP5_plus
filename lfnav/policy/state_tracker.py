@@ -66,6 +66,11 @@ class TrackerNoise:
     yaw_std: float = 0.0
     disp_std: float = 0.0
     odom_std: float = 0.0
+    p_fp_start: float = 0.0
+    fp_duration_min: int = 2
+    fp_duration_max: int = 8
+    hfov_deg: float = 97.0
+    log_dist_bank: list = field(default_factory=list)
 
     def apply_obs(self, obs: TargetObs, rng) -> TargetObs:
         visible = bool(obs.visible)
@@ -197,8 +202,20 @@ class TrackerState:
 
 
 def _sector_index(rel_yaw: float) -> int:
+    """Sector 0 is the current heading; remaining bins go clockwise."""
     ang = (float(rel_yaw) % 360.0 + 360.0) % 360.0
     return int((ang + 22.5) // 45.0) % N_SECTORS
+
+
+def rotate_sectors(sector_raw, dyaw_deg: float) -> list[float]:
+    """Keep sector 0 aligned with heading after a turn. Right-positive yaw."""
+    src = [float(v) for v in sector_raw]
+    width = 360.0 / float(N_SECTORS)
+    shift = int(round(float(dyaw_deg) / width))
+    if shift == 0:
+        return src
+    n = N_SECTORS
+    return [src[(i + shift) % n] for i in range(n)]
 
 
 def _action_yaw(name: str) -> float:
@@ -244,6 +261,7 @@ def _step_one(
     nrm = _norm(math.hypot(nxt.belief_sin, nxt.belief_cos))
     nxt.belief_sin /= nrm
     nxt.belief_cos /= nrm
+    nxt.sector_raw = rotate_sectors(nxt.sector_raw, dyaw)
 
     moved = math.hypot(pose[0] - nxt.pos[0], pose[-1] - nxt.pos[-1])
     if moved > 0.05:
@@ -339,6 +357,65 @@ def observation_from_step(step: dict) -> TargetObs:
         bearing = 30.0
     log_d = math.log(max(float(dist), 0.05)) if dist is not None else LOG_DIST_UNSEEN
     return TargetObs(visible=True, bearing_deg=bearing, log_distance=log_d)
+
+
+def _fp_world_pos(pos, yaw: float, rel_bearing: float, log_d: float) -> tuple[float, float]:
+    world = wrap_deg(float(yaw) + float(rel_bearing))
+    dist = math.exp(float(log_d))
+    rad = math.radians(world)
+    return float(pos[0]) + dist * math.sin(rad), float(pos[-1]) + dist * math.cos(rad)
+
+
+def _fp_obs(pos, yaw: float, x: float, z: float) -> TargetObs:
+    dx = float(x) - float(pos[0])
+    dz = float(z) - float(pos[-1])
+    dist = math.hypot(dx, dz)
+    world = math.degrees(math.atan2(dx, dz))
+    bearing = wrap_deg(world - float(yaw))
+    log_d = math.log(max(dist, 0.05))
+    return TargetObs(visible=True, bearing_deg=bearing, log_distance=log_d)
+
+
+def apply_c_obs_noise(
+    gt_obs: list[TargetObs],
+    steps: list[dict],
+    noise: TrackerNoise | None,
+    rng,
+) -> list[TargetObs]:
+    """Drop / bearing / log-dist noise plus persistent false positives on GT-invisible steps."""
+    if noise is None:
+        return list(gt_obs)
+    out: list[TargetObs] = []
+    remain = 0
+    fx = fz = 0.0
+    bank = list(noise.log_dist_bank) if noise.log_dist_bank else [LOG_DIST_UNSEEN]
+    hfov = float(noise.hfov_deg)
+    dmin = int(noise.fp_duration_min)
+    dmax = int(noise.fp_duration_max)
+    if dmin > dmax:
+        dmin, dmax = dmax, dmin
+    for i, gt in enumerate(gt_obs):
+        step = steps[i] if i < len(steps) else {}
+        pos = step.get("pos") if step.get("pos") is not None else [0.0, 0.0, 0.0]
+        yaw = 0.0 if step.get("yaw") is None else float(step.get("yaw"))
+        if gt.visible:
+            remain = 0
+            out.append(noise.apply_obs(gt, rng))
+            continue
+        if remain > 0:
+            out.append(_fp_obs(pos, yaw, fx, fz))
+            remain -= 1
+            continue
+        if float(noise.p_fp_start) > 0.0 and rng.random() < float(noise.p_fp_start):
+            rel = rng.uniform(-hfov / 2.0, hfov / 2.0)
+            log_d = float(bank[rng.randrange(len(bank))])
+            fx, fz = _fp_world_pos(pos, yaw, rel, log_d)
+            remain = int(rng.randint(dmin, dmax))
+            out.append(_fp_obs(pos, yaw, fx, fz))
+            remain -= 1
+            continue
+        out.append(TargetObs(visible=False))
+    return out
 
 
 def replay(

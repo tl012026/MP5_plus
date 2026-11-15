@@ -19,7 +19,7 @@ c2:
 c2nav:
   version: c2nav_v1
   features_version: nav_v3_easy
-  epochs: 20
+  epochs: 15
   batch: 16
   lr: 0.0003
   weight_decay: 0.05
@@ -28,6 +28,11 @@ c2nav:
   vis_tau: 0.5
   obs_source: pred
   stop_requires_visible: true
+  torch_threads: 2
+  ckpt_dir: c2nav_easy_r3
+  a_extra_features: []
+  a_extra_demos: []
+  a_extra_per_epoch: 30000
   augment:
     flip: false
   train_difficulties: [easy]

@@ -350,9 +350,11 @@ def run_c3(cfg: dict, feat: Path) -> str:
         "turn": math.log(N_TURN),
         "forward": math.log(len(FORWARD_BINS)),
         "present": math.log(2.0),
+        "vis": math.log(2.0),
     }
     glob_ok = abs(mean4 - parts["global"]) < 1e-6
     total_ok = parts["total"] < 20
+    vis_ok = abs(float(parts.get("vis", 0.0)) - math.log(2.0)) < 0.15
     ce_ok = True
     for name in ("mode", "turn", "forward"):
         ref = refs[name]
@@ -360,11 +362,12 @@ def run_c3(cfg: dict, feat: Path) -> str:
         if not (0.5 * ref <= val <= 2.0 * ref):
             ce_ok = False
     src_ok = list(src.keys()) == ["gt_noisy"]
-    status = "PASS" if total_ok and glob_ok and ce_ok and src_ok else "FAIL"
+    status = "PASS" if total_ok and glob_ok and ce_ok and src_ok and vis_ok else "FAIL"
     _print_json("C3 losses", {
         "present_bce": parts["present"],
         "log_dist": parts["log_dist"],
         "L_global": parts["global"],
+        "L_vis": parts.get("vis"),
         "biome": parts["biome"],
         "time": parts["time"],
         "weather": parts["weather"],
@@ -377,6 +380,7 @@ def run_c3(cfg: dict, feat: Path) -> str:
         "L": parts["total"],
         "ref": refs,
         "L_global_eq_mean4": glob_ok,
+        "L_vis_near_ln2": vis_ok,
         "status": status,
     })
     print(f"C3 {status}", flush=True)
@@ -458,6 +462,12 @@ def run_c8(cfg: dict, feat: Path) -> str:
                 prec = tp / max(tp + fp, 1.0)
                 rec = tp / max(tp + fn, 1.0)
                 stop_f1 = 2.0 * prec * rec / max(prec + rec, 1e-9)
+                vis_acc = None
+                if "vis_logit" in out:
+                    vis_pred = (torch.sigmoid(out["vis_logit"]) >= 0.5).float()
+                    vis_ok_m = batch["vis_ignore"] < 0.5
+                    if bool(vis_ok_m.any()):
+                        vis_acc = float((vis_pred[vis_ok_m] == batch["vis"][vis_ok_m]).float().mean().item())
                 rec = {
                     "step": step,
                     "loss": float(loss.item()),
@@ -465,6 +475,7 @@ def run_c8(cfg: dict, feat: Path) -> str:
                     "turn_acc": acc(out["turn"].argmax(-1), batch["turn"]),
                     "forward_acc": acc(out["forward"].argmax(-1), batch["forward"]),
                     "stop_f1": stop_f1,
+                    "vis_acc": vis_acc,
                 }
                 last = rec
                 print(f"C8 {json.dumps(rec)}", flush=True)
@@ -478,7 +489,7 @@ def run_c8(cfg: dict, feat: Path) -> str:
     else:
         if last["loss"] >= 0.05 * loss0:
             reasons.append(f"loss {last['loss']} >= 5% of {loss0}")
-        for head, bar in (("mode_acc", 0.95), ("turn_acc", 0.89), ("forward_acc", 0.95)):
+        for head, bar in (("mode_acc", 0.95), ("turn_acc", 0.89), ("forward_acc", 0.95), ("vis_acc", 0.95)):
             if last[head] is None or last[head] < bar:
                 reasons.append(f"{head}={last[head]} < {bar}")
         if last.get("stop_f1") is None or last["stop_f1"] < 0.9:

@@ -110,10 +110,15 @@ c2nav:
   stop_requires_visible: true
   lr: 0.0003
   weight_decay: 0.05
-  epochs: 20
+  epochs: 15
   batch: 16
   label_smoothing: 0.1
   vis_tau: 0.5
+  torch_threads: 2
+  ckpt_dir: c2nav_easy_r3
+  a_extra_features: []
+  a_extra_demos: []
+  a_extra_per_epoch: 30000
   augment:
     flip: false
   features_version: joint_v1
@@ -125,10 +130,11 @@ c2nav:
     stop: 1.0
   noise:
     drop_visible: 0.15
-    bearing_std: 5.0
+    bearing_std: 3.0
     log_dist_std: 0.1
     yaw_std: 1.0
     disp_std: 0.05
+    p_fp_start: 0.03
   demo_dirs:
     - /scratch/${USER}/lfnav/data/demos_main
     - /scratch/${USER}/lfnav/data/demos_main_v3
@@ -160,7 +166,7 @@ gradle:
   worker_copies: false
 frames:
   enabled: true
-  every: 20
+  every: 10
   format: jpg
   quality: 80
   scale: 0.5

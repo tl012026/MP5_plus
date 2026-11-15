@@ -25,15 +25,26 @@ from lfnav.perception.extract_features import episode_feature_name
 from lfnav.policy.c2_data import demo_roots, iter_success_episodes, load_task, select_training_episodes
 from lfnav.policy.c2nav import (
     C2NavNet,
+    PRESENT_POS_CAP,
+    VIS_POS_CAP,
+    a_extra_demos_of,
+    a_extra_features_of,
+    a_extra_per_epoch_of,
+    ckpt_dir_of,
     encode_match,
     encode_s,
+    far_class_ignore,
     geom_from_obs,
     gt_target_obs,
+    horizontal_fov_deg,
     patch_bearings,
     patch_targets,
     pool_to_grid,
     spec_from_cfg,
     structure_record,
+    torch_threads_of,
+    vis_labels,
+    wide_radar_field,
 )
 from lfnav.policy.c2nav_labels import (
     FORWARD_BINS,
@@ -49,6 +60,7 @@ from lfnav.policy.state_tracker import (
     STEPS_NORM,
     TargetObs,
     TrackerNoise,
+    apply_c_obs_noise,
     flip_vector,
     replay,
 )
@@ -109,6 +121,10 @@ class NavSample:
     forward_clipped: bool = False
     geom_clean: np.ndarray | None = None
     obs_source: str = "gt_noisy"
+    vis: np.ndarray | None = None
+    vis_ignore: np.ndarray | None = None
+    a_only: bool = False
+    feat_store: int = 0
 
 
 def _label_int(labels: dict | None, key: str, default: int) -> int:
@@ -164,25 +180,28 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
     target_index = objects.index(target) if target in objects else 0
     grid = tuple(spec["grid"])
     pool = int(spec["token_pool"])
-    radius = float((cfg.get("judge") or {}).get("radius") or 3.0)
+    judge = cfg.get("judge") if cfg.get("judge") is not None else {}
+    radius_raw = judge.get("radius")
+    radius = 3.0 if radius_raw is None else float(radius_raw)
     bearings = patch_bearings(int(grid[0]), int(grid[1]), cfg)
     rng = random.Random(seed)
     parsed = []
     gt_obs: list[TargetObs] = []
+    hfov = horizontal_fov_deg(cfg)
     for i, step in enumerate(packed["steps"]):
         decision = int(step["decision"] if step.get("decision") is not None else i)
         feat_row = lookup.get((stem, decision))
-        scene = step.get("scene") or {}
+        scene = step.get("scene") if step.get("scene") is not None else {}
         present, log_d, ignore = patch_targets(scene, objects, pool, grid)
+        class_ig = far_class_ignore(step, objects, hfov)
+        vis, vis_ig = vis_labels(present, ignore, class_ig)
         obs_clean = gt_target_obs(present, ignore, target_index, bearings, step.get("target_distance_num"))
         gt_obs.append(obs_clean)
-        parsed.append((i, step, feat_row, present, log_d, ignore, obs_clean))
-    noisy_obs = []
-    for obs_clean in gt_obs:
-        if noise is None:
-            noisy_obs.append(obs_clean)
-        else:
-            noisy_obs.append(noise.apply_obs(obs_clean, rng))
+        parsed.append((i, step, feat_row, present, log_d, ignore, obs_clean, vis, vis_ig))
+    if noise is None:
+        noisy_obs = list(gt_obs)
+    else:
+        noisy_obs = apply_c_obs_noise(gt_obs, packed["steps"], noise, rng)
     states = replay(
         packed["steps"],
         max_steps=STEPS_NORM,
@@ -193,7 +212,7 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
     rows = []
     source = "gt_noisy"
     last_feat = None
-    for i, step, feat_row, present, log_d, ignore, obs_clean in parsed:
+    for i, step, feat_row, present, log_d, ignore, obs_clean, vis, vis_ig in parsed:
         if feat_row is None:
             if last_feat is None:
                 continue
@@ -210,7 +229,7 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
         s_vec = encode_s(states[i] if i < len(states) else states[-1])
         geom = _geom_from_obs(obs)
         geom_clean = _geom_from_obs(obs_clean)
-        scene = step.get("scene") or {}
+        scene = step.get("scene") if step.get("scene") is not None else {}
         rows.append(NavSample(
             row=int(feat_row),
             present=present,
@@ -237,6 +256,9 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
             branch="" if step.get("expert_branch") is None else str(step.get("expert_branch")),
             forward_clipped=fwd_clip,
             obs_source=source,
+            vis=vis,
+            vis_ignore=vis_ig,
+            a_only=False,
         ))
     return rows
 
@@ -244,29 +266,99 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
 VAL_SEEDS_DEFAULT = (1, 13, 23, 26, 37, 45)
 
 
+def _nav_dict(cfg: dict | None) -> dict:
+    if cfg is None:
+        return {}
+    nav = cfg.get("c2nav")
+    if nav is None:
+        return {}
+    return nav
+
+
+def _noise_from_cfg(cfg: dict) -> TrackerNoise:
+    nav = _nav_dict(cfg)
+    noise_cfg = nav.get("noise")
+    if noise_cfg is None:
+        noise_cfg = {}
+    drop_visible = float(noise_cfg["drop_visible"] if noise_cfg.get("drop_visible") is not None else 0.15)
+    if drop_visible > 0.15:
+        drop_visible = 0.15
+    p_fp = noise_cfg.get("p_fp_start")
+    return TrackerNoise(
+        drop_visible=drop_visible,
+        bearing_std=float(noise_cfg["bearing_std"] if noise_cfg.get("bearing_std") is not None else 3.0),
+        log_dist_std=float(noise_cfg["log_dist_std"] if noise_cfg.get("log_dist_std") is not None else 0.1),
+        yaw_std=float(noise_cfg["yaw_std"] if noise_cfg.get("yaw_std") is not None else 1.0),
+        disp_std=float(noise_cfg["disp_std"] if noise_cfg.get("disp_std") is not None else 0.05),
+        p_fp_start=0.03 if p_fp is None else float(p_fp),
+        hfov_deg=float(horizontal_fov_deg(cfg)),
+    )
+
+
+def collect_log_dist_bank(episodes, spec: dict, cfg: dict, val_seeds: set[int]) -> list[float]:
+    bank = []
+    objects = list(spec["objects"])
+    grid = tuple(spec["grid"])
+    pool = int(spec["token_pool"])
+    bearings = patch_bearings(int(grid[0]), int(grid[1]), cfg)
+    for folder in episodes:
+        packed = read_episode(folder)
+        rec = packed["record"]
+        seed = int(rec.get("seed") if rec.get("seed") is not None else Path(folder).name)
+        if seed in val_seeds:
+            continue
+        task = load_task(rec, Path(folder), cfg)
+        target = str(task.get("target") if task.get("target") is not None else "pig")
+        t_i = objects.index(target) if target in objects else 0
+        for step in packed["steps"]:
+            scene = step.get("scene") if step.get("scene") is not None else {}
+            present, _log_d, ignore = patch_targets(scene, objects, pool, grid)
+            obs = gt_target_obs(present, ignore, t_i, bearings, step.get("target_distance_num"))
+            if obs.visible and obs.log_distance is not None:
+                bank.append(float(obs.log_distance))
+    return bank
+
+
+def count_stop_neg_invisible_close(rows: list[NavSample], max_dist: float = 3.5) -> dict:
+    n_close_inv = 0
+    n_pos = 0
+    for row in rows:
+        if not row.has_c:
+            continue
+        vis = 0.0
+        if row.geom_clean is not None:
+            vis = float(row.geom_clean[0])
+        elif row.geom is not None:
+            vis = float(row.geom[0])
+        log_d = float(row.s_vec[2]) if row.s_vec is not None and len(row.s_vec) > 2 else 0.0
+        dist = math.exp(log_d)
+        if vis < 0.5 and dist <= float(max_dist):
+            n_close_inv += 1
+            if int(row.stop) != 0:
+                n_pos += 1
+    return {"n": n_close_inv, "stop_pos": n_pos, "all_neg": n_pos == 0}
+
+
 def load_split(cfg: dict, feat_dir: Path, apply_noise: bool = True) -> tuple[list[NavSample], list[NavSample], dict]:
     spec = spec_from_cfg(cfg)
     tokens, _, index = load_memmaps(feat_dir)
     lookup = _index_lookup(index)
-    nav = cfg.get("c2nav") or {}
-    roots = demo_roots(nav.get("demo_dirs"), {"c2": {"demo_dirs": nav.get("demo_dirs")}}) if nav.get("demo_dirs") else demo_roots(None, cfg)
+    nav = _nav_dict(cfg)
+    demo_dirs = nav.get("demo_dirs")
+    if demo_dirs:
+        roots = demo_roots(demo_dirs, {"c2": {"demo_dirs": demo_dirs}})
+    else:
+        roots = demo_roots(None, cfg)
     folders = []
     for root in roots:
         if Path(root).is_dir():
             folders.extend(iter_success_episodes(root))
     episodes, stats = select_training_episodes(folders, cfg)
-    val_seeds = {int(s) for s in (nav.get("val_seeds") or VAL_SEEDS_DEFAULT)}
-    noise_cfg = nav.get("noise") or {}
-    drop_visible = float(noise_cfg["drop_visible"] if noise_cfg.get("drop_visible") is not None else 0.15)
-    if drop_visible > 0.15:
-        drop_visible = 0.15
-    train_noise = TrackerNoise(
-        drop_visible=drop_visible,
-        bearing_std=float(noise_cfg["bearing_std"] if noise_cfg.get("bearing_std") is not None else 5.0),
-        log_dist_std=float(noise_cfg["log_dist_std"] if noise_cfg.get("log_dist_std") is not None else 0.1),
-        yaw_std=float(noise_cfg["yaw_std"] if noise_cfg.get("yaw_std") is not None else 1.0),
-        disp_std=float(noise_cfg["disp_std"] if noise_cfg.get("disp_std") is not None else 0.05),
-    )
+    val_raw = nav.get("val_seeds")
+    val_seeds = {int(s) for s in (VAL_SEEDS_DEFAULT if val_raw is None else val_raw)}
+    train_noise = _noise_from_cfg(cfg)
+    if apply_noise:
+        train_noise.log_dist_bank = collect_log_dist_bank(episodes, spec, cfg, val_seeds)
     train, val = [], []
     for folder in episodes:
         seed = int(Path(folder).name) if str(Path(folder).name).isdigit() else 0
@@ -279,12 +371,86 @@ def load_split(cfg: dict, feat_dir: Path, apply_noise: bool = True) -> tuple[lis
         dest.extend(rows)
     stats["train_rows"] = len(train)
     stats["val_rows"] = len(val)
-    stats["grid"] = list(index.get("grid") or tokens.shape[1:3])
-    stats["dim"] = int(index.get("dim") or tokens.shape[-1])
+    stats["grid"] = list(index.get("grid") if index.get("grid") is not None else tokens.shape[1:3])
+    stats["dim"] = int(index.get("dim") if index.get("dim") is not None else tokens.shape[-1])
+    close_inv = count_stop_neg_invisible_close(train)
+    stats["stop_neg_invisible_close"] = close_inv
     print(f"c2nav samples train={len(train)} val={len(val)} episodes={len(episodes)}", flush=True)
+    print(f"c2nav stop-neg invisible belief<=3.5 n={close_inv['n']} stop_pos={close_inv['stop_pos']} all_neg={close_inv['all_neg']}", flush=True)
     print_label_stats("train", train, spec)
     print_label_stats("val", val, spec)
     return train, val, stats
+
+
+def check_a_extra_format(feat_dir: Path, spec: dict) -> dict:
+    tokens, _pooled, index = load_memmaps(feat_dir)
+    if tokens.ndim != 4:
+        raise RuntimeError(f"{feat_dir} tokens ndim={tokens.ndim}, expected 4")
+    expect = (8, 13, 384)
+    got = tuple(int(x) for x in tokens.shape[1:])
+    if got != expect:
+        raise RuntimeError(f"{feat_dir} tokens grid/dim {got}, expected {expect}")
+    if str(tokens.dtype) not in ("float16", "float32"):
+        raise RuntimeError(f"{feat_dir} tokens dtype={tokens.dtype}, expected float16")
+    objs = index.get("objects")
+    if objs is not None and list(objs) != list(spec["objects"]):
+        raise RuntimeError(f"{feat_dir} objects {objs} != {spec['objects']}")
+    return {"n": int(tokens.shape[0]), "shape": list(tokens.shape), "dtype": str(tokens.dtype)}
+
+
+def _assert_old_patch_hw(scene: dict, folder: Path) -> None:
+    patches = scene.get("patches")
+    ignore = scene.get("ignore")
+    if patches is None:
+        return
+    sample_p = next(iter(patches.values())) if isinstance(patches, dict) and patches else patches
+    arr = np.asarray(sample_p)
+    if arr.ndim != 2 or tuple(int(x) for x in arr.shape) != (16, 26):
+        raise RuntimeError(f"old demo patches shape {arr.shape}, expected (16, 26) in {folder}")
+    if ignore is None:
+        return
+    ig = np.asarray(ignore)
+    if ig.ndim == 2 and tuple(int(x) for x in ig.shape) != (16, 26):
+        raise RuntimeError(f"old demo ignore shape {ig.shape}, expected (16, 26) in {folder}")
+
+
+def load_a_extra(cfg: dict, spec: dict) -> tuple[list[NavSample], list[NavSample]]:
+    feat_dirs = a_extra_features_of(cfg)
+    if not feat_dirs:
+        return [], []
+    demo_dirs = a_extra_demos_of(cfg)
+    if not demo_dirs:
+        raise RuntimeError("c2nav.a_extra_features is set but c2nav.a_extra_demos is empty")
+    nav = _nav_dict(cfg)
+    val_raw = nav.get("val_seeds")
+    val_seeds = {int(s) for s in (VAL_SEEDS_DEFAULT if val_raw is None else val_raw)}
+    train, val = [], []
+    for feat_dir in feat_dirs:
+        path = Path(feat_dir)
+        check_a_extra_format(path, spec)
+        _tokens, _, index = load_memmaps(path)
+        lookup = _index_lookup(index)
+        folders = []
+        for root in demo_dirs:
+            root_p = Path(root)
+            if root_p.is_dir():
+                folders.extend(iter_success_episodes(root_p))
+        for folder in folders:
+            packed = read_episode(folder)
+            rec = packed["record"]
+            seed = int(rec.get("seed") if rec.get("seed") is not None else Path(folder).name)
+            for step in packed["steps"]:
+                scene = step.get("scene") if step.get("scene") is not None else {}
+                _assert_old_patch_hw(scene, Path(folder))
+            rows = samples_from_episode(folder, lookup, spec, cfg, None)
+            store_i = 1 + feat_dirs.index(feat_dir)
+            for row in rows:
+                row.a_only = True
+                row.feat_store = store_i
+            dest = val if seed in val_seeds else train
+            dest.extend(rows)
+    print(f"c2nav a_extra train={len(train)} val={len(val)}", flush=True)
+    return train, val
 
 
 def print_label_stats(name: str, rows: list[NavSample], spec: dict) -> dict:
@@ -333,7 +499,10 @@ def _presence_pos_weight(rows: list[NavSample], n_obj: int) -> np.ndarray:
     pos = np.zeros(n_obj, np.float64)
     neg = np.zeros(n_obj, np.float64)
     for row in rows:
+        vis_ig = row.vis_ignore
         for k in range(n_obj):
+            if vis_ig is not None and k < len(vis_ig) and float(vis_ig[k]) >= 0.5:
+                continue
             m = (row.ignore < 0.5)
             p = row.present[k] > 0.5
             pos[k] += float((p & m).sum())
@@ -341,8 +510,42 @@ def _presence_pos_weight(rows: list[NavSample], n_obj: int) -> np.ndarray:
     w = np.ones(n_obj, np.float32)
     for k in range(n_obj):
         if pos[k] > 0:
-            w[k] = np.clip(neg[k] / max(pos[k], 1.0), 1.0, 50.0)
+            w[k] = min(float(PRESENT_POS_CAP), neg[k] / max(pos[k], 1.0))
     return w
+
+
+def _vis_pos_weight(rows: list[NavSample], n_obj: int) -> np.ndarray:
+    pos = np.zeros(n_obj, np.float64)
+    neg = np.zeros(n_obj, np.float64)
+    for row in rows:
+        vis, vis_ig = _row_vis(row, n_obj)
+        for k in range(n_obj):
+            if float(vis_ig[k]) >= 0.5:
+                continue
+            if float(vis[k]) > 0.5:
+                pos[k] += 1.0
+            else:
+                neg[k] += 1.0
+    w = np.ones(n_obj, np.float32)
+    for k in range(n_obj):
+        if pos[k] > 0:
+            w[k] = min(float(VIS_POS_CAP), neg[k] / max(pos[k], 1.0))
+    return w
+
+
+def _row_vis(row: NavSample, n_obj: int) -> tuple[np.ndarray, np.ndarray]:
+    if row.vis is None:
+        return vis_labels(row.present, row.ignore)
+    vis = np.asarray(row.vis, np.float32).reshape(-1)
+    if row.vis_ignore is None:
+        vis_ig = np.zeros((n_obj,), np.float32)
+    else:
+        vis_ig = np.asarray(row.vis_ignore, np.float32).reshape(-1)
+    if vis.shape[0] < n_obj:
+        vis = np.pad(vis, (0, n_obj - vis.shape[0]))
+    if vis_ig.shape[0] < n_obj:
+        vis_ig = np.pad(vis_ig, (0, n_obj - vis_ig.shape[0]))
+    return vis[:n_obj], vis_ig[:n_obj]
 
 
 def class_counts(values: list[int], n: int) -> np.ndarray:
@@ -354,7 +557,7 @@ def class_counts(values: list[int], n: int) -> np.ndarray:
 
 
 def class_weights(values: list[int], n: int, cap: float = 10.0) -> tuple[np.ndarray, np.ndarray]:
-    """w_c = min(10, sqrt(N/(K n_c))), then mean 1. Empty class raises."""
+    """w_c = min(cap, sqrt(N/(K n_c))), then mean 1. Empty class raises."""
     counts = class_counts(values, n)
     total = float(counts.sum())
     empty = [i for i in range(int(n)) if counts[i] == 0]
@@ -403,6 +606,10 @@ def flip_sample(sample: NavSample) -> NavSample:
         forward_clipped=sample.forward_clipped,
         geom_clean=None if sample.geom_clean is None else np.asarray(sample.geom_clean, np.float32).copy(),
         obs_source=sample.obs_source,
+        vis=None if sample.vis is None else np.flip(np.asarray(sample.vis), axis=-1).copy() if np.asarray(sample.vis).ndim == 2 else np.asarray(sample.vis).copy(),
+        vis_ignore=None if sample.vis_ignore is None else np.asarray(sample.vis_ignore).copy(),
+        a_only=sample.a_only,
+        feat_store=sample.feat_store,
     )
 
 
@@ -413,8 +620,10 @@ def collate(rows: list[NavSample], tokens, flip: bool, rng: random.Random) -> di
         use = flip_sample(row) if flip and rng.random() < 0.5 else row
         chosen.append(use)
         flips.append(use is not row and flip)
-    idx = [r.row for r in chosen]
-    tok = rows_float32(tokens, idx)
+    if isinstance(tokens, (list, tuple)):
+        tok = np.stack([np.asarray(tokens[int(r.feat_store)][int(r.row)], np.float32) for r in chosen])
+    else:
+        tok = rows_float32(tokens, [r.row for r in chosen])
     for i, do in enumerate(flips):
         if do:
             tok[i] = tok[i, :, ::-1, :].copy()
@@ -441,6 +650,9 @@ def collate(rows: list[NavSample], tokens, flip: bool, rng: random.Random) -> di
         "geom_clean": np.stack([
             r.geom if r.geom_clean is None else r.geom_clean for r in chosen
         ]),
+        "vis": np.stack([_row_vis(r, chosen[0].present.shape[0])[0] for r in chosen]),
+        "vis_ignore": np.stack([_row_vis(r, chosen[0].present.shape[0])[1] for r in chosen]),
+        "a_only": np.asarray([1.0 if r.a_only else 0.0 for r in chosen], np.float32),
     }
 
 
@@ -454,52 +666,71 @@ def _mask_unseen_logits(logits, weight):
     return torch.where(valid.unsqueeze(0), logits, fill)
 
 
-def nav_loss(out, batch, weights, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth: float):
+def nav_loss(out, batch, weights, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth: float, vis_w=None):
     import torch
     from torch.nn import functional as F
 
-    present = out["present_logit"]
-    b, k, h, w = present.shape
-    ignore = batch["ignore"].unsqueeze(1)
-    valid = (ignore < 0.5).float()
-    y = batch["present"]
-    bce = F.binary_cross_entropy_with_logits(present, y, reduction="none")
-    pw = pos_w.view(1, k, 1, 1)
-    bce = torch.where(y > 0.5, bce * pw, bce)
-    loss_p = (bce * valid).sum() / valid.sum().clamp_min(1.0)
-    mask_d = (y > 0.5) & (valid > 0.5)
-    if mask_d.any():
-        loss_d = F.smooth_l1_loss(out["log_dist"][mask_d], batch["log_dist"][mask_d])
+    skip_a = float(weights["a"] if weights.get("a") is not None else 1.0) == 0.0
+    if skip_a:
+        z = out["mode"].new_zeros(())
+        loss_p = loss_d = loss_g = loss_vis = loss_a = z
+        loss_biome = loss_time = loss_weather = loss_bright = z
+        present = None
     else:
-        loss_d = present.new_zeros(())
-    loss_biome = F.cross_entropy(out["biome"], batch["biome"])
-    loss_time = F.cross_entropy(out["time"], batch["time"])
-    loss_weather = F.cross_entropy(out["weather"], batch["weather"])
-    loss_bright = F.cross_entropy(out["brightness"], batch["brightness"])
-    # Each global CE is already a batch mean; L_global is the mean of those four.
-    loss_g = torch.stack([loss_biome, loss_time, loss_weather, loss_bright]).mean()
-    loss_a = loss_p + loss_d + loss_g
-    c_mask = (batch["has_c"] > 0.5) & (batch["used_wide"] < 0.5) & (batch["stop"] < 0.5)
-    if c_mask.any():
-        mode_logits = _mask_unseen_logits(out["mode"][c_mask], mode_w)
-        turn_logits = _mask_unseen_logits(out["turn"][c_mask], turn_w)
-        fwd_logits = _mask_unseen_logits(out["forward"][c_mask], fwd_w)
-        loss_mode = F.cross_entropy(mode_logits, batch["mode"][c_mask], weight=mode_w, label_smoothing=smooth)
-        loss_turn = F.cross_entropy(turn_logits, batch["turn"][c_mask], weight=turn_w, label_smoothing=smooth)
-        loss_fwd = F.cross_entropy(fwd_logits, batch["forward"][c_mask], weight=fwd_w, label_smoothing=smooth)
+        present = out["present_logit"]
+        b, k, h, w = present.shape
+        ignore = batch["ignore"].unsqueeze(1)
+        class_ok = (batch["vis_ignore"] < 0.5).float().view(b, k, 1, 1)
+        valid = (ignore < 0.5).float() * class_ok
+        y = batch["present"]
+        bce = F.binary_cross_entropy_with_logits(present, y, reduction="none")
+        pw = pos_w.view(1, k, 1, 1)
+        bce = torch.where(y > 0.5, bce * pw, bce)
+        loss_p = (bce * valid).sum() / valid.sum().clamp_min(1.0)
+        mask_d = (y > 0.5) & (valid > 0.5)
+        if mask_d.any():
+            loss_d = F.smooth_l1_loss(out["log_dist"][mask_d], batch["log_dist"][mask_d])
+        else:
+            loss_d = present.new_zeros(())
+        loss_biome = F.cross_entropy(out["biome"], batch["biome"])
+        loss_time = F.cross_entropy(out["time"], batch["time"])
+        loss_weather = F.cross_entropy(out["weather"], batch["weather"])
+        loss_bright = F.cross_entropy(out["brightness"], batch["brightness"])
+        loss_g = torch.stack([loss_biome, loss_time, loss_weather, loss_bright]).mean()
+        y_vis = batch["vis"]
+        v_ig = batch["vis_ignore"]
+        valid_v = (v_ig < 0.5).float()
+        bce_v = F.binary_cross_entropy_with_logits(out["vis_logit"], y_vis, reduction="none")
+        if vis_w is None:
+            vis_w = torch.ones(k, device=present.device, dtype=present.dtype)
+        bce_v = torch.where(y_vis > 0.5, bce_v * vis_w.view(1, k), bce_v)
+        loss_vis = (bce_v * valid_v).sum() / valid_v.sum().clamp_min(1.0)
+        loss_a = loss_p + loss_d + loss_g + loss_vis
+        z = present.new_zeros(())
+    a_only = batch.get("a_only")
+    if a_only is None:
+        a_only = z
+    c_ok = (batch["has_c"] > 0.5) & (batch["used_wide"] < 0.5) & (batch["stop"] < 0.5) & (a_only < 0.5)
+    if c_ok.any():
+        mode_logits = _mask_unseen_logits(out["mode"][c_ok], mode_w)
+        turn_logits = _mask_unseen_logits(out["turn"][c_ok], turn_w)
+        fwd_logits = _mask_unseen_logits(out["forward"][c_ok], fwd_w)
+        loss_mode = F.cross_entropy(mode_logits, batch["mode"][c_ok], weight=mode_w, label_smoothing=smooth)
+        loss_turn = F.cross_entropy(turn_logits, batch["turn"][c_ok], weight=turn_w, label_smoothing=smooth)
+        loss_fwd = F.cross_entropy(fwd_logits, batch["forward"][c_ok], weight=fwd_w, label_smoothing=smooth)
         loss_wp = (loss_turn + loss_fwd) / 2.0
     else:
-        loss_mode = present.new_zeros(())
-        loss_wp = present.new_zeros(())
-        loss_turn = present.new_zeros(())
-        loss_fwd = present.new_zeros(())
-    if (batch["has_c"] > 0.5).any():
-        stop_mask = batch["has_c"] > 0.5
+        loss_mode = z
+        loss_wp = z
+        loss_turn = z
+        loss_fwd = z
+    stop_ok = (batch["has_c"] > 0.5) & (a_only < 0.5)
+    if stop_ok.any():
         loss_stop = F.binary_cross_entropy_with_logits(
-            out["stop"][stop_mask], batch["stop"][stop_mask], pos_weight=stop_pos,
+            out["stop"][stop_ok], batch["stop"][stop_ok], pos_weight=stop_pos,
         )
     else:
-        loss_stop = present.new_zeros(())
+        loss_stop = z
     total = (
         float(weights["a"]) * loss_a
         + float(weights["mode"]) * loss_mode
@@ -511,6 +742,7 @@ def nav_loss(out, batch, weights, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth
         "present": float(loss_p.detach().item()),
         "log_dist": float(loss_d.detach().item()),
         "global": float(loss_g.detach().item()),
+        "vis": float(loss_vis.detach().item()),
         "biome": float(loss_biome.detach().item()),
         "time": float(loss_time.detach().item()),
         "weather": float(loss_weather.detach().item()),
@@ -557,8 +789,10 @@ def _binary_auc(y, p) -> float | None:
     return float((ranks[y_sorted == 1].sum() - n_pos * (n_pos + 1) / 2.0) / (n_pos * n_neg))
 
 
-def heads_out(model, batch):
+def heads_out(model, batch, skip_a: bool = False):
     """A from tokens; C from GT geom so policy metrics match the training objective."""
+    if skip_a:
+        return model.policy(batch["geom"], batch["s_vec"], batch["cond"])
     a = model.perception(batch["tokens"])
     c = model.policy(batch["geom"], batch["s_vec"], batch["cond"])
     out = dict(a)
@@ -566,11 +800,47 @@ def heads_out(model, batch):
     return out
 
 
+def _pr_fpr(y, p, tau: float) -> dict:
+    y = np.asarray(y, dtype=np.int32)
+    p = np.asarray(p, dtype=np.float64)
+    if y.size == 0:
+        return {"precision": None, "recall": None, "fpr": None, "n": 0, "tau": float(tau)}
+    pred = p >= float(tau)
+    tp = int(((y == 1) & pred).sum())
+    fp = int(((y == 0) & pred).sum())
+    fn = int(((y == 1) & (~pred)).sum())
+    tn = int(((y == 0) & (~pred)).sum())
+    prec = None if (tp + fp) == 0 else tp / float(tp + fp)
+    rec = None if (tp + fn) == 0 else tp / float(tp + fn)
+    fpr = None if (fp + tn) == 0 else fp / float(fp + tn)
+    return {"precision": prec, "recall": rec, "fpr": fpr, "n": int(y.size), "tau": float(tau)}
+
+
+def _best_stop_f1(y, p) -> dict:
+    y = np.asarray(y, dtype=np.int32)
+    p = np.asarray(p, dtype=np.float64)
+    if y.size == 0 or int((y == 1).sum()) == 0:
+        return {"f1": None, "tau": None, "n": int(y.size)}
+    best = {"f1": -1.0, "tau": 0.5, "n": int(y.size)}
+    for tau in np.linspace(0.05, 0.95, 19):
+        rec = _pr_fpr(y, p, float(tau))
+        prec = rec["precision"]
+        recall = rec["recall"]
+        if prec is None or recall is None:
+            continue
+        f1 = 2.0 * prec * recall / max(prec + recall, 1e-9)
+        if f1 > best["f1"]:
+            best = {"f1": float(f1), "tau": float(tau), "n": int(y.size)}
+    if best["f1"] < 0:
+        return {"f1": None, "tau": None, "n": int(y.size)}
+    return best
+
+
 def _metric(value, n: int) -> dict:
     return {"value": None if n <= 0 else value, "n": int(n)}
 
 
-def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cfg: dict, bearings, warn_empty_stop: bool = True) -> dict:
+def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cfg: dict, bearings, warn_empty_stop: bool = True, skip_a: bool = False) -> dict:
     import torch
 
     empty_mode = {name: _metric(None, 0) for name in MODE_NAMES}
@@ -592,26 +862,51 @@ def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cf
     y_stop, p_stop = [], []
     y_turn, p_turn = [], []
     y_fwd, p_fwd = [], []
+    y_turn_by_mode = {name: ([], []) for name in MODE_NAMES}
+    y_fwd_by_mode = {name: ([], []) for name in MODE_NAMES}
     present_y, present_p = [], []
+    vis_y, vis_p = [], []
+    vis_y_tgt, vis_p_tgt = [], []
     dist_err = []
     n_dist = 0
+    k_obj = len(spec["objects"])
     bs = 16
     with torch.no_grad():
         for start in range(0, len(rows), bs):
             chunk = rows[start : start + bs]
             batch = _to_torch(collate(chunk, tokens, False, rng), device, bearings=bearings)
-            out = model(batch)
+            out = heads_out(model, batch, skip_a=skip_a)
             for i, row in enumerate(chunk):
-                if policy_supervised(row):
+                if policy_supervised(row) and not row.a_only:
                     y_mode.append(row.mode)
                     p_mode.append(int(out["mode"][i].argmax().item()))
                     y_turn.append(row.turn)
                     p_turn.append(int(out["turn"][i].argmax().item()))
                     y_fwd.append(row.forward)
                     p_fwd.append(int(out["forward"][i].argmax().item()))
-                if row.has_c:
+                    name = MODE_NAMES[row.mode] if 0 <= row.mode < len(MODE_NAMES) else None
+                    if name is not None:
+                        y_turn_by_mode[name][0].append(row.turn)
+                        y_turn_by_mode[name][1].append(int(out["turn"][i].argmax().item()))
+                        y_fwd_by_mode[name][0].append(row.forward)
+                        y_fwd_by_mode[name][1].append(int(out["forward"][i].argmax().item()))
+                if row.has_c and not row.a_only:
                     y_stop.append(int(row.stop))
                     p_stop.append(float(torch.sigmoid(out["stop"][i]).item()))
+                if skip_a or "vis_logit" not in out:
+                    continue
+                vis, vis_ig = _row_vis(row, k_obj)
+                vis_logit = out["vis_logit"][i].detach().cpu().numpy()
+                vis_prob = 1.0 / (1.0 + np.exp(-vis_logit))
+                for k in range(k_obj):
+                    if float(vis_ig[k]) >= 0.5:
+                        continue
+                    vis_y.append(int(vis[k] > 0.5))
+                    vis_p.append(float(vis_prob[k]))
+                t_i = int(row.target_index)
+                if t_i < k_obj and float(vis_ig[t_i]) < 0.5:
+                    vis_y_tgt.append(int(vis[t_i] > 0.5))
+                    vis_p_tgt.append(float(vis_prob[t_i]))
                 mask = row.ignore < 0.5
                 if mask.any():
                     present_y.append(row.present[:, mask].reshape(-1))
@@ -631,6 +926,7 @@ def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cf
     n_pos = int(sum(y_stop))
     f1_val = None
     auc_val = None
+    stop_best = {"f1": None, "tau": None, "n": n_stop}
     if n_stop == 0 or n_pos == 0:
         if warn_empty_stop and n_stop >= 0:
             print("验证集无停止正样本", flush=True)
@@ -645,6 +941,7 @@ def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cf
         rec = tp / max(tp + fn, 1)
         f1_val = 2 * prec * rec / max(prec + rec, 1e-9)
         auc_val = _binary_auc(y_stop, p_stop)
+        stop_best = _best_stop_f1(y_stop, p_stop)
     mode_acc = {}
     if y_mode:
         y_mode_a = np.asarray(y_mode)
@@ -655,23 +952,41 @@ def offline_metrics(model, rows: list[NavSample], tokens, device, spec: dict, cf
             mode_acc[name] = _metric(None if n_c == 0 else float(np.mean(p_mode_a[m] == i)), n_c)
     else:
         mode_acc = empty_mode
+    turn_by_mode = {name: acc(y_turn_by_mode[name][0], y_turn_by_mode[name][1]) for name in MODE_NAMES}
+    fwd_by_mode = {name: acc(y_fwd_by_mode[name][0], y_fwd_by_mode[name][1]) for name in MODE_NAMES}
     py = np.concatenate(present_y) if present_y else np.zeros(0)
     pp = np.concatenate(present_p) if present_p else np.zeros(0)
     present_auc = None if py.size == 0 else _binary_auc((py > 0.5).astype(int), pp)
+    vis_auc = _binary_auc(vis_y, vis_p) if vis_y else None
+    vis_at = {str(t): _pr_fpr(vis_y_tgt, vis_p_tgt, t) for t in (0.5, 0.7, 0.9)}
+    vis_fpr_05 = vis_at["0.5"]["fpr"]
+    chosen_vis = None
+    for t in (0.5, 0.7, 0.9):
+        fpr = vis_at[str(t)]["fpr"]
+        if fpr is not None and fpr <= 0.03:
+            chosen_vis = float(t)
+            break
     return {
         "mode_acc": acc(y_mode, p_mode),
         "mode_acc_by_name": mode_acc,
         "turn_acc": acc(y_turn, p_turn),
         "forward_acc": acc(y_fwd, p_fwd),
+        "turn_acc_by_mode": turn_by_mode,
+        "forward_acc_by_mode": fwd_by_mode,
         "stop_f1": _metric(f1_val, n_pos),
         "stop_auc": _metric(auc_val, n_pos),
+        "stop_best_f1": stop_best,
         "present_auc": _metric(present_auc, int(py.size)),
+        "vis_auc": _metric(vis_auc, len(vis_y)),
+        "vis_target": vis_at,
+        "vis_tau_fpr_le_3": chosen_vis,
         "log_dist_mae": _metric(None if not dist_err else float(np.mean(dist_err)), n_dist),
         "pred_mode": {MODE_NAMES[i]: int(p_mode.count(i)) for i in range(len(MODE_NAMES))} if p_mode else None,
         "n": len(rows),
         "n_mode": len(y_mode),
         "n_stop": n_stop,
         "n_stop_pos": n_pos,
+        "vis_fpr_0.5": vis_fpr_05,
     }
 
 
@@ -764,6 +1079,9 @@ def dry_run_torch() -> float:
         "stop": torch.zeros(b),
         "used_wide": torch.zeros(b),
         "has_c": torch.ones(b),
+        "vis": torch.zeros(b, k),
+        "vis_ignore": torch.zeros(b, k),
+        "a_only": torch.zeros(b),
     }
     batch["present"][:, 0, 1, 2] = 1.0
     out = model(batch)
@@ -789,40 +1107,206 @@ def dry_run_torch() -> float:
     return after
 
 
-def train_loop(cfg: dict, feat_dir: Path, out: Path, epochs: int, batch_size: int, lr: float, seed: int, cfg_path: Path | None = None) -> Path:
+TURN_WEIGHT_CAP = 3.0
+A_PARAM_PREFIX = ("stem", "present", "dist_conv", "log_dist", "biome", "time", "weather", "brightness", "vis_fc1", "vis_fc2")
+
+
+def resume_start_epoch(path) -> int:
+    import torch
+
+    payload = torch.load(path, map_location="cpu")
+    meta = payload.get("meta") if payload.get("meta") is not None else {}
+    epoch = meta.get("epoch")
+    if epoch is None:
+        return 1
+    return int(epoch) + 1
+
+
+def _freeze_a(model, freeze: bool) -> None:
+    for name, param in model.named_parameters():
+        head = name.split(".", 1)[0]
+        if head in A_PARAM_PREFIX:
+            param.requires_grad = not freeze
+
+
+def _brief_val(metrics: dict, extra_a=None) -> dict:
+    vis_at = metrics.get("vis_target") if metrics.get("vis_target") is not None else {}
+    brief = {
+        "vis_auc": metrics.get("vis_auc"),
+        "vis_at": vis_at,
+        "turn_acc_by_mode": metrics.get("turn_acc_by_mode"),
+        "forward_acc_by_mode": metrics.get("forward_acc_by_mode"),
+        "stop_best_f1": metrics.get("stop_best_f1"),
+    }
+    if extra_a is not None:
+        brief["a_extra_val"] = {
+            "vis_auc": extra_a.get("vis_auc"),
+            "vis_at": extra_a.get("vis_target"),
+        }
+    return brief
+
+
+BEARING_BUCKETS = ((0.0, 10.0), (10.0, 20.0), (20.0, 30.0), (30.0, 45.0), (45.0, 181.0))
+
+
+def _bearing_abs(geom) -> float:
+    g = np.asarray(geom, np.float32)
+    if g.shape[0] < 3 or float(g[0]) < 0.5:
+        return float("nan")
+    return abs(float(math.degrees(math.atan2(float(g[1]), float(g[2])))))
+
+
+def _bucket_name(abs_deg: float) -> str:
+    if abs_deg != abs_deg:
+        return "unseen"
+    for lo, hi in BEARING_BUCKETS:
+        if lo <= abs_deg < hi:
+            if hi >= 180:
+                return f">{int(lo)}"
+            return f"{int(lo)}-{int(hi)}"
+    return f">{int(BEARING_BUCKETS[-1][0])}"
+
+
+def c_only_diag(model, rows: list[NavSample], tokens, device, spec: dict, cfg: dict, bearings) -> dict:
+    import torch
+    from collections import Counter
+
+    from lfnav.policy.c2nav_labels import TURN_BINS
+
+    rng = random.Random(0)
+    buckets = {}
+    for lo, hi in BEARING_BUCKETS:
+        key = f">{int(lo)}" if hi >= 180 else f"{int(lo)}-{int(hi)}"
+        buckets[key] = {"expert": Counter(), "pred": Counter(), "n": 0}
+    n_back = n_back_hit = 0
+    skip_a = True
+    model.eval()
+    with torch.no_grad():
+        for start in range(0, len(rows), 16):
+            chunk = rows[start : start + 16]
+            batch = _to_torch(collate(chunk, tokens, False, rng), device, bearings=bearings)
+            out = heads_out(model, batch, skip_a=skip_a)
+            for i, row in enumerate(chunk):
+                if not policy_supervised(row) or row.a_only:
+                    continue
+                pred_t = int(out["turn"][i].argmax().item())
+                pred_f = int(out["forward"][i].argmax().item())
+                if int(row.forward) == 0:
+                    n_back += 1
+                    if pred_f == 0:
+                        n_back_hit += 1
+                if row.mode != MODE_NAMES.index("approach"):
+                    continue
+                src = row.geom_clean if row.geom_clean is not None else row.geom
+                key = _bucket_name(_bearing_abs(src))
+                if key not in buckets:
+                    buckets[key] = {"expert": Counter(), "pred": Counter(), "n": 0}
+                buckets[key]["expert"][int(TURN_BINS[row.turn])] += 1
+                buckets[key]["pred"][int(TURN_BINS[pred_t])] += 1
+                buckets[key]["n"] += 1
+    packed = {}
+    for key, rec in buckets.items():
+        packed[key] = {
+            "n": rec["n"],
+            "expert": {str(k): int(v) for k, v in sorted(rec["expert"].items())},
+            "pred": {str(k): int(v) for k, v in sorted(rec["pred"].items())},
+        }
+    return {
+        "approach_turn_buckets": packed,
+        "backward_recall": None if n_back == 0 else n_back_hit / float(n_back),
+        "n_backward": n_back,
+    }
+
+
+def _epoch_score(metrics: dict) -> tuple[bool, float, float | None, float | None]:
+    vis_tau = metrics.get("vis_tau_fpr_le_3")
+    ok = vis_tau is not None
+    turn = metrics.get("turn_acc_by_mode") if metrics.get("turn_acc_by_mode") is not None else {}
+    approach = turn.get("approach") if isinstance(turn, dict) else None
+    approach_acc = 0.0
+    if isinstance(approach, dict) and approach.get("value") is not None:
+        approach_acc = float(approach["value"])
+    stop = metrics.get("stop_best_f1") if metrics.get("stop_best_f1") is not None else {}
+    stop_f1 = 0.0 if stop.get("f1") is None else float(stop["f1"])
+    stop_tau = stop.get("tau")
+    return ok, approach_acc + stop_f1, vis_tau, stop_tau
+
+
+def train_loop(
+    cfg: dict,
+    feat_dir: Path,
+    out: Path,
+    epochs: int,
+    batch_size: int,
+    lr: float,
+    seed: int,
+    cfg_path: Path | None = None,
+    resume=None,
+    c_only: bool = False,
+    apply_noise: bool = True,
+) -> Path:
     import torch
 
     spec = spec_from_cfg(cfg)
-    train, val, stats = load_split(cfg, feat_dir)
+    n_th = torch_threads_of(cfg)
+    if n_th > 0:
+        torch.set_num_threads(n_th)
+    train, val, stats = load_split(cfg, feat_dir, apply_noise=apply_noise)
     if not train:
         raise RuntimeError("no c2nav training samples")
     tokens, _, index = load_memmaps(feat_dir)
-    spec["dim"] = int(index.get("dim") or spec["dim"])
-    spec["grid"] = tuple(index.get("grid") or spec["grid"])
-    spec["token_pool"] = int(index.get("token_pool") or spec["token_pool"])
+    spec["dim"] = int(index.get("dim") if index.get("dim") is not None else spec["dim"])
+    spec["grid"] = tuple(index.get("grid") if index.get("grid") is not None else spec["grid"])
+    spec["token_pool"] = int(index.get("token_pool") if index.get("token_pool") is not None else spec["token_pool"])
+    extra_train, extra_val = load_a_extra(cfg, spec)
+    token_arg = tokens
+    if extra_train or extra_val:
+        stores = [tokens]
+        for extra_dir in a_extra_features_of(cfg):
+            extra_tok, _, _ = load_memmaps(Path(extra_dir))
+            stores.append(extra_tok)
+        token_arg = stores
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.manual_seed(seed)
     np.random.seed(seed)
     model = C2NavNet(spec).to(device)
-    opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=float((cfg.get("c2nav") or {}).get("weight_decay") or 0.05))
+    nav = _nav_dict(cfg)
+    wd_raw = nav.get("weight_decay")
+    wd = 0.05 if wd_raw is None else float(wd_raw)
+    opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=wd)
+    start_epoch = 1
+    if resume is not None:
+        payload = torch.load(resume, map_location=device)
+        model.load_state_dict(payload["model"])
+        start_epoch = resume_start_epoch(resume)
+        print(f"c2nav resume {resume} start_epoch={start_epoch}", flush=True)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max(epochs, 1))
-    pos_w = torch.as_tensor(_presence_pos_weight(train, len(spec["objects"])), device=device)
+    pos_w = torch.as_tensor(_presence_pos_weight(train + extra_train, len(spec["objects"])), device=device)
+    vis_w = torch.as_tensor(_vis_pos_weight(train + extra_train, len(spec["objects"])), device=device)
     usable = [r for r in train if policy_supervised(r)]
     mode_w, mode_n = class_weights([r.mode for r in usable], len(MODE_NAMES))
-    turn_n = class_counts([r.turn for r in usable], N_TURN)
-    fwd_n = class_counts([r.forward for r in usable], len(FORWARD_BINS))
+    turn_w, turn_n = class_weights([r.turn for r in usable], N_TURN, cap=TURN_WEIGHT_CAP)
+    fwd_w, fwd_n = class_weights([r.forward for r in usable], len(FORWARD_BINS), cap=TURN_WEIGHT_CAP)
     mode_w = torch.as_tensor(mode_w, device=device)
-    turn_w = torch.ones(N_TURN, device=device, dtype=torch.float32)
-    fwd_w = torch.ones(len(FORWARD_BINS), device=device, dtype=torch.float32)
+    turn_w = torch.as_tensor(turn_w, device=device)
+    fwd_w = torch.as_tensor(fwd_w, device=device)
     stop_scale = stop_pos_weight(train)
     stop_pos = torch.tensor(stop_scale, device=device)
-    wts = dict((cfg.get("c2nav") or {}).get("loss_weights") or {"a": 1, "mode": 1, "wp": 1, "stop": 1})
-    smooth = float((cfg.get("c2nav") or {}).get("label_smoothing") or 0.1)
+    wts_raw = nav.get("loss_weights")
+    wts = dict(wts_raw) if wts_raw is not None else {"a": 1, "mode": 1, "wp": 1, "stop": 1}
+    if c_only:
+        wts = dict(wts)
+        wts["a"] = 0.0
+        _freeze_a(model, True)
+    smooth_raw = nav.get("label_smoothing")
+    smooth = 0.1 if smooth_raw is None else float(smooth_raw)
     bearings = patch_bearings(spec["grid"][0], spec["grid"][1], cfg)
+    extra_n = a_extra_per_epoch_of(cfg)
     print(
         "c2nav weights "
         + json.dumps({
             "present_pos": pos_w.detach().cpu().tolist(),
+            "vis_pos": vis_w.detach().cpu().tolist(),
             "mode": mode_w.detach().cpu().tolist(),
             "mode_n": mode_n.tolist(),
             "turn": turn_w.detach().cpu().tolist(),
@@ -838,20 +1322,29 @@ def train_loop(cfg: dict, feat_dir: Path, out: Path, epochs: int, batch_size: in
     last = out / "last.pt"
     first_parts = None
     last_parts = None
-    use_flip = bool(((cfg.get("c2nav") or {}).get("augment") or {}).get("flip"))
-    for epoch in range(1, epochs + 1):
+    aug = nav.get("augment")
+    if aug is None:
+        aug = {}
+    use_flip = bool(aug.get("flip"))
+    best_pack = None
+    skip_a = bool(c_only)
+    for epoch in range(start_epoch, epochs + 1):
         model.train()
-        order = list(range(len(train)))
+        epoch_rows = list(train)
+        if extra_train and extra_n > 0:
+            take = extra_n if extra_n <= len(extra_train) else len(extra_train)
+            epoch_rows.extend(rng.sample(extra_train, k=take) if take < len(extra_train) else list(extra_train))
+        order = list(range(len(epoch_rows)))
         rng.shuffle(order)
         running = 0.0
         part_sum = {}
         n_b = 0
         for start in range(0, len(order), batch_size):
-            chunk = [train[i] for i in order[start : start + batch_size]]
-            batch = _to_torch(collate(chunk, tokens, use_flip, rng), device, bearings=bearings)
+            chunk = [epoch_rows[i] for i in order[start : start + batch_size]]
+            batch = _to_torch(collate(chunk, token_arg, use_flip, rng), device, bearings=bearings)
             opt.zero_grad()
-            out_b = heads_out(model, batch)
-            loss, parts = nav_loss(out_b, batch, wts, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth)
+            out_b = heads_out(model, batch, skip_a=skip_a)
+            loss, parts = nav_loss(out_b, batch, wts, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth, vis_w=vis_w)
             loss.backward()
             opt.step()
             running += float(loss.item())
@@ -862,27 +1355,64 @@ def train_loop(cfg: dict, feat_dir: Path, out: Path, epochs: int, batch_size: in
         avg_parts = {key: part / max(n_b, 1) for key, part in part_sum.items()}
         if first_parts is None:
             first_parts = avg_parts
-            print(f"c2nav loss epoch_1 {json.dumps(first_parts)}", flush=True)
+            print(f"c2nav loss epoch_{epoch} {json.dumps(first_parts)}", flush=True)
         last_parts = avg_parts
         eval_rows = val if len(val) != 0 else train[: min(64, len(train))]
         metrics = offline_metrics(
             model=model,
             rows=eval_rows,
-            tokens=tokens,
+            tokens=token_arg,
             device=device,
             spec=spec,
             cfg=cfg,
             bearings=bearings,
             warn_empty_stop=len(val) != 0,
+            skip_a=skip_a,
         )
+        extra_metrics = None
+        if extra_val:
+            extra_metrics = offline_metrics(
+                model=model,
+                rows=extra_val,
+                tokens=token_arg,
+                device=device,
+                spec=spec,
+                cfg=cfg,
+                bearings=bearings,
+                warn_empty_stop=False,
+                skip_a=skip_a,
+            )
         metrics["train_loss"] = running / max(n_b, 1)
         metrics["loss_parts"] = avg_parts
+        brief = _brief_val(metrics, extra_metrics)
+        print(f"c2nav val epoch {epoch} {json.dumps(brief, default=str)}", flush=True)
+        ok, score, vis_tau, stop_tau = _epoch_score(metrics)
+        extra_meta = {
+            "filter": stats,
+            "chosen_vis_tau": vis_tau,
+            "chosen_stop_tau": stop_tau,
+            "chosen_tau": stop_tau,
+        }
         ckpt = out / f"epoch_{epoch:02d}.pt"
-        save_checkpoint(ckpt, model, spec, epoch, metrics, extra={"filter": stats})
-        save_checkpoint(last, model, spec, epoch, metrics, extra={"filter": stats})
+        save_checkpoint(ckpt, model, spec, epoch, metrics, extra=extra_meta)
+        save_checkpoint(last, model, spec, epoch, metrics, extra=extra_meta)
+        if ok and (best_pack is None or score > best_pack[0]):
+            best_pack = (score, epoch, vis_tau, stop_tau, metrics)
+            save_checkpoint(out / "best.pt", model, spec, epoch, metrics, extra={
+                **extra_meta,
+                "best_score": score,
+            })
         print(f"epoch {epoch} loss={metrics['train_loss']:.4f} metrics={json.dumps(metrics, default=str)}", flush=True)
     if last_parts is not None:
         print(f"c2nav loss last_epoch {json.dumps(last_parts)}", flush=True)
+    if best_pack is None:
+        print("c2nav best skipped: no epoch with frame vis FPR <= 0.03", flush=True)
+    else:
+        print(f"c2nav best epoch={best_pack[1]} score={best_pack[0]:.4f} vis_tau={best_pack[2]} stop_tau={best_pack[3]}", flush=True)
+    if c_only:
+        diag_rows = val if val else train
+        diag = c_only_diag(model, diag_rows, token_arg, device, spec, cfg, bearings)
+        print("c2nav c_only_diag " + json.dumps(diag, default=str), flush=True)
     return last
 
 
@@ -897,6 +1427,9 @@ def main():
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--overfit", action="store_true", help="64 samples, 200 steps, expect loss~0 acc~1")
+    parser.add_argument("--resume", default=None)
+    parser.add_argument("--c-only", action="store_true")
+    parser.add_argument("--no-noise", action="store_true")
     args = parser.parse_args()
     if args.dry_run:
         try:
@@ -913,13 +1446,23 @@ def main():
         return
     cfg_path = Path(args.config).resolve() if args.config else None
     cfg = load_config(cfg_path) if cfg_path else load_config()
-    nav = cfg.get("c2nav") or {}
-    feat = Path(args.features) if args.features else Path(os.environ.get("SCR") or f"/scratch/{os.environ.get('USER', 'user')}") / "lfnav" / "features" / str(nav.get("features_version") or "joint_v1")
-    out = Path(args.out) if args.out else Path(os.environ.get("SCR") or f"/scratch/{os.environ.get('USER', 'user')}") / "lfnav" / "ckpt" / "c2nav_easy"
-    epochs = int(args.epochs if args.epochs is not None else nav.get("epochs") or 20)
-    batch = int(args.batch if args.batch is not None else nav.get("batch") or 16)
-    lr = float(args.lr if args.lr is not None else nav.get("lr") or 3e-4)
-    train_loop(cfg, feat, out, epochs, batch, lr, int(args.seed), cfg_path=cfg_path)
+    nav = _nav_dict(cfg)
+    feat_ver = nav.get("features_version")
+    if feat_ver is None:
+        feat_ver = "joint_v1"
+    feat = Path(args.features) if args.features is not None else Path(os.environ.get("SCR") if os.environ.get("SCR") is not None else f"/scratch/{os.environ.get('USER', 'user')}") / "lfnav" / "features" / str(feat_ver)
+    out_name = ckpt_dir_of(cfg)
+    out = Path(args.out) if args.out is not None else Path(os.environ.get("SCR") if os.environ.get("SCR") is not None else f"/scratch/{os.environ.get('USER', 'user')}") / "lfnav" / "ckpt" / out_name
+    ep_raw = nav.get("epochs")
+    epochs = int(args.epochs if args.epochs is not None else (15 if ep_raw is None else ep_raw))
+    batch_raw = nav.get("batch")
+    batch = int(args.batch if args.batch is not None else (16 if batch_raw is None else batch_raw))
+    lr_raw = nav.get("lr")
+    lr = float(args.lr if args.lr is not None else (3e-4 if lr_raw is None else lr_raw))
+    train_loop(
+        cfg, feat, out, epochs, batch, lr, int(args.seed), cfg_path=cfg_path,
+        resume=args.resume, c_only=bool(args.c_only), apply_noise=not bool(args.no_noise),
+    )
 
 
 if __name__ == "__main__":

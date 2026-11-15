@@ -18,7 +18,7 @@ def frames_cfg(cfg: dict | None) -> dict:
     raw = dict((cfg or {}).get("frames") or {})
     return {
         "enabled": bool(raw.get("enabled", False)),
-        "every": max(int(raw.get("every", 20)), 1),
+        "every": max(int(raw["every"] if raw.get("every") is not None else 10), 1),
         "format": str(raw.get("format", "jpg")).lower().lstrip("."),
         "quality": int(raw.get("quality", 80)),
         "scale": float(raw.get("scale", 0.5)),

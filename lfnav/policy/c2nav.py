@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import math
+import time
 
 import numpy as np
 
 from lfnav.policy.base import Policy
 from lfnav.policy.c2nav_labels import FORWARD_BINS, MODE_NAMES, N_TURN, invert_waypoint, turn_center
-from lfnav.policy.state_tracker import LOG_DIST_UNSEEN, STEPS_NORM, TargetObs, TrackerState, update
+from lfnav.policy.state_tracker import LOG_DIST_UNSEEN, STEPS_NORM, TargetObs, TrackerState, update, wrap_deg
 
 VERSION = "c2nav_v1"
 CHANNELS = 64
@@ -21,6 +22,10 @@ STOP_GATE_NOT_VISIBLE = "blocked_not_visible"
 STOP_GATE_CONDITIONS = "blocked_conditions"
 STOP_GATE_TOO_FAR = "blocked_too_far"
 STOP_GATE_BELOW_TAU = "below_tau"
+PRESENT_POS_CAP = 5.0
+VIS_POS_CAP = 5.0
+PATCH_PRESENT_MIN = 0.3
+WIDE_RADAR_KEYS = ("wide_rays", "lfnav_wide_rays", "wide_lidar", "radar_360")
 CKPT_STRUCTURE = (
     "version",
     "hidden",
@@ -44,31 +49,72 @@ CKPT_STRUCTURE = (
 
 
 def spec_from_cfg(cfg: dict | None = None) -> dict:
-    cfg = cfg or {}
-    labels = cfg.get("labels") or {}
-    nav = cfg.get("c2nav") or {}
-    objects = list(labels.get("objects") or ["tree", "grass", "water", "pig", "cow", "sheep", "chicken", "sand"])
+    if cfg is None:
+        cfg = {}
+    labels = cfg.get("labels")
+    if labels is None:
+        labels = {}
+    nav = cfg.get("c2nav")
+    if nav is None:
+        nav = {}
+    objects = labels.get("objects")
+    if objects is None:
+        objects = ["tree", "grass", "water", "pig", "cow", "sheep", "chicken", "sand"]
+    objects = list(objects)
+    biomes = labels.get("biomes")
+    if biomes is None:
+        biomes = ["forest", "plains", "desert", "savanna", "taiga", "jungle", "other"]
+    times = labels.get("time")
+    if times is None:
+        times = ["day", "night"]
+    weathers = labels.get("weather")
+    if weathers is None:
+        weathers = ["clear", "rain"]
+    brightness = labels.get("brightness")
+    if brightness is None:
+        brightness = ["sufficient", "insufficient"]
+    hidden = nav.get("hidden")
+    channels = nav.get("channels")
+    dim = nav.get("dim")
+    grid = nav.get("grid")
+    joint = cfg.get("joint")
+    if joint is None:
+        joint = {}
+    token_pool = nav.get("token_pool")
+    if token_pool is None:
+        token_pool = joint.get("token_pool")
+    if token_pool is None:
+        token_pool = 2
+    dropout = nav.get("dropout")
+    chunk = nav.get("chunk_max_steps")
+    obs_source = nav.get("obs_source")
+    vis_tau = nav.get("vis_tau")
+    torch_threads = nav.get("torch_threads")
+    a_extra_per_epoch = nav.get("a_extra_per_epoch")
+    version = nav.get("version")
     return {
         "objects": objects,
-        "biomes": list(labels.get("biomes") or ["forest", "plains", "desert", "savanna", "taiga", "jungle", "other"]),
-        "times": list(labels.get("time") or ["day", "night"]),
-        "weathers": list(labels.get("weather") or ["clear", "rain"]),
-        "brightness": list(labels.get("brightness") or ["sufficient", "insufficient"]),
-        "hidden": int(nav.get("hidden") or 256),
-        "channels": int(nav.get("channels") or CHANNELS),
-        "dim": int(nav.get("dim") or 384),
-        "grid": tuple(nav.get("grid") or (8, 13)),
-        "token_pool": int(nav.get("token_pool") if nav.get("token_pool") is not None else ((cfg.get("joint") or {}).get("token_pool") if (cfg.get("joint") or {}).get("token_pool") is not None else 2)),
-        "dropout": float(nav.get("dropout") if nav.get("dropout") is not None else 0.3),
-        "chunk_max_steps": int(nav.get("chunk_max_steps") if nav.get("chunk_max_steps") is not None else DECISION_ACTION_CAP),
-        "obs_source": str(nav.get("obs_source") if nav.get("obs_source") is not None else OBS_PRED),
-        "vis_tau": float(nav["vis_tau"] if nav.get("vis_tau") is not None else 0.5),
+        "biomes": list(biomes),
+        "times": list(times),
+        "weathers": list(weathers),
+        "brightness": list(brightness),
+        "hidden": 256 if hidden is None else int(hidden),
+        "channels": CHANNELS if channels is None else int(channels),
+        "dim": 384 if dim is None else int(dim),
+        "grid": (8, 13) if grid is None else tuple(grid),
+        "token_pool": int(token_pool),
+        "dropout": 0.3 if dropout is None else float(dropout),
+        "chunk_max_steps": DECISION_ACTION_CAP if chunk is None else int(chunk),
+        "obs_source": OBS_PRED if obs_source is None else str(obs_source),
+        "vis_tau": 0.5 if vis_tau is None else float(vis_tau),
+        "torch_threads": 2 if torch_threads is None else int(torch_threads),
+        "a_extra_per_epoch": 30000 if a_extra_per_epoch is None else int(a_extra_per_epoch),
         "modes": list(MODE_NAMES),
         "n_turn": int(N_TURN),
         "forward_bins": list(FORWARD_BINS),
         "s_dim": S_DIM,
         "cond_dim": 1 + len(objects) + 4,
-        "version": str(nav.get("version") or VERSION),
+        "version": VERSION if version is None else str(version),
     }
 
 
@@ -134,6 +180,56 @@ def stop_requires_visible_of(cfg: dict | None = None) -> bool:
     if raw is None:
         return True
     return bool(raw)
+
+
+def torch_threads_of(cfg: dict | None = None) -> int:
+    nav = (cfg or {}).get("c2nav")
+    if nav is None:
+        nav = {}
+    raw = nav.get("torch_threads")
+    if raw is None:
+        return 2
+    return int(raw)
+
+
+def a_extra_per_epoch_of(cfg: dict | None = None) -> int:
+    nav = (cfg or {}).get("c2nav")
+    if nav is None:
+        nav = {}
+    raw = nav.get("a_extra_per_epoch")
+    if raw is None:
+        return 30000
+    return int(raw)
+
+
+def a_extra_features_of(cfg: dict | None = None) -> list:
+    nav = (cfg or {}).get("c2nav")
+    if nav is None:
+        nav = {}
+    raw = nav.get("a_extra_features")
+    if raw is None:
+        return []
+    return list(raw)
+
+
+def a_extra_demos_of(cfg: dict | None = None) -> list:
+    nav = (cfg or {}).get("c2nav")
+    if nav is None:
+        nav = {}
+    raw = nav.get("a_extra_demos")
+    if raw is None:
+        return []
+    return list(raw)
+
+
+def ckpt_dir_of(cfg: dict | None = None) -> str:
+    nav = (cfg or {}).get("c2nav")
+    if nav is None:
+        nav = {}
+    raw = nav.get("ckpt_dir")
+    if raw is None:
+        return "c2nav_easy"
+    return str(raw)
 
 
 def stop_max_dist_of(cfg: dict | None = None) -> float:
@@ -273,6 +369,108 @@ def gt_target_obs(present: np.ndarray, ignore: np.ndarray, target_index: int, be
     return TargetObs(visible=True, bearing_deg=yaw, log_distance=log_d)
 
 
+def vis_labels(present: np.ndarray, ignore: np.ndarray, class_ignore=None) -> tuple[np.ndarray, np.ndarray]:
+    """Frame-level vis: 1 if any non-HUD patch of the class is positive. class_ignore skips the loss."""
+    p = np.asarray(present, np.float32)
+    ig = np.asarray(ignore, np.float32)
+    k = int(p.shape[0])
+    vis = np.zeros((k,), np.float32)
+    vis_ig = np.zeros((k,), np.float32)
+    valid = ig < 0.5 if ig.ndim == 2 else np.ones(p.shape[1:], dtype=bool)
+    ci = np.zeros((k,), np.float32) if class_ignore is None else np.asarray(class_ignore, np.float32).reshape(-1)
+    for i in range(k):
+        if i < ci.shape[0] and ci[i] >= 0.5:
+            vis_ig[i] = 1.0
+            continue
+        if not np.any(valid):
+            vis_ig[i] = 1.0
+            continue
+        vis[i] = 1.0 if np.any((p[i] > 0.5) & valid) else 0.0
+    return vis, vis_ig
+
+
+def wide_radar_field(step: dict | None) -> tuple[str | None, list | None]:
+    """Return (field_name, rays) if a 360° radar list is stored on the step."""
+    if not isinstance(step, dict):
+        return None, None
+    blobs = (step, step.get("scene") if isinstance(step.get("scene"), dict) else {}, step.get("memory") if isinstance(step.get("memory"), dict) else {})
+    for blob in blobs:
+        for key in WIDE_RADAR_KEYS:
+            val = blob.get(key)
+            if val:
+                return str(key), list(val)
+    return None, None
+
+
+def far_class_ignore(step: dict, objects: list[str], hfov_deg: float, d0: float = 16.0, d1: float = 32.0) -> np.ndarray:
+    """Ignore present/vis labels when wide radar sees the class at 16–32 blocks inside the camera HFOV."""
+    ig = np.zeros((len(objects),), np.float32)
+    _key, rays = wide_radar_field(step)
+    if rays is None:
+        return ig
+    half = float(hfov_deg) / 2.0
+    names = {str(n): i for i, n in enumerate(objects)}
+    for ray in rays:
+        if not isinstance(ray, dict):
+            continue
+        dist = ray.get("distance")
+        if dist is None:
+            continue
+        d = float(dist)
+        if d < float(d0) or d > float(d1):
+            continue
+        yaw = ray.get("yaw_offset")
+        if yaw is None:
+            yaw = ray.get("bearing")
+        if yaw is None:
+            continue
+        if abs(wrap_deg(float(yaw))) > half:
+            continue
+        label = ray.get("label")
+        if label is None:
+            label = ray.get("name")
+        if label in names:
+            ig[names[str(label)]] = 1.0
+    return ig
+
+
+def obs_from_present_head(
+    present_p,
+    log_dist,
+    target_index: int,
+    bearings: np.ndarray,
+    vis_logit,
+    vis_tau: float,
+    ignore=None,
+    patch_min: float = PATCH_PRESENT_MIN,
+) -> TargetObs:
+    """A5: vis_head decides visible; bearing/dist from present patches (argmax if none ≥ 0.3)."""
+    vis_p = 1.0 / (1.0 + math.exp(-float(vis_logit)))
+    visible = vis_p >= float(vis_tau)
+    p = np.asarray(present_p[int(target_index)], np.float32)
+    dmap = np.asarray(log_dist[int(target_index)], np.float32)
+    yaw_map = np.asarray(bearings, np.float32)
+    valid = np.ones(p.shape, dtype=bool)
+    if ignore is not None:
+        ig = np.asarray(ignore, np.float32)
+        if ig.shape == p.shape:
+            valid = ig < 0.5
+    strong = (p >= float(patch_min)) & valid
+    if visible and not np.any(strong):
+        masked = np.where(valid, p, -1.0)
+        idx = int(np.argmax(masked))
+        strong = np.zeros(p.shape, dtype=bool)
+        strong.reshape(-1)[idx] = True
+        strong = strong.reshape(p.shape)
+        if float(masked.reshape(-1)[idx]) < 0.0:
+            strong[:] = False
+    if not visible or not np.any(strong):
+        return TargetObs(visible=False)
+    yaw = float(yaw_map[strong].mean())
+    log_d = float(dmap[strong].mean())
+    return TargetObs(visible=True, bearing_deg=yaw, log_distance=log_d)
+
+
 def encode_match(match: dict | None, objects: list[str]) -> np.ndarray:
     match = match or {}
     sat = match.get("satisfied") or {}
@@ -408,6 +606,8 @@ def C2NavNet(spec: dict):
             self.time = nn.Linear(pooled, len(spec["times"]))
             self.weather = nn.Linear(pooled, len(spec["weathers"]))
             self.brightness = nn.Linear(pooled, len(spec["brightness"]))
+            self.vis_fc1 = nn.Linear(pooled, pooled)
+            self.vis_fc2 = nn.Linear(pooled, n_obj)
             self.c1 = nn.Linear(c_in, hidden)
             self.c2 = nn.Linear(hidden, hidden)
             self.drop = nn.Dropout(drop)
@@ -422,10 +622,13 @@ def C2NavNet(spec: dict):
             present_logit = self.present(h)
             log_d = self.log_dist(nn.functional.relu(self.dist_conv(h)))
             pooled = h.mean(dim=(2, 3))
+            vis_logit = self.vis_fc2(nn.functional.relu(self.vis_fc1(pooled)))
             return {
                 "present_logit": present_logit,
                 "present_p": torch.sigmoid(present_logit),
                 "log_dist": log_d,
+                "vis_logit": vis_logit,
+                "vis_p": torch.sigmoid(vis_logit),
                 "biome": self.biome(pooled),
                 "time": self.time(pooled),
                 "weather": self.weather(pooled),
@@ -540,6 +743,7 @@ class C2NavAgent(Policy):
         self.obs_source = obs_source_of(self.cfg)
         self.stop_requires_visible = stop_requires_visible_of(self.cfg)
         self.stop_max_dist = stop_max_dist_of(self.cfg)
+        self.encode_calls = 0
         self._tokens = None
         self._scene = None
         self._last_a = None
@@ -562,6 +766,10 @@ class C2NavAgent(Policy):
         except ImportError:
             torch = None
         self._torch = torch
+        n_th = torch_threads_of(self.cfg)
+        self.torch_threads = n_th
+        if torch is not None and n_th > 0:
+            torch.set_num_threads(n_th)
         ckpt = nav.get("checkpoint")
         payload = None
         if ckpt is not None:
@@ -569,12 +777,18 @@ class C2NavAgent(Policy):
                 raise RuntimeError("c2nav checkpoint requires torch")
             payload = torch.load(ckpt, map_location="cpu")
             self.model, self.spec = load_net(payload)
-            meta = payload.get("meta") or {}
-            if meta.get("chosen_tau") is not None:
-                self.tau = float(meta["chosen_tau"])
+            meta = payload.get("meta") if payload.get("meta") is not None else {}
+            if stop_tau is None:
+                chosen_stop = meta.get("chosen_stop_tau")
+                if chosen_stop is None:
+                    chosen_stop = meta.get("chosen_tau")
+                if chosen_stop is not None:
+                    self.tau = float(chosen_stop)
+            if nav.get("vis_tau") is None and meta.get("chosen_vis_tau") is not None:
+                self.spec["vis_tau"] = float(meta["chosen_vis_tau"])
             self.bearings = patch_bearings(self.spec["grid"][0], self.spec["grid"][1], self.cfg)
             if self.spec.get("vis_tau") is None:
-                self.spec["vis_tau"] = float(nav["vis_tau"] if nav.get("vis_tau") is not None else 0.5)
+                self.spec["vis_tau"] = 0.5
             self.spec["obs_source"] = self.obs_source
             self._ignore_hw = self._hud_ignore_map()
         if self.obs_source != OBS_GT:
@@ -616,6 +830,9 @@ class C2NavAgent(Policy):
         self.n_stop_blocked_not_visible = 0
         self.n_stop_blocked_conditions = 0
         self.n_stop_blocked_too_far = 0
+        self.encode_calls = 0
+        self.time_encode = 0.0
+        self.time_policy = 0.0
         self.last_info = {}
 
     def gt_obs_from_scene(self, scene: dict, target: str, dist_num) -> TargetObs:
@@ -636,6 +853,8 @@ class C2NavAgent(Policy):
             raise RuntimeError("c2nav pred path requires an encoder")
         if not force and self._tokens is not None:
             return {"tokens": self._tokens}
+        self.encode_calls += 1
+        t0 = time.perf_counter()
         rgb = frame
         if isinstance(frame, dict):
             from lfnav.env.frames import rgb_hwc
@@ -655,6 +874,7 @@ class C2NavAgent(Policy):
             tokens = pool_patch_tokens(tokens, max(int(kh), 1))
         encoded["tokens"] = tokens
         self._tokens = tokens
+        self.time_encode += time.perf_counter() - t0
         return encoded
 
     def numeric_distance(self, target: str):
@@ -680,9 +900,22 @@ class C2NavAgent(Policy):
             self._last_a["present_p"], self._last_a["log_dist"], objects.index(target), self.bearings,
             vis_tau=vis_tau, ignore=self._ignore_hw, cfg=self.cfg,
         )
-        if float(vis) < vis_tau:
+        vis_logit = self._last_a.get("vis_logit")
+        if vis_logit is None:
             return None
-        return math.exp(float(log_d))
+        vis_p = 1.0 / (1.0 + math.exp(-float(vis_logit[0, objects.index(target)].detach().cpu())))
+        if vis_p < vis_tau:
+            return None
+        present_np = self._last_a["present_p"][0].detach().cpu().numpy()
+        dist_np = self._last_a["log_dist"][0].detach().cpu().numpy()
+        obs = obs_from_present_head(
+            present_np, dist_np, objects.index(target), self.bearings,
+            float(vis_logit[0, objects.index(target)].detach().cpu()),
+            vis_tau, ignore=self._ignore_hw, patch_min=PATCH_PRESENT_MIN,
+        )
+        if not obs.visible or obs.log_distance is None:
+            return None
+        return math.exp(float(obs.log_distance))
 
     def perceive(self, frame):
         from lfnav.gt.scene_state import scene_state_from_obs
@@ -725,7 +958,8 @@ class C2NavAgent(Policy):
         from lfnav.gt.initial import privileged_ray_distance
         from lfnav.types import PolicyOutput
 
-        mem = policy_input.memory or {}
+        t_pol = time.perf_counter()
+        mem = policy_input.memory if policy_input.memory is not None else {}
         pos = [0.0, 0.0, 0.0] if mem.get("pos") is None else list(mem.get("pos"))
         yaw = 0.0 if mem.get("yaw") is None else float(mem.get("yaw"))
         match = policy_input.match or {}
@@ -748,27 +982,24 @@ class C2NavAgent(Policy):
             obs = self.gt_obs_from_scene(scene_d, target, dist_num)
             self._gt_obs = obs
             geom_np = geom_from_obs(obs)
-        elif self.model is not None and self._torch is not None and self._tokens is not None:
+        elif self.model is not None and self._torch is not None:
             torch = self._torch
-            device = next(self.model.parameters()).device
-            with torch.no_grad():
-                tokens = torch.from_numpy(np.asarray(self._tokens, np.float32)).unsqueeze(0).to(device)
-                a = self.model.perception(tokens)
-                vis, sn, cs, log_d = target_geometry(
-                    a["present_p"], a["log_dist"], t_i, self.bearings,
-                    vis_tau=vis_tau, ignore=self._ignore_hw, cfg=self.cfg,
+            a = self._last_a
+            if a is None and self._tokens is not None:
+                device = next(self.model.parameters()).device
+                with torch.no_grad():
+                    tokens = torch.from_numpy(np.asarray(self._tokens, np.float32)).unsqueeze(0).to(device)
+                    a = self.model.perception(tokens)
+                self._last_a = a
+            if a is not None:
+                vis_logit = a["vis_logit"][0, t_i]
+                present_np = a["present_p"][0].detach().cpu().numpy()
+                dist_np = a["log_dist"][0].detach().cpu().numpy()
+                obs = obs_from_present_head(
+                    present_np, dist_np, t_i, self.bearings, float(vis_logit.detach().cpu()),
+                    vis_tau, ignore=self._ignore_hw, patch_min=PATCH_PRESENT_MIN,
                 )
-            vis_f = float(vis[0])
-            sn_f = float(sn[0])
-            cs_f = float(cs[0])
-            log_f = float(log_d[0])
-            obs = TargetObs(
-                visible=vis_f >= vis_tau,
-                bearing_deg=math.degrees(math.atan2(sn_f, cs_f)),
-                log_distance=log_f,
-            )
-            geom_np = np.asarray([vis_f, sn_f, cs_f, log_f], np.float32)
-            self._last_a = a
+                geom_np = geom_from_obs(obs)
 
         self._s = update(self._s, pos, yaw, self._prev_actions, obs, max_steps=self._s.max_steps)
 
@@ -835,6 +1066,7 @@ class C2NavAgent(Policy):
             self.n_stop_blocked_too_far += 1
             self.n_stop_blocked += 1
         self.last_info = info
+        self.time_policy += time.perf_counter() - t_pol
         if gate == STOP_GATE_STOP:
             return PolicyOutput(stop=True, info=info)
         return PolicyOutput(action_chunk=actions, info=info)
