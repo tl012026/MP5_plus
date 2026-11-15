@@ -14,13 +14,18 @@ from lfnav.policy.c2_data import demo_roots, iter_success_episodes, load_task
 from lfnav.policy.c2nav import (
     C2NavAgent,
     OBS_GT,
+    STOP_GATE_CONDITIONS,
+    STOP_GATE_NOT_VISIBLE,
+    STOP_GATE_STOP,
     encode_s,
     geom_from_obs,
     gt_target_obs,
+    infer_stop_gate,
     obs_source_of,
     patch_bearings,
     patch_targets,
     spec_from_cfg,
+    stop_requires_visible_of,
 )
 from lfnav.policy.c2nav_labels import FORWARD_BINS, TURN_BINS, invert_waypoint, turn_index
 from lfnav.policy.state_tracker import STEPS_NORM, replay
@@ -191,6 +196,88 @@ class OpeningStateTest(unittest.TestCase):
             np.testing.assert_allclose(np.asarray(infer_s), np.asarray(train_s), atol=1e-6, err_msg=str(folder))
             self.assertIn("s", seen, folder)
             np.testing.assert_allclose(np.asarray(seen["s"]), np.asarray(train_s), atol=1e-6, err_msg=f"C input {folder}")
+
+
+FOUND_MATCH = {"status": "found", "stop": False, "missing": [], "satisfied": {"target": True}}
+MISSING_COND = {
+    "status": "not_found",
+    "stop": False,
+    "missing": ["biome:forest"],
+    "satisfied": {"target": True, "biome:forest": False},
+}
+
+
+def _force_p_stop(agent, p=0.9):
+    import math
+
+    import torch
+
+    logit = math.log(p / (1.0 - p))
+    real = agent.model.policy
+
+    def wrapped(geom, s_vec, cond):
+        out = dict(real(geom, s_vec, cond))
+        out["stop"] = torch.full_like(out["stop"], logit)
+        return out
+
+    agent.model.policy = wrapped
+
+
+def _act(agent, visible, match):
+    raw = np.zeros((16, 26), np.float32)
+    if visible:
+        raw[:, 10:12] = 1.0
+    agent.reset()
+    agent.perceive({
+        "patches": {"pig": raw.tolist()},
+        "ignore": np.zeros((16, 26), np.float32).tolist(),
+    })
+    return agent.act(PolicyInput(
+        task={"target": "pig"},
+        match=match,
+        scene={"target_distance_num": 2.0},
+        memory={"pos": [0.0, 64.0, 0.0], "yaw": 0.0},
+    ))
+
+
+class StopGateTest(unittest.TestCase):
+    def test_stop_requires_visible_defaults_true(self):
+        self.assertTrue(stop_requires_visible_of({}))
+        self.assertTrue(stop_requires_visible_of({"c2nav": {}}))
+        self.assertTrue(stop_requires_visible_of({"c2nav": {"stop_requires_visible": None}}))
+        self.assertFalse(stop_requires_visible_of({"c2nav": {"stop_requires_visible": False}}))
+
+    def test_high_p_stop_not_visible_does_not_stop(self):
+        self.assertEqual(infer_stop_gate(0.9, 0.5, False, FOUND_MATCH, True), STOP_GATE_NOT_VISIBLE)
+        agent = _gt_agent()
+        _force_p_stop(agent, 0.9)
+        out = _act(agent, visible=False, match=FOUND_MATCH)
+        self.assertFalse(out.stop)
+        self.assertTrue(out.action_chunk)
+        self.assertEqual(out.info.get("stop_gate"), STOP_GATE_NOT_VISIBLE)
+        self.assertFalse(out.info.get("visible"))
+        self.assertEqual(int(agent.n_stop_blocked), 1)
+
+    def test_high_p_stop_visible_and_conditions_stops(self):
+        self.assertEqual(infer_stop_gate(0.9, 0.5, True, FOUND_MATCH, True), STOP_GATE_STOP)
+        agent = _gt_agent()
+        _force_p_stop(agent, 0.9)
+        out = _act(agent, visible=True, match=FOUND_MATCH)
+        self.assertTrue(out.stop)
+        self.assertEqual(out.info.get("stop_gate"), STOP_GATE_STOP)
+        self.assertTrue(out.info.get("visible"))
+        self.assertEqual(int(agent.n_stop_blocked), 0)
+
+    def test_high_p_stop_visible_but_conditions_fail_does_not_stop(self):
+        self.assertEqual(infer_stop_gate(0.9, 0.5, True, MISSING_COND, True), STOP_GATE_CONDITIONS)
+        agent = _gt_agent()
+        _force_p_stop(agent, 0.9)
+        out = _act(agent, visible=True, match=MISSING_COND)
+        self.assertFalse(out.stop)
+        self.assertTrue(out.action_chunk)
+        self.assertEqual(out.info.get("stop_gate"), STOP_GATE_CONDITIONS)
+        self.assertTrue(out.info.get("visible"))
+        self.assertEqual(int(agent.n_stop_blocked), 1)
 
 
 if __name__ == "__main__":

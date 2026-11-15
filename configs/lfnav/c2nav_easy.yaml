@@ -27,6 +27,7 @@ c2nav:
   label_smoothing: 0.1
   vis_tau: 0.5
   obs_source: pred
+  stop_requires_visible: true
   augment:
     flip: false
   train_difficulties: [easy]

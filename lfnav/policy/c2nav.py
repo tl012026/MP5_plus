@@ -16,6 +16,10 @@ S_DIM = 18
 OBS_PRED = "pred"
 OBS_GT = "gt"
 DECISION_ACTION_CAP = 12
+STOP_GATE_STOP = "stop"
+STOP_GATE_NOT_VISIBLE = "blocked_not_visible"
+STOP_GATE_CONDITIONS = "blocked_conditions"
+STOP_GATE_BELOW_TAU = "below_tau"
 CKPT_STRUCTURE = (
     "version",
     "hidden",
@@ -121,6 +125,40 @@ def obs_source_of(cfg: dict | None = None) -> str:
     if name not in (OBS_PRED, OBS_GT):
         raise RuntimeError(f"c2nav.obs_source must be {OBS_PRED!r} or {OBS_GT!r}, got {name!r}")
     return name
+
+
+def stop_requires_visible_of(cfg: dict | None = None) -> bool:
+    nav = (cfg or {}).get("c2nav") or {}
+    raw = nav.get("stop_requires_visible")
+    if raw is None:
+        return True
+    return bool(raw)
+
+
+def conditions_satisfied(match: dict | None) -> bool:
+    """B reports every required condition holds (status found, nothing missing)."""
+    data = {} if match is None else dict(match)
+    missing = data.get("missing")
+    if missing is not None and len(list(missing)) > 0:
+        return False
+    status = data.get("status")
+    if status is not None:
+        return str(status) == "found"
+    sat = data.get("satisfied")
+    if sat is not None:
+        return all(bool(v) for v in sat.values())
+    return False
+
+
+def infer_stop_gate(p_stop, tau, visible, match, requires_visible: bool = True) -> str:
+    """Inference-only stop rule. below_tau, then not-visible, then B conditions."""
+    if float(p_stop) < float(tau):
+        return STOP_GATE_BELOW_TAU
+    if requires_visible and not bool(visible):
+        return STOP_GATE_NOT_VISIBLE
+    if not conditions_satisfied(match):
+        return STOP_GATE_CONDITIONS
+    return STOP_GATE_STOP
 
 
 def pool2d(arr: np.ndarray, k: int, how: str) -> np.ndarray:
@@ -473,6 +511,7 @@ class C2NavAgent(Policy):
         chunk = nav.get("chunk_max_steps")
         self.chunk_max = DECISION_ACTION_CAP if chunk is None else int(chunk)
         self.obs_source = obs_source_of(self.cfg)
+        self.stop_requires_visible = stop_requires_visible_of(self.cfg)
         self._tokens = None
         self._scene = None
         self._last_a = None
@@ -480,6 +519,7 @@ class C2NavAgent(Policy):
         self._gt_obs = None
         self._s = TrackerState(max_steps=STEPS_NORM)
         self._prev_actions: list[str] = []
+        self.n_stop_blocked = 0
         self.last_info: dict = {}
         self.model = None
         self.encoder = None
@@ -541,6 +581,7 @@ class C2NavAgent(Policy):
         self._gt_obs = None
         self._s = TrackerState(max_steps=STEPS_NORM)
         self._prev_actions = []
+        self.n_stop_blocked = 0
         self.last_info = {}
 
     def gt_obs_from_scene(self, scene: dict, target: str, dist_num) -> TargetObs:
@@ -739,7 +780,13 @@ class C2NavAgent(Policy):
         actions = invert_waypoint(turn_i, fwd_i)[:cap] or ["noop"]
         self._prev_actions = list(actions)
         info["action_chunk"] = actions
+        gate = infer_stop_gate(
+            p_stop, self.tau, obs.visible, match, requires_visible=self.stop_requires_visible,
+        )
+        info["stop_gate"] = gate
+        if gate in (STOP_GATE_NOT_VISIBLE, STOP_GATE_CONDITIONS):
+            self.n_stop_blocked += 1
         self.last_info = info
-        if p_stop > self.tau:
+        if gate == STOP_GATE_STOP:
             return PolicyOutput(stop=True, info=info)
         return PolicyOutput(action_chunk=actions, info=info)

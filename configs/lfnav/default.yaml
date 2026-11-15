@@ -107,6 +107,7 @@ c2nav:
   obs_source: pred
   encoder: dinov2_vits14
   stop_tau: 0.5
+  stop_requires_visible: true
   lr: 0.0003
   weight_decay: 0.05
   epochs: 20

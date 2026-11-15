@@ -250,6 +250,7 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
             "peaceful_sent": peaceful_command_sent(meta),
             "peaceful_ok": peaceful_command_sent(meta),
             "obs_source": obs_source_of(cfg) if cfg.get("policy_name") == "c2nav" else None,
+            "n_stop_blocked": 0,
         }
         return verdict, []
     if "initial_target_distance" not in meta:
@@ -337,6 +338,7 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
                 "bearing": info.get("bearing"),
                 "dist": info.get("dist"),
                 "obs_source": info.get("obs_source"),
+                "stop_gate": info.get("stop_gate"),
                 "pos": list(pos) if pos is not None else None,
                 "yaw": yaw,
                 "scene": scene.to_dict(),
@@ -441,6 +443,7 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
             "bearing": info.get("bearing"),
             "dist": info.get("dist"),
             "obs_source": info.get("obs_source"),
+            "stop_gate": info.get("stop_gate"),
             "pos": list(pos) if pos is not None else None,
             "yaw": yaw,
             "scene": scene.to_dict(),
@@ -512,6 +515,7 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         "peaceful_ok": peaceful_command_sent(meta),
         "hostile_seen": int(hostile_seen),
         "obs_source": obs_source_of(cfg) if cfg.get("policy_name") == "c2nav" else None,
+        "n_stop_blocked": 0 if getattr(policy, "n_stop_blocked", None) is None else int(policy.n_stop_blocked),
         "spawn_underground": bool(meta.get("spawn_underground", False)),
         "underground_rerolls": int(meta.get("underground_rerolls") or 0),
         "can_see_sky": bool(meta.get("can_see_sky", True)),
