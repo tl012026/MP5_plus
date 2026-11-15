@@ -7,8 +7,16 @@ import unittest
 
 import numpy as np
 
-from lfnav.policy.c2nav import C2NavAgent, align_hw, patch_bearings, target_geometry
-from lfnav.policy.train_c2nav import gt_target_obs, pool_to_grid
+from lfnav.policy.c2nav import (
+    C2NavAgent,
+    gt_target_obs,
+    patch_bearings,
+    patch_targets,
+    pool_gt_to_grid,
+    pool_to_grid,
+    target_geometry,
+    vis_labels,
+)
 
 try:
     import torch  # noqa: F401
@@ -114,11 +122,65 @@ class TargetGeometryGridTest(unittest.TestCase):
     def test_ignore_16x26_pools_to_8x13(self):
         ignore = np.zeros((16, 26), np.float32)
         ignore[:, 24:26] = 1.0
-        pooled = align_hw(ignore, 8, 13, "max")
+        pooled = pool_to_grid(ignore, (8, 13), "min")
         self.assertEqual(tuple(pooled.shape), (8, 13))
         self.assertGreater(float(pooled[:, -1].min()), 0.5)
         vis, _, _ = self._geom(8, 13, [12], ignore=ignore)
         self.assertLess(vis, 0.5)
+
+
+class GtPoolRulesTest(unittest.TestCase):
+    def test_one_positive_subpatch_stays_positive(self):
+        present = np.zeros((16, 26), np.float32)
+        present[3, 5] = 1.0
+        ignore = np.zeros((16, 26), np.float32)
+        pooled, ign, _dist = pool_gt_to_grid(present, ignore, None, (8, 13))
+        self.assertEqual(tuple(pooled.shape), (8, 13))
+        self.assertGreater(float(pooled[1, 2]), 0.5)
+        self.assertLess(float(ign[1, 2]), 0.5)
+        scene = {"patches": {"pig": present.tolist()}, "ignore": ignore.tolist()}
+        pres, _log_d, ig = patch_targets(scene, ["pig"], 2, (8, 13))
+        vis, _vis_ig = vis_labels(pres, ig)
+        self.assertEqual(float(vis[0]), 1.0)
+        obs = gt_target_obs(pres, ig, 0, patch_bearings(8, 13, CFG), 4.0)
+        self.assertTrue(obs.visible)
+
+    def test_partial_ignore_keeps_positive_and_not_ignored(self):
+        present = np.zeros((16, 26), np.float32)
+        ignore = np.zeros((16, 26), np.float32)
+        present[0, 0] = 1.0
+        ignore[0, 1] = 1.0
+        ignore[1, 0] = 1.0
+        ignore[1, 1] = 1.0
+        pooled, ign, _dist = pool_gt_to_grid(present, ignore, None, (8, 13))
+        self.assertGreater(float(pooled[0, 0]), 0.5)
+        self.assertLess(float(ign[0, 0]), 0.5)
+        scene = {"patches": {"pig": present.tolist()}, "ignore": ignore.tolist()}
+        pres, _log_d, ig = patch_targets(scene, ["pig"], 2, (8, 13))
+        vis, vis_ig = vis_labels(pres, ig)
+        self.assertEqual(float(vis[0]), 1.0)
+        self.assertEqual(float(vis_ig[0]), 0.0)
+        self.assertLess(float(ig[0, 0]), 0.5)
+        obs = gt_target_obs(pres, ig, 0, patch_bearings(8, 13, CFG), 4.0)
+        self.assertTrue(obs.visible)
+
+    def test_distance_takes_min_of_block(self):
+        present = np.zeros((16, 26), np.float32)
+        present[0:2, 0:2] = 1.0
+        dist = np.zeros((16, 26), np.float32)
+        dist[0, 0] = 12.0
+        dist[0, 1] = 8.0
+        dist[1, 0] = 5.0
+        dist[1, 1] = 9.0
+        _p, _ig, pooled_d = pool_gt_to_grid(present, np.zeros((16, 26), np.float32), dist, (8, 13))
+        self.assertAlmostEqual(float(pooled_d[0, 0]), 5.0, places=5)
+        scene = {
+            "patches": {"pig": present.tolist()},
+            "ignore": np.zeros((16, 26), np.float32).tolist(),
+            "patch_dist": {"pig": dist.tolist()},
+        }
+        _pres, log_d, _ig = patch_targets(scene, ["pig"], 2, (8, 13))
+        self.assertAlmostEqual(float(log_d[0, 0, 0]), math.log(5.0), places=5)
 
 
 class StopTauConfigTest(unittest.TestCase):

@@ -321,6 +321,51 @@ def pool_to_grid(arr: np.ndarray, grid: tuple[int, int], how: str = "max") -> np
     return np.asarray(pooled, dtype=np.float32)
 
 
+GT_POOL_PRESENT_HOW = "max"
+GT_POOL_IGNORE_HOW = "min"
+GT_POOL_DIST_HOW = "min"
+
+
+def pool_gt_to_grid(
+    present_hw,
+    ignore_hw,
+    dist_hw,
+    grid: tuple[int, int],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Pool 16x26 GT maps onto the token grid (8x13 when pool=2).
+
+    Present: max of the block (any positive sub-patch stays positive).
+    Ignore: min of the block (ignored only if every sub-patch is ignored).
+    Distance: min of present-positive sub-patches in the block.
+    """
+    gh, gw = int(grid[0]), int(grid[1])
+    present_raw = np.asarray(present_hw, dtype=np.float32)
+    if present_raw.ndim != 2:
+        present_raw = np.zeros((gh, gw), np.float32)
+    present = pool_to_grid(present_raw, grid, GT_POOL_PRESENT_HOW)
+    if ignore_hw is None:
+        ignore = np.zeros((gh, gw), np.float32)
+    else:
+        ig = np.asarray(ignore_hw, dtype=np.float32)
+        if ig.ndim != 2:
+            ignore = np.zeros((gh, gw), np.float32)
+        else:
+            ignore = pool_to_grid(ig, grid, GT_POOL_IGNORE_HOW)
+    dist = np.zeros((gh, gw), np.float32)
+    if dist_hw is not None:
+        raw_d = np.asarray(dist_hw, dtype=np.float32)
+        if raw_d.ndim == 2:
+            if raw_d.shape != present_raw.shape:
+                filled = np.full(present_raw.shape, np.inf, dtype=np.float32)
+            else:
+                filled = np.where(present_raw > 0.5, raw_d, np.inf).astype(np.float32)
+                if not np.any(present_raw > 0.5):
+                    filled = np.where(np.isfinite(raw_d), raw_d, np.inf).astype(np.float32)
+            pooled_d = pool_to_grid(filled, grid, GT_POOL_DIST_HOW)
+            dist = np.where(np.isfinite(pooled_d), pooled_d, 0.0).astype(np.float32)
+    return present, ignore, dist
+
+
 def patch_targets(scene: dict, objects: list[str], pool: int, grid: tuple[int, int]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     del pool
     gh, gw = int(grid[0]), int(grid[1])
@@ -329,18 +374,27 @@ def patch_targets(scene: dict, objects: list[str], pool: int, grid: tuple[int, i
     log_d = np.zeros((k, gh, gw), np.float32)
     ignore = np.zeros((gh, gw), np.float32)
     raw_ignore = (scene or {}).get("ignore") or []
+    ig = None
     if raw_ignore:
-        ig = np.asarray(raw_ignore, dtype=np.float32)
-        if ig.ndim == 2:
-            ignore = pool_to_grid(ig, grid, "max")
+        ig_arr = np.asarray(raw_ignore, dtype=np.float32)
+        if ig_arr.ndim == 2:
+            ig = ig_arr
+            ignore = pool_to_grid(ig, grid, GT_POOL_IGNORE_HOW)
     patches = (scene or {}).get("patches") or {}
+    dist_maps = (scene or {}).get("patch_dist")
+    if dist_maps is None:
+        dist_maps = {}
     for i, name in enumerate(objects):
         grid_p = np.asarray(patches.get(name) or [], dtype=np.float32)
         if grid_p.ndim != 2:
             continue
-        pooled = pool_to_grid(grid_p, grid, "max")
+        dist_p = dist_maps.get(name) if isinstance(dist_maps, dict) else None
+        pooled, ignore, dist = pool_gt_to_grid(grid_p, ig, dist_p, grid)
         present[i] = pooled
-        log_d[i] = np.where(pooled > 0.5, math.log(8.0), 0.0)
+        if dist_p is None:
+            log_d[i] = np.where(pooled > 0.5, math.log(8.0), 0.0)
+        else:
+            log_d[i] = np.where(pooled > 0.5, np.log(np.maximum(dist, 0.05)), 0.0)
     return present, log_d, ignore
 
 
@@ -521,16 +575,18 @@ def _ignore_for_grid(ignore, height: int, width: int, device, dtype):
     if arr.size == 0:
         return None
     if arr.ndim == 2:
-        aligned = align_hw(arr, height, width, "max")
+        aligned = pool_to_grid(arr, (int(height), int(width)), GT_POOL_IGNORE_HOW)
         return torch.as_tensor(aligned, device=device, dtype=dtype)
     if arr.ndim == 3:
-        stacked = np.stack([align_hw(row, height, width, "max") for row in arr])
+        stacked = np.stack([
+            pool_to_grid(row, (int(height), int(width)), GT_POOL_IGNORE_HOW) for row in arr
+        ])
         return torch.as_tensor(stacked, device=device, dtype=dtype)
     return None
 
 
 def target_geometry(present_p, log_dist, target_index, bearings=None, vis_tau: float = 0.5, ignore=None, cfg: dict | None = None):
-    """present_p, log_dist: (B, K, H, W). Yaw uses the actual (H, W); ignore 16x26 is 2x2-pooled to 8x13."""
+    """present_p, log_dist: (B, K, H, W). Yaw uses the actual (H, W); ignore uses pool_gt_to_grid (min)."""
     import torch
 
     b, _k, height, width = present_p.shape
