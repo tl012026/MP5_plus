@@ -16,6 +16,7 @@ from lfnav.policy.train_c2nav import (
     hard_neg_counts,
     hard_neg_epoch_report,
     hard_neg_of,
+    hard_neg_weight_keys,
     hard_neg_weights,
     hard_negative_mask,
     mine_hard_negatives,
@@ -171,6 +172,38 @@ class HardNegMineTest(unittest.TestCase):
         self.assertEqual(report["recall_all"]["n"], 2)
         self.assertEqual(report["dist_le_3_median"]["n"], 2)
         self.assertAlmostEqual(report["dist_le_3_median"]["median"], 1.5, places=3)
+
+    def test_classes_weights_only_named_class(self):
+        z = np.zeros((2, 1, 1), np.float32)
+        ig = np.zeros((1, 1), np.float32)
+        rows = [
+            _sample(0, 0, [0, 0], [0, 0], z, ig),
+            _sample(0, 1, [0, 0], [0, 0], z, ig),
+            _sample(1, 0, [0, 0], [0, 0], z, ig),
+        ]
+        found = [
+            {"feat_store": 0, "row": 0, "class_index": 0, "class_name": "sheep"},
+            {"feat_store": 0, "row": 1, "class_index": 1, "class_name": "cow"},
+            {"feat_store": 1, "row": 0, "class_index": 0, "class_name": "pig"},
+            {"feat_store": 1, "row": 0, "class_index": 1, "class_name": "cow"},
+        ]
+        cow = hard_neg_weights(rows, hard_neg_weight_keys(found, ["cow"]), 3.0, 2)
+        self.assertEqual(cow[0].tolist(), [1.0, 1.0])
+        self.assertEqual(cow[1].tolist(), [1.0, 3.0])
+        self.assertEqual(cow[2].tolist(), [1.0, 3.0])
+        self.assertEqual(int(np.sum(cow != 1.0)), 2)
+        every = hard_neg_weight_keys(found, None)
+        self.assertEqual(
+            every,
+            {(int(rec["feat_store"]), int(rec["row"]), int(rec["class_index"])) for rec in found},
+        )
+        all_w = hard_neg_weights(rows, every, 3.0, 2)
+        self.assertEqual(all_w[0].tolist(), [3.0, 1.0])
+        self.assertEqual(all_w[2].tolist(), [3.0, 3.0])
+        self.assertIsNone(hard_neg_of({})["classes"])
+        self.assertIsNone(hard_neg_of({"c2nav": {"hard_neg": {"classes": None}}})["classes"])
+        self.assertEqual(hard_neg_of({"c2nav": {"hard_neg": {"classes": ["cow"]}}})["classes"], ["cow"])
+        self.assertEqual(hard_neg_of({"c2nav": {"hard_neg": {"classes": []}}})["classes"], [])
 
 
 class HardNegWeightTest(unittest.TestCase):

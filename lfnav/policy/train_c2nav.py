@@ -851,11 +851,17 @@ def hard_neg_of(cfg: dict | None = None) -> dict:
     vis_tau = raw.get("vis_tau")
     max_pred_dist = raw.get("max_pred_dist")
     weight = raw.get("weight")
+    classes = raw.get("classes")
+    if isinstance(classes, str):
+        raise RuntimeError("c2nav.hard_neg.classes must be a list of class names or null")
+    if classes is not None:
+        classes = [str(name) for name in classes]
     return {
         "enable": False if enable is None else bool(enable),
         "vis_tau": 0.7 if vis_tau is None else float(vis_tau),
         "max_pred_dist": 8.0 if max_pred_dist is None else float(max_pred_dist),
         "weight": 3.0 if weight is None else float(weight),
+        "classes": classes,
     }
 
 
@@ -917,6 +923,17 @@ def hard_neg_counts(found: list[dict], objects: list[str]) -> dict:
         name = str(rec["class_name"])
         counts[name] = counts.get(name, 0) + 1
     return counts
+
+
+def hard_neg_weight_keys(found: list[dict], classes) -> set:
+    """Keys passed to hard_neg_weights. classes null keeps every mined class."""
+    allow = None if classes is None else {str(name) for name in classes}
+    keys = set()
+    for rec in found:
+        if allow is not None and str(rec["class_name"]) not in allow:
+            continue
+        keys.add((int(rec["feat_store"]), int(rec["row"]), int(rec["class_index"])))
+    return keys
 
 
 def hard_neg_weights(rows: list[NavSample], keys: set, weight: float, n_obj: int) -> np.ndarray:
@@ -1885,7 +1902,7 @@ def train_loop(
             model, report_rows, token_arg, device, objects,
             hard_cfg["vis_tau"], hard_cfg["max_pred_dist"],
         )
-        hard_keys = {(int(rec["feat_store"]), int(rec["row"]), int(rec["class_index"])) for rec in found}
+        hard_keys = hard_neg_weight_keys(found, hard_cfg["classes"])
         train_counts = hard_neg_counts(found, objects)
         val_counts = hard_neg_counts(val_hard, objects)
         print("c2nav hard_neg train " + json.dumps(train_counts), flush=True)
