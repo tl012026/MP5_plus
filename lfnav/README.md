@@ -1,10 +1,12 @@
 # lfnav: LLM-free conditional navigation for MP5
 
-lfnav replaces the LLM components of MP5 with small trainable modules, on the 16 MP5 creative "find X with conditions" tasks. No language model runs on the control path. The main metric is **SR-b**: at the moment the agent stops, the target is visible, within 3 blocks, and every condition holds. MP5's own success rule (SR-a) is reported as a secondary metric.
+lfnav runs the 16 MP5 creative "find X with conditions" tasks. The main system does not use a language model. Perception is ground truth from MineDojo rays. The learned piece is the policy C (`c2nav`). Learned perception A is an appendix experiment, not the main line. An LLM planner that sees the same ground truth is the comparison partner; only the decision differs.
 
-Final question: can a navigation policy learned here transfer to robot simulation (AI2-THOR first)?
+The main metric is **SR-b**: at the moment the agent stops, the target is visible, within 3 blocks, and every condition holds. MP5's own success rule (SR-a) is reported as a secondary metric. Transfer to robot simulation is the last step of the work order, after generalization eval.
 
-Detailed notes are in `lfnav/docs/`: `C0C1_BASELINE.md` (baseline fixes), `DEMOS.md` (expert data), `REPORT.md` (calibration). The shared evaluation protocol with the MP5 group is in `benchmark/creative16/`.
+Results: [`docs/c2nav_result.md`](docs/c2nav_result.md). Perception and evaluation alignment for the LLM baseline: [`docs/llm_baseline_alignment.md`](docs/llm_baseline_alignment.md).
+
+Other notes in `lfnav/docs/`: `C0C1_BASELINE.md` (baseline fixes), `DEMOS.md` (expert data), `REPORT.md` (calibration). The shared evaluation protocol with the MP5 group is in `benchmark/creative16/`.
 
 ---
 
@@ -18,20 +20,24 @@ rgb frame ──► A: perceive ──► SceneState ──► B: match ──�
 
 | Module | What it does | Replaces in MP5 |
 |---|---|---|
-| **A: perception** (`lfnav/perception`) | Image → per-object presence, direction (left/center/right), distance (near ≤3 / mid ≤10 / far), plus biome, time, weather and brightness. Evaluation default is the A head of the joint model (frozen DINOv2). GT rays and MineLLM remain available as backends. | Percipient (MineLLM questioned by GPT) |
-| **B: matcher** (`lfnav/matcher.py`) | Rule-based. Is the target found, are the conditions met, should the agent stop? Stops when the nearest target ray is within 3 blocks, the same test SR-b uses. | The "is it found" part of the percipient prompt |
-| **C: policy** (`lfnav/policy`) | Chooses the next action chunk from the scene, the match result and memory. | The scripted explore branch of the find action |
+| **A: perception** (`lfnav/perception`) | Main line uses GT perception; learned perception A is an appendix experiment. | Percipient (MineLLM questioned by GPT) |
+| **B: matcher** (`lfnav/matcher.py`) | Rule-based. Is the target found, and are the conditions met? | The "is it found" part of the percipient prompt |
+| **S: state** (`lfnav/policy/state_tracker.py`) | Odometry tracker shared by training replay and closed-loop inference. It carries scan progress, visits in 8 directions, displacement, and whether the agent is stuck. | — |
+| **C: policy** (`lfnav/policy/c2nav.py`) | c2nav: an MLP with 4 modes (scan, explore, approach, reacquire), 10 turn classes and 4 forward classes. Its inputs are GT target geometry, the task conditions and the S state vector. | The scripted explore branch of the find action |
 | Controller (`lfnav/control`) | Executes actions. Jumps 1-block steps, avoids hazards, wades shallow water, detects stuck (displacement-based) and escapes. | `structured_actions.py` movement |
 
-Policies, in build order:
+Stop rule: target visible, all conditions hold, distance ≤ `stop_max_dist` (2.8), and the gate passes on `stop_confirm` consecutive decisions (default 1).
+
+Policies:
 
 1. **C0, straight walk**: walk forward and turn when blocked. Lower bound, close to MP5's blind exploration.
 2. **C1, rules**: opening 360° scan, steer toward a visible target, approach at mid range in steps of at most 2, re-acquire a lost target, otherwise explore the least-visited of 8 sectors.
-3. **Expert = C1 + 360° wide lidar**: used only to generate demonstrations (Section 3).
-4. **Joint A+C2**: frozen DINOv2 features, one training run. The A head predicts `SceneState`; the C2 head predicts K = 4 actions from pooled features, A's output, task conditions, 8-sector counts, the last 4 actions, and `last_seen`. `run.py --policy joint` runs A then B then C2.
-5. **C3, diffusion policy** (reserved): samples short action chunks or waypoints. The interface exists in `lfnav/policy/c3.py`, and the controller already accepts `(dyaw_deg, forward_blocks)` waypoints.
+3. **Expert**: C1 plus the 360° wide lidar. Used only to generate demonstrations (Section 3).
+4. **C2 = c2nav (main)**: the learned MLP above. `run.py --policy c2nav` with GT perception.
+5. **Joint** (legacy, superseded): one training run with a perception head and a policy head. Not the main line.
+6. **C3, diffusion policy** (reserved): samples short action chunks or waypoints. The interface exists in `lfnav/policy/c3.py`, and the controller already accepts `(dyaw_deg, forward_blocks)` waypoints.
 
-Order of work: GT perception + B + C0/C1 baselines → expert demos → extract DINOv2 features → joint A+C2 → C3 → transfer.
+Order of work: baselines → expert demos → C2 training → generalization eval → joint training → transfer.
 
 ---
 
@@ -58,13 +64,24 @@ Order of work: GT perception + B + C0/C1 baselines → expert demos → extract 
 - lfnav summons animals itself after `reset()`, because MineDojo's `initial_mobs` reset hook does not actually spawn them. Commands go through `_send_chat` (whitelist bypass); `Invalid cmd` raises. If `location_stats.can_see_sky` is false, the world seed is remade (`seed*1000+k`, up to `max_reroll`). Exhausted remakes are `spawn_underground` and the episode is not run.
 - **Sole setting (`configs/lfnav/main.yaml`)**: animals move; natural animals stay; vegetation is not cleared; `/difficulty peaceful` is the first spawn command; resistance is NBT on `/summon`. The only intended difference from stock MP5 is peaceful difficulty. Episode field `peaceful_sent` (old name `peaceful_ok`) means that command was sent, not that it worked. Whether hostiles were actually gone is `hostile_seen == 0`.
 - Initial distance (and SPL) is the nearest same-species ray at the start.
+- Rays stop at the first block, and entity rays are also blocked by blocks, so an animal behind tall grass is invisible to both the GT and the judge.
+- MineDojo ray names: `grass` = tallgrass, `plant` = double_plant, `flower` = small flower, `grass block` = ground.
+- The occluder list is `occluder_names` in `lfnav/labels.yaml`.
+- Each GT scene also stores:
+  - `occluder`: cells whose ray hit an occluder name.
+  - `patch_dist`: closest hit distance in each cell (null if that ray missed).
+  - `patch_dist_by_class`: per class, the closest **visible** hit only. A visible hit is the first hit on that ray.
+  - `occluded_by_class`: per class, cells where that class sits behind only occluders. Always empty in MineDojo, because entity rays do not pass through blocks.
+  - `hit_names`: `{name: count}` of `ray_raw` names over all aligned rays, including subrays. Blocks and entities both count.
 
 ### Amounts
-| Set | Seeds | Size |
-|---|---|---|
-| Evaluation | `eval_seeds_baseline.txt`: 9, 19, 29, 39, 49 (all end in 9) | 16 × 3 × 5 = 240 episodes per policy |
-| Expert demos | `train_seeds_demo.txt`: 44 seeds in 1–48, none ending in 9 | 8 animal tasks × 3 difficulties plus 8 block tasks at easy = 32 cells × 44 ≈ 1,400 episodes. Only successful episodes are used for training. |
-| Joint features | same successful demos as training | Frozen DINOv2, one `.npy` per filtered episode under `$SCR/lfnav/features/<version>/` |
+| Set | What it is |
+|---|---|
+| `demos_main` | Old data, used for A only |
+| `demos_main_v3` | Easy, used to train C. 44 training seeds, easy cells only |
+| `demos_v4` | Medium, max 500 steps. Hard is planned with max 1500 steps |
+
+Evaluation seeds stay `eval_seeds_baseline.txt`: 9, 19, 29, 39, 49. They do not overlap the training seeds.
 
 ### Compared with MP5
 | | lfnav | MP5 |
@@ -82,7 +99,7 @@ Order of work: GT perception + B + C0/C1 baselines → expert demos → extract 
 The expert is C1 with ground-truth perception plus a **360° wide lidar** (horizontal ring, 5° steps, pitches 0°, −3° and −8°, 32-block range). Wide lidar is used only when aligned rays do **not** see the target (`match.satisfied.target` is false). If the target is in view but a `near` condition fails, C1 handles it.
 
 - Each decision records the GT scene, the match result, memory (8-sector visits, recent actions), the expert's action chunk, the 224×364 frame, and `used_wide`.
-- Demos are collected with `configs/lfnav/main.yaml` into `$SCR/lfnav/data/demos_main`. Failures store `record.json` and `steps.jsonl` only (no frames). Old `demos_dynamic` files are kept and may be used as C2 legacy data.
+- Demos are collected with `configs/lfnav/main.yaml`. `$SCR/lfnav/data/demos_main` is the old set (A only). `$SCR/lfnav/data/demos_main_v3` is the easy set used to train C. `$SCR/lfnav/data/demos_v4` is the medium set (max 500 steps). Failures store `record.json` and `steps.jsonl` only (no frames). Old `demos_dynamic` files are kept.
 - The expert is never used as an evaluation policy, except in the explicit upper-bound run (`expert_eval`, requires `allow_privileged_eval`).
 
 **Expert results (demos, `main.yaml`, 44 training seeds per cell, 4-3 excluded)**
@@ -116,6 +133,7 @@ Setting: `configs/lfnav/main.yaml` (targets move, tall grass kept, natural mobs 
 - All 12 failures are timeouts after the target had been seen (`target_never_seen = 0`). C1's weakness is reaching or stopping at a moving target, not exploration.
 - Hard is the only difficulty with room left. 2-4 is the outlier (hard 1/5).
 - Covered: all 7 animal tasks at hard, plus representative easy/medium cells. Block tasks and the remaining animal easy/medium cells are not yet run.
+- C1 is being completed on all 29 cells; this table will be updated.
 
 ### 4.2 Earlier static setting: C0 vs C1 (superseded)
 Frozen targets, natural mobs removed, tall grass cleared, not peaceful. Not comparable with 4.1. Report: `result/lfnav_basline/report.md`.
@@ -127,19 +145,22 @@ Frozen targets, natural mobs removed, tall grass cleared, not peaceful. Not comp
 | SPL | 0.06 | 0.63 |
 | Median steps (successes) | 372 | 89 |
 
-### 4.3 Main setting, to be filled
-| Policy | SR-b (animal) | easy / medium / hard | SPL |
-|---|---|---|---|
-| C1 + GT | 0.80 | 1.00 / 0.93 / 0.69 | — |
-| C2 + GT observations (c2nav, r3 epoch 13) | 1.00 (10/10, easy only) | 1.00 / — / — | — |
-| C2 + learned perception (A) | pending | | |
-| C3 | | | |
+### 4.3 C2 + GT
 
-C2 + GT observations: perception is replaced by ground truth, so this row measures the policy alone.
-Evaluated on 1-3 easy and 1-4 easy, eval seeds 9/19/29/39/49 (10 episodes).
-On the same 10 episodes, C1 + GT also scores 10/10; median steps C2 36 vs C1 29 (total 507 vs 436).
-Stop is decided by rule (target visible, conditions met, distance ≤ 2.8 blocks); explore turns are sampled.
-SPL is not reported because the initial distance is not yet logged correctly.
+C2 trained on easy demos only (`demos_main_v3`, 44 training seeds, r3 epoch 13). Same GT perception as C1. Stop rule: target visible, conditions met, distance ≤ 2.8. Explore turns are sampled. Full write-up: [`docs/c2nav_result.md`](docs/c2nav_result.md).
+
+| cell | C2 SR-b | C1 SR-b | note |
+|---|---|---|---|
+| 1-3 easy | 5/5 | 5/5 | median steps C2 36 vs C1 29 over both easy cells |
+| 1-4 easy | 5/5 | 5/5 | |
+| 1-3 medium | 5/5 | 5/5 | not seen in training |
+| 1-4 medium | 4/5 | 4/5 | different seeds fail |
+| 1-3 hard | 3/5 | 4/5 | not seen in training |
+| 1-4 hard | 3/5 | 4/5 | |
+| **medium total** | **9/10** | **9/10** | |
+| **hard total** | **6/10** | **8/10** | |
+
+Learned perception (A) is not part of this comparison. See Appendix A of [`docs/c2nav_result.md`](docs/c2nav_result.md).
 
 ---
 
@@ -150,15 +171,17 @@ Runs on HPC. Full guide: `Minedojo environment/` and the setup PDF.
 | Part | Where | Used for |
 |---|---|---|
 | MineDojo image | `$SCR/env/minedojo.sif` (Singularity; Minecraft 1.11.2 via Malmo) | Every episode |
-| Runtime | `$SCR/mp5_env.sh`. Must be sourced in every terminal: it sets `SCR`, `MP5`, `PYTHONPATH`, `GRADLE_USER_HOME` and the Slurm account. | Everything |
+| Runtime | `$SCR/mp5_env.sh`. Must be sourced in every terminal: it sets `SCR`, `MP5`, `PYTHONPATH` and `GRADLE_USER_HOME`. | Everything |
 | Gradle cache | `$SCR/.gradle` plus a local MixinGradle repo. Each job copies it to node-local `/tmp` (`lfnav/env/gradle_home.sh`). | Minecraft build at launch |
-| Training env | PyTorch 2.x (`~/lfnav_train_env.sh`) | Feature extract and joint A+C2 training |
+| Training env | PyTorch 2.x (`$HOME/lfnav_train_env.sh`) | C2 training. Feature extract and joint training are the A or legacy pipeline only |
 | MineLLM (optional) | Separate conda env plus models on A100 | MineLLM perception baseline only |
 
 Rules:
 - Host-side scripts use only the Python standard library. Anything that needs numpy runs inside the image (`lfnav_sif_exec`).
-- Code changes are made on the dev machine and pushed. the cluster only pulls and runs.
-- Large outputs (runs, demos, features, checkpoints) stay in `/scratch/$USER/lfnav/`. Only small summaries go into the repo.
+- Code changes are made on the dev machine and pushed. The run copy only pulls and runs.
+- Large outputs (runs, demos, features, checkpoints) stay in `$SCR/lfnav/`. Only small summaries go into the repo.
+- The sbatch scripts default the code directory to `MP5=${MP5:-$HOME/MP5_plus}`. Before submitting, `export MP5=<run copy>` and confirm the version with `git -C $MP5 log -n 1`.
+- Confirm that every config file the job reads exists before submitting.
 
 Quick checks (no MineDojo needed):
 ```bash
