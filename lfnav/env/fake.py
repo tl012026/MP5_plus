@@ -10,7 +10,7 @@ import math
 import numpy as np
 
 from lfnav.geom import aligned_subrays_n, patch_grid, ray_directions, subray_grid_from_cfg
-from lfnav.gt.scene_state import biome_id_for_name, is_occluder_name, split_ray_hits
+from lfnav.gt.scene_state import biome_id_for_name, is_occluder_name, occluder_names_of, split_ray_hits
 from lfnav.env.minedojo_env import CHAT_WHITELIST, INVALID_CMD, ray_raw
 
 
@@ -287,7 +287,7 @@ class FakeMineDojoEnv:
                 if not found:
                     continue
                 label, dist = found[0]["raw"], found[0]["distance"]
-                visible, occluded = split_ray_hits(found)
+                visible, occluded = split_ray_hits(found, occluder_names_of(self.cfg))
                 hits.append({
                     "row": i, "col": j, "label": label, "distance": dist,
                     "pitch": ry, "raw": ray_raw(label),
@@ -317,7 +317,7 @@ class FakeMineDojoEnv:
                     found = self._hits_along(wx, wz, self.max_ray)
                     if not found:
                         continue
-                    visible, occluded = split_ray_hits(found)
+                    visible, occluded = split_ray_hits(found, occluder_names_of(self.cfg))
                     visible_all.extend(visible)
                     occluded_all.extend(occluded)
                     along.extend(found)
@@ -350,7 +350,7 @@ class FakeMineDojoEnv:
             if not found:
                 continue
             label, dist = found[0]["raw"], found[0]["distance"]
-            visible, occluded = split_ray_hits(found)
+            visible, occluded = split_ray_hits(found, occluder_names_of(self.cfg))
             hits.append({
                 "yaw_offset": deg, "label": label, "distance": dist, "raw": ray_raw(label),
                 "hits": found, "visible_hits": visible, "occluded_hits": occluded,
@@ -377,7 +377,7 @@ class FakeMineDojoEnv:
                 continue
             dist = float(s)
             blocks.append({"raw": ray_raw(name), "distance": dist, "kind": "block"})
-            if not is_occluder_name(name):
+            if not is_occluder_name(name, occluder_names_of(self.cfg)):
                 solid_dist = dist
                 break
         limit_dist = float(limit) if solid_dist is None else solid_dist

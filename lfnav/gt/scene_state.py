@@ -35,18 +35,30 @@ CANDIDATE_BIOME_IDS = {
 OCCLUDER_NAMES = ("tallgrass", "tall_grass", "double_plant")
 
 
-def is_occluder_name(raw) -> bool:
-    """tallgrass and double_plant hide whatever is behind them. grass block does not."""
-    if raw is None:
-        return False
+def _occluder_key(raw) -> str:
     text = str(raw).strip().lower()
     if text.startswith("minecraft:"):
         text = text[len("minecraft:"):]
-    text = text.replace(" ", "_")
-    return text in OCCLUDER_NAMES
+    return text.replace(" ", "_")
 
 
-def split_ray_hits(hits) -> tuple[list, list]:
+def occluder_names_of(cfg: dict | None) -> tuple:
+    labels = (cfg or {}).get("labels") or {}
+    raw = labels.get("occluder_names")
+    if raw is None:
+        return OCCLUDER_NAMES
+    return tuple(_occluder_key(name) for name in raw)
+
+
+def is_occluder_name(raw, names=None) -> bool:
+    """Exact match after lowercasing, stripping minecraft:, and turning spaces into underscores."""
+    if raw is None:
+        return False
+    allowed = OCCLUDER_NAMES if names is None else names
+    return _occluder_key(raw) in {_occluder_key(name) for name in allowed}
+
+
+def split_ray_hits(hits, names=None) -> tuple[list, list]:
     """Sort one subray. The closest hit is visible. An entity behind only occluders is occluded."""
     cleaned = []
     for hit in hits or []:
@@ -81,23 +93,23 @@ def split_ray_hits(hits) -> tuple[list, list]:
             prev for prev in cleaned[:idx]
             if prev["distance"] is not None and float(prev["distance"]) < float(hit["distance"])
         ]
-        if front and all(is_occluder_name(prev.get("raw")) for prev in front):
+        if front and all(is_occluder_name(prev.get("raw"), names) for prev in front):
             occluded.append(dict(hit))
     return visible, occluded
 
 
-def _ray_visibility(ray: dict) -> tuple[list, list]:
+def _ray_visibility(ray: dict, names=None) -> tuple[list, list]:
     """Use stored per-subray classes when convert_rays wrote them. Otherwise split hits."""
     if isinstance(ray, dict) and ("visible_hits" in ray or "occluded_hits" in ray):
         return list(ray.get("visible_hits") or []), list(ray.get("occluded_hits") or [])
     raw_hits = ray.get("hits") if isinstance(ray, dict) else None
     if isinstance(raw_hits, list) and raw_hits:
-        return split_ray_hits(raw_hits)
+        return split_ray_hits(raw_hits, names)
     raw = ray.get("raw") if isinstance(ray, dict) else None
     if raw is None and isinstance(ray, dict):
         raw = ray.get("label")
     dist = ray.get("distance") if isinstance(ray, dict) else None
-    return split_ray_hits([{"raw": raw, "distance": dist}])
+    return split_ray_hits([{"raw": raw, "distance": dist}], names)
 
 
 def _hits_of(ray: dict) -> list[tuple]:
@@ -320,6 +332,7 @@ def scene_state_from_obs(obs: dict, cfg: dict) -> SceneState:
     labels = cfg.get("labels") or {}
     objects = list(labels.get("objects") or [])
     aliases = labels.get("aliases") or {}
+    names = occluder_names_of(cfg)
     height, width = cfg.get("image_hw", [224, 364])
     patch = int(cfg.get("patch", 14))
     n_h, n_w = patch_grid(int(height), int(width), patch)
@@ -331,19 +344,47 @@ def scene_state_from_obs(obs: dict, cfg: dict) -> SceneState:
     patch_dist = [[None for _ in range(n_w)] for _ in range(n_h)]
     by_class = {name: [[None for _ in range(n_w)] for _ in range(n_h)] for name in objects}
     occluded = {name: [[0.0 for _ in range(n_w)] for _ in range(n_h)] for name in objects}
+    hit_names: dict[str, int] = {}
     ignored = patch_ignore(int(height), int(width), n_h, n_w, cfg.get("camera_calib") or {})
     rays = lookup(obs, keys.get("aligned_rays"), []) or []
+    from lfnav.env.minedojo_env import ray_raw
+
+    cells_with_hits = set()
+    lone = []
+    for ray in rays:
+        if isinstance(ray.get("hits"), list):
+            cells_with_hits.add((int(ray["row"]), int(ray["col"])))
+            for hit in ray["hits"]:
+                if not isinstance(hit, dict):
+                    continue
+                raw = hit.get("raw")
+                if raw is None:
+                    raw = hit.get("label")
+                name = ray_raw(raw)
+                if name:
+                    hit_names[name] = hit_names.get(name, 0) + 1
+        else:
+            lone.append(ray)
+    for ray in lone:
+        if (int(ray["row"]), int(ray["col"])) in cells_with_hits:
+            continue
+        raw = ray.get("raw")
+        if raw is None:
+            raw = ray.get("label")
+        name = ray_raw(raw)
+        if name:
+            hit_names[name] = hit_names.get(name, 0) + 1
     for ray in rays:
         i, j = int(ray["row"]), int(ray["col"])
         if not (0 <= i < n_h and 0 <= j < n_w):
             continue
         for raw, hit_dist in _hits_of(ray):
-            if is_occluder_name(raw):
+            if is_occluder_name(raw, names):
                 occluder[i][j] = 1.0
             if hit_dist is None:
                 continue
             patch_dist[i][j] = _closer(patch_dist[i][j], hit_dist)
-        visible_hits, occluded_hits = _ray_visibility(ray)
+        visible_hits, occluded_hits = _ray_visibility(ray, names)
         for hit in visible_hits:
             hit_dist = hit.get("distance")
             if hit_dist is None:
@@ -382,4 +423,5 @@ def scene_state_from_obs(obs: dict, cfg: dict) -> SceneState:
         patch_dist=patch_dist,
         patch_dist_by_class=by_class,
         occluded_by_class=occluded,
+        hit_names=hit_names,
     )

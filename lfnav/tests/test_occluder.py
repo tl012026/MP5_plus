@@ -13,7 +13,8 @@ torch.set_num_threads(4)
 from lfnav.config import load_config
 from lfnav.data.collect_demos import apply_difficulty_max_steps
 from lfnav.env.minedojo_env import convert_rays
-from lfnav.gt.scene_state import is_occluder_name, occluder_at_stop, scene_state_from_obs
+from lfnav.gt.scene_state import is_occluder_name, occluder_at_stop, occluder_names_of, scene_state_from_obs
+from lfnav.types import SceneState
 from lfnav.policy.c2nav import patch_targets, vis_labels
 from lfnav.policy.train_c2nav import animal_occluder_supervision, nav_loss, occluder_frac_of
 
@@ -126,6 +127,68 @@ class OccluderRayTest(unittest.TestCase):
         self.assertIn(("cow", 2.0), visible)
         self.assertIn(("cow", 4.0), occluded)
         self.assertNotIn(("cow", 4.0), visible)
+
+    def test_hit_names_counts_each_raw_hit(self):
+        cfg = load_config()
+        key = cfg["obs_keys"]["aligned_rays"]
+        rays = [
+            {
+                "row": 0, "col": 0, "label": "tallgrass", "distance": 1.5, "raw": "tallgrass",
+                "hits": [
+                    {"raw": "minecraft:TallGrass", "distance": 1.5, "kind": "block"},
+                    {"raw": "Cow", "distance": 2.5, "kind": "entity"},
+                    {"raw": "cow", "distance": 4.0, "kind": "entity"},
+                ],
+            },
+            {
+                "row": 0, "col": 1, "label": "grass", "distance": 3.0, "raw": "grass block",
+                "hits": [{"raw": "grass block", "distance": 3.0, "kind": "block"}],
+            },
+            {"row": 0, "col": 0, "label": "cow", "distance": 2.5, "raw": "cow"},
+        ]
+        scene = scene_state_from_obs({key: rays}, cfg)
+        self.assertEqual(scene.hit_names, {"tallgrass": 1, "cow": 2, "grass block": 1})
+        again = SceneState.from_dict(scene.to_dict())
+        self.assertEqual(again.hit_names, scene.hit_names)
+
+    def test_custom_occluder_names(self):
+        self.assertTrue(is_occluder_name("minecraft:Tall Grass", ("tall_grass",)))
+        self.assertFalse(is_occluder_name("tallgrass", ("dirt",)))
+        self.assertFalse(is_occluder_name("tallgrass", ()))
+        bare = dict(load_config())
+        labels = dict(bare["labels"])
+        labels.pop("occluder_names", None)
+        bare["labels"] = labels
+        self.assertEqual(occluder_names_of(bare), ("tallgrass", "tall_grass", "double_plant"))
+        cfg = dict(load_config())
+        cfg["labels"] = dict(cfg["labels"])
+        cfg["labels"]["occluder_names"] = ["dirt"]
+        plan = {
+            "aligned": (0, 1),
+            "wide": (1, 1),
+            "rows_cols": [(0, 0)],
+            "wide_angles_deg": [],
+            "subrays": 1,
+        }
+        key = cfg["obs_keys"]["aligned_rays"]
+        hidden = convert_rays({
+            "block_name": ["dirt"],
+            "block_distance": [1.5],
+            "entity_name": ["cow"],
+            "entity_distance": [2.5],
+        }, plan, cfg)
+        scene = scene_state_from_obs({key: hidden["aligned"]}, cfg)
+        self.assertGreaterEqual(scene.occluded_by_class["cow"][0][0], 0.5)
+        self.assertEqual(scene.hit_names, {"dirt": 1, "cow": 1})
+        shown = convert_rays({
+            "block_name": ["tallgrass"],
+            "block_distance": [1.5],
+            "entity_name": ["cow"],
+            "entity_distance": [2.5],
+        }, plan, cfg)
+        open_scene = scene_state_from_obs({key: shown["aligned"]}, cfg)
+        self.assertLess(open_scene.occluded_by_class["cow"][0][0], 0.5)
+        self.assertIsNone(open_scene.patch_dist_by_class["cow"][0][0])
 
     def test_unseen_animal_with_near_occluders_skips_frame_vis(self):
         objects = ["pig", "cow", "sheep", "chicken", "grass"]

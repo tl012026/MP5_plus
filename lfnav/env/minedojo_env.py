@@ -208,7 +208,9 @@ def peaceful_command_sent(meta: dict | None) -> bool:
 
 def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
     """Turn MineDojo's parallel ray arrays into aligned and wide lfnav rays."""
-    from lfnav.gt.scene_state import resolve_label, split_ray_hits
+    from lfnav.gt.scene_state import occluder_names_of, resolve_label, split_ray_hits
+
+    occluders = occluder_names_of(cfg)
 
     fields = ((cfg.get("obs_keys") or {}).get("ray_fields") or {})
     miss_names = {str(name).strip().lower() for name in (fields.get("miss_names") or ["", "air", "null", "none"])}
@@ -246,7 +248,7 @@ def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
     if n_sub <= 1:
         for offset, (row, col) in enumerate(cells):
             label, dist, raw, hits = one(start + offset)
-            visible, occluded = split_ray_hits(hits)
+            visible, occluded = split_ray_hits(hits, occluders)
             aligned.append({
                 "row": row, "col": col, "label": label, "distance": dist, "raw": raw, "hits": hits,
                 "visible_hits": visible, "occluded_hits": occluded,
@@ -267,7 +269,7 @@ def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
             occluded_all = []
             for s in range(per):
                 label, dist, raw, hits = one(start + cell_i * per + s)
-                visible, occluded = split_ray_hits(hits)
+                visible, occluded = split_ray_hits(hits, occluders)
                 visible_all.extend(visible)
                 occluded_all.extend(occluded)
                 along.extend(hits)
@@ -307,7 +309,7 @@ def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
     w0, _w1 = plan["wide"]
     for offset, (pitch, yaw) in enumerate(plan["wide_angles_deg"]):
         label, dist, raw, hits = one(w0 + offset)
-        visible, occluded = split_ray_hits(hits)
+        visible, occluded = split_ray_hits(hits, occluders)
         wide.append({
             "pitch": pitch,
             "yaw": yaw,

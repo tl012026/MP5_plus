@@ -69,6 +69,7 @@ class SceneState:
     patch_dist: list = field(default_factory=list)
     patch_dist_by_class: dict = field(default_factory=dict)
     occluded_by_class: dict = field(default_factory=dict)
+    hit_names: dict = field(default_factory=dict)
 
     def object(self, name: str) -> ObjectBelief:
         raw = self.objects.get(name)
@@ -99,6 +100,7 @@ class SceneState:
             "occluded_by_class": {
                 name: [list(row) for row in grid] for name, grid in (self.occluded_by_class or {}).items()
             },
+            "hit_names": {str(name): int(count) for name, count in (self.hit_names or {}).items()},
         }
 
     @classmethod
@@ -123,6 +125,7 @@ class SceneState:
                 name: [list(row) for row in grid]
                 for name, grid in (data.get("occluded_by_class") or {}).items()
             },
+            hit_names={str(name): int(count) for name, count in (data.get("hit_names") or {}).items()},
         )
 
 
