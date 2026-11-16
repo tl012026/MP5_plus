@@ -26,3 +26,4 @@ hard:
   max_reroll: 5
   distractors: 4
   leave_biome: false
+  max_steps: 1500

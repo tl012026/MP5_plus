@@ -65,6 +65,9 @@ class SceneState:
     unknown: list = field(default_factory=list)
     ignore: list = field(default_factory=list)
     patches: dict = field(default_factory=dict)
+    occluder: list = field(default_factory=list)
+    patch_dist: list = field(default_factory=list)
+    patch_dist_by_class: dict = field(default_factory=dict)
 
     def object(self, name: str) -> ObjectBelief:
         raw = self.objects.get(name)
@@ -87,6 +90,11 @@ class SceneState:
             "unknown": list(self.unknown),
             "ignore": [list(row) for row in (self.ignore or [])],
             "patches": {name: [list(row) for row in grid] for name, grid in (self.patches or {}).items()},
+            "occluder": [list(row) for row in (self.occluder or [])],
+            "patch_dist": [list(row) for row in (self.patch_dist or [])],
+            "patch_dist_by_class": {
+                name: [list(row) for row in grid] for name, grid in (self.patch_dist_by_class or {}).items()
+            },
         }
 
     @classmethod
@@ -101,6 +109,12 @@ class SceneState:
             unknown=list(data.get("unknown") or []),
             ignore=[list(row) for row in (data.get("ignore") or [])],
             patches={name: [list(row) for row in grid] for name, grid in (data.get("patches") or {}).items()},
+            occluder=[list(row) for row in (data.get("occluder") or [])],
+            patch_dist=[list(row) for row in (data.get("patch_dist") or [])],
+            patch_dist_by_class={
+                name: [list(row) for row in grid]
+                for name, grid in (data.get("patch_dist_by_class") or {}).items()
+            },
         )
 
 

@@ -28,7 +28,7 @@ from lfnav.gt.initial import (
     privileged_ray_distance,
 )
 from lfnav.gt.judge import aligned_target_distance, judge_episode
-from lfnav.gt.scene_state import scene_state_from_obs
+from lfnav.gt.scene_state import occluder_at_stop, scene_state_from_obs
 from lfnav.io import atomic_write_json, json_default, read_seeds, read_tasks
 from lfnav.matcher import Matcher
 from lfnav.memory import Memory
@@ -518,6 +518,7 @@ def run_episode(env, task: TaskSpec, cfg: dict, perception=None, policy=None, se
         "policy_name": cfg.get("policy_name", "c1"),
         "difficulty": cfg.get("difficulty"),
         "stop_mode": (cfg.get("match") or {}).get("stop_mode", "sr_b"),
+        "occluder_at_stop": occluder_at_stop(gt_scene, max_dist=3.0),
         "gt_at_stop": gt_scene.to_dict(),
         "perception_at_stop": None if scene is None else scene.to_dict(),
         "world_seed": meta.get("world_seed", seed),

@@ -146,6 +146,11 @@ class NavSample:
     dist_bin_mask: np.ndarray | None = None
     target_log_dist: float = 0.0
     target_dist_mask: float = 0.0
+    present_ignore: np.ndarray | None = None
+
+
+ANIMAL_CLASSES = ("pig", "cow", "sheep", "chicken")
+OCCLUDER_VIS_DIST = 8.0
 
 
 def _label_int(labels: dict | None, key: str, default: int) -> int:
@@ -198,6 +203,83 @@ def _pose_noise(noise: TrackerNoise | None) -> TrackerNoise | None:
     return TrackerNoise(yaw_std=float(noise.yaw_std), disp_std=float(noise.disp_std), odom_std=float(noise.odom_std))
 
 
+def occluder_frac_of(cfg: dict | None) -> float:
+    raw = _nav_dict(cfg).get("occluder_frac")
+    return 0.1 if raw is None else float(raw)
+
+
+def _class_hit(dist_grid, non_hud: np.ndarray) -> bool:
+    if dist_grid is None:
+        return False
+    raw = np.array(dist_grid, dtype=object)
+    if raw.ndim != 2 or raw.shape != non_hud.shape:
+        return False
+    for i in range(raw.shape[0]):
+        for j in range(raw.shape[1]):
+            if not non_hud[i, j]:
+                continue
+            val = raw[i, j]
+            if val is None:
+                continue
+            try:
+                float(val)
+            except (TypeError, ValueError):
+                continue
+            return True
+    return False
+
+
+def animal_occluder_supervision(scene, objects, present, ignore, vis, vis_ig, frac: float):
+    """Ignore occluded animal cells. Old scenes without occluder are returned unchanged."""
+    if not isinstance(scene, dict) or "occluder" not in scene:
+        return None, vis, vis_ig
+    occ = np.asarray(scene.get("occluder"), dtype=np.float32)
+    if occ.ndim != 2 or occ.size == 0:
+        return None, vis, vis_ig
+    vis = np.array(vis, np.float32, copy=True)
+    vis_ig = np.array(vis_ig, np.float32, copy=True)
+    hud = np.asarray(scene.get("ignore") if scene.get("ignore") is not None else [], dtype=np.float32)
+    if hud.ndim != 2 or hud.shape != occ.shape:
+        hud = np.zeros(occ.shape, np.float32)
+    non_hud = hud < 0.5
+    dist_raw = scene.get("patch_dist")
+    dist = np.full(occ.shape, np.nan, np.float32)
+    if dist_raw is not None:
+        raw = np.array(dist_raw, dtype=object)
+        if raw.ndim == 2 and raw.shape == occ.shape:
+            for i in range(raw.shape[0]):
+                for j in range(raw.shape[1]):
+                    val = raw[i, j]
+                    if val is None:
+                        continue
+                    try:
+                        dist[i, j] = float(val)
+                    except (TypeError, ValueError):
+                        continue
+    near = non_hud & (occ >= 0.5) & np.isfinite(dist) & (dist <= OCCLUDER_VIS_DIST)
+    denom = float(non_hud.sum())
+    ratio = 0.0 if denom <= 0 else float(near.sum()) / denom
+    by_class = scene.get("patch_dist_by_class")
+    if not isinstance(by_class, dict):
+        by_class = {}
+    animals = set(ANIMAL_CLASSES)
+    for i, name in enumerate(objects):
+        if str(name) not in animals or i >= vis.shape[0]:
+            continue
+        if _class_hit(by_class.get(name), non_hud):
+            if vis_ig[i] < 0.5:
+                vis[i] = 1.0
+        elif ratio >= float(frac):
+            vis_ig[i] = 1.0
+    pooled = pool_to_grid(occ, (int(present.shape[1]), int(present.shape[2])), "max")
+    mask = np.zeros(present.shape, np.float32)
+    marked = (pooled >= 0.5).astype(np.float32)
+    for i, name in enumerate(objects):
+        if str(name) in animals:
+            mask[i] = marked
+    return mask, vis, vis_ig
+
+
 def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, noise: TrackerNoise | None) -> list[NavSample]:
     packed = read_episode(folder)
     record = packed["record"]
@@ -227,6 +309,9 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
         present, log_d, ignore = patch_targets(scene, objects, pool, grid)
         class_ig = far_class_ignore(step, objects, hfov)
         vis, vis_ig = vis_labels(present, ignore, class_ig)
+        present_ig, vis, vis_ig = animal_occluder_supervision(
+            scene, objects, present, ignore, vis, vis_ig, occluder_frac_of(cfg),
+        )
         obs_clean = gt_target_obs(present, ignore, target_index, bearings, step.get("target_distance_num"))
         patches = scene.get("patches") if scene.get("patches") is not None else {}
         raw = np.asarray(patches.get(target) if isinstance(patches, dict) else present[target_index], np.float32)
@@ -240,7 +325,7 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
             step.get("target_distance_num"), cfg, dist_mass=dist_mass,
         )
         gt_obs.append(obs_clean)
-        parsed.append((i, step, feat_row, present, log_d, ignore, obs_clean, vis, vis_ig))
+        parsed.append((i, step, feat_row, present, log_d, ignore, obs_clean, vis, vis_ig, present_ig))
     if noise is None:
         noisy_obs = list(gt_obs)
     else:
@@ -254,7 +339,7 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
     )
     rows = []
     last_feat = None
-    for i, step, feat_row, present, log_d, ignore, obs_clean, vis, vis_ig in parsed:
+    for i, step, feat_row, present, log_d, ignore, obs_clean, vis, vis_ig, present_ig in parsed:
         if feat_row is None:
             if last_feat is None:
                 continue
@@ -317,6 +402,7 @@ def samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: dict, nois
             dist_bin_mask=dist_bin_mask,
             target_log_dist=target_log,
             target_dist_mask=target_mask,
+            present_ignore=present_ig,
         ))
     return rows
 
@@ -502,6 +588,9 @@ def a_extra_samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: di
         _assert_old_patch_hw(scene, Path(folder))
         present, log_d, ignore = patch_targets(scene, objects, pool, grid)
         vis, vis_ig = vis_labels(present, ignore)
+        present_ig, vis, vis_ig = animal_occluder_supervision(
+            scene, objects, present, ignore, vis, vis_ig, occluder_frac_of(cfg),
+        )
         dist_bin, dist_bin_mask = dist_bin_labels_from_objects(scene, objects)
         target_log, target_mask = target_log_dist_label(step.get("target_distance_num"))
         rows.append(NavSample(
@@ -533,6 +622,7 @@ def a_extra_samples_from_episode(folder: Path, lookup: dict, spec: dict, cfg: di
             dist_bin_mask=dist_bin_mask,
             target_log_dist=target_log,
             target_dist_mask=target_mask,
+            present_ignore=present_ig,
         ))
     return rows
 
@@ -779,6 +869,7 @@ def flip_sample(sample: NavSample) -> NavSample:
         dist_bin_mask=None if sample.dist_bin_mask is None else np.asarray(sample.dist_bin_mask).copy(),
         target_log_dist=float(sample.target_log_dist),
         target_dist_mask=float(sample.target_dist_mask),
+        present_ignore=None if sample.present_ignore is None else np.flip(sample.present_ignore, axis=-1).copy(),
     )
 
 
@@ -796,7 +887,7 @@ def collate(rows: list[NavSample], tokens, flip: bool, rng: random.Random) -> di
     for i, do in enumerate(flips):
         if do:
             tok[i] = tok[i, :, ::-1, :].copy()
-    return {
+    out = {
         "tokens": tok,
         "present": np.stack([r.present for r in chosen]),
         "log_dist": np.stack([r.log_dist for r in chosen]),
@@ -831,6 +922,16 @@ def collate(rows: list[NavSample], tokens, flip: bool, rng: random.Random) -> di
         "target_log_dist": np.asarray([float(r.target_log_dist) for r in chosen], np.float32),
         "target_dist_mask": np.asarray([float(r.target_dist_mask) for r in chosen], np.float32),
     }
+    if any(r.present_ignore is not None for r in chosen):
+        k_h_w = chosen[0].present.shape
+        masks = []
+        for r in chosen:
+            if r.present_ignore is None:
+                masks.append(np.zeros(k_h_w, np.float32))
+            else:
+                masks.append(np.asarray(r.present_ignore, np.float32))
+        out["present_ignore"] = np.stack(masks)
+    return out
 
 
 def _mask_unseen_logits(logits, weight):
@@ -1038,6 +1139,9 @@ def nav_loss(out, batch, weights, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth
         ignore = batch["ignore"].unsqueeze(1)
         class_ok = (batch["vis_ignore"] < 0.5).float().view(b, k, 1, 1)
         valid = (ignore < 0.5).float() * class_ok
+        extra_ig = batch.get("present_ignore")
+        if extra_ig is not None:
+            valid = valid * (extra_ig < 0.5).float()
         y = batch["present"]
         bce = F.binary_cross_entropy_with_logits(present, y, reduction="none")
         pw = pos_w.view(1, k, 1, 1)
@@ -1048,7 +1152,7 @@ def nav_loss(out, batch, weights, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth
         loss_p = (bce * valid).sum() / valid.sum().clamp_min(1.0)
         mask_d = (y > 0.5) & (valid > 0.5)
         if mask_d.any():
-            # Weight stays 0: there is no real per-patch distance label.
+            # Weight stays 0. Per-cell distances are still stored when patch_dist_by_class exists.
             loss_d = present.new_zeros(()) + PATCH_LOG_DIST_LOSS_WEIGHT * F.smooth_l1_loss(
                 out["log_dist"][mask_d], batch["log_dist"][mask_d],
             )

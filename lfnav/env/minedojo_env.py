@@ -160,6 +160,21 @@ def _distance(value):
         return None
 
 
+def ray_hits(block_name, block_distance, entity_name, entity_distance, miss_names: set[str]) -> list[dict]:
+    """Both the block and the entity when each is a real hit. Order is near to far."""
+    hits = []
+    if not _is_miss(block_name, miss_names):
+        dist = _distance(block_distance)
+        if dist is not None:
+            hits.append({"raw": ray_raw(block_name), "distance": dist})
+    if not _is_miss(entity_name, miss_names):
+        dist = _distance(entity_distance)
+        if dist is not None:
+            hits.append({"raw": ray_raw(entity_name), "distance": dist})
+    hits.sort(key=lambda hit: hit["distance"])
+    return hits
+
+
 def first_hit(block_name, block_distance, entity_name, entity_distance, miss_names: set[str]):
     """Entity wins only when it is a real hit closer than the block. Otherwise the block."""
     block_miss = _is_miss(block_name, miss_names)
@@ -213,9 +228,16 @@ def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
             _ray_at(entity_dists, index),
             miss_names,
         )
+        hits = ray_hits(
+            _ray_at(block_names, index),
+            _ray_at(block_dists, index),
+            _ray_at(entity_names, index),
+            _ray_at(entity_dists, index),
+            miss_names,
+        )
         raw = ray_raw(hit)
         label = None if hit is None else resolve_label(hit, aliases, objects)
-        return label, dist, raw
+        return label, dist, raw, hits
 
     aligned = []
     start, stop = plan["aligned"]
@@ -223,8 +245,10 @@ def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
     n_sub = max(1, int(plan.get("subrays") or 1))
     if n_sub <= 1:
         for offset, (row, col) in enumerate(cells):
-            label, dist, raw = one(start + offset)
-            aligned.append({"row": row, "col": col, "label": label, "distance": dist, "raw": raw})
+            label, dist, raw, hits = one(start + offset)
+            aligned.append({
+                "row": row, "col": col, "label": label, "distance": dist, "raw": raw, "hits": hits,
+            })
         if stop != start + len(cells):
             raise RuntimeError("aligned ray span does not match the patch cells")
     else:
@@ -236,8 +260,10 @@ def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
             by_obj = {}
             closest = (None, None, None)
             unlabeled = (None, None)
+            along = []
             for s in range(per):
-                label, dist, raw = one(start + cell_i * per + s)
+                label, dist, raw, hits = one(start + cell_i * per + s)
+                along.extend(hits)
                 if dist is None:
                     continue
                 if label is None:
@@ -252,11 +278,13 @@ def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
             if not by_obj:
                 aligned.append({
                     "row": row, "col": col,
-                    "label": None, "distance": unlabeled[1], "raw": unlabeled[0],
+                    "label": None, "distance": unlabeled[1], "raw": unlabeled[0], "hits": along,
                 })
                 continue
             primary, pdist, praw = closest
-            aligned.append({"row": row, "col": col, "label": primary, "distance": pdist, "raw": praw})
+            aligned.append({
+                "row": row, "col": col, "label": primary, "distance": pdist, "raw": praw, "hits": along,
+            })
             for name, (dist, raw) in by_obj.items():
                 if name != primary:
                     extras.append({"row": row, "col": col, "label": name, "distance": dist, "raw": raw})
@@ -269,7 +297,7 @@ def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
     wide = []
     w0, _w1 = plan["wide"]
     for offset, (pitch, yaw) in enumerate(plan["wide_angles_deg"]):
-        label, dist, raw = one(w0 + offset)
+        label, dist, raw, hits = one(w0 + offset)
         wide.append({
             "pitch": pitch,
             "yaw": yaw,
@@ -277,6 +305,7 @@ def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
             "label": label,
             "distance": dist,
             "raw": raw,
+            "hits": hits,
         })
     return {"aligned": aligned, "wide": wide}
 

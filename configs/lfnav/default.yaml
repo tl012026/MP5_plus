@@ -120,6 +120,7 @@ c2nav:
     max_pred_dist: 8.0
     weight: 3.0
     classes: null
+  occluder_frac: 0.1
   lr: 0.0003
   weight_decay: 0.05
   epochs: 15

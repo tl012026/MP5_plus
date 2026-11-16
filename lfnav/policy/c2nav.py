@@ -524,12 +524,26 @@ def patch_targets(scene: dict, objects: list[str], pool: int, grid: tuple[int, i
             ig = ig_arr
             ignore = pool_to_grid(ig, grid, GT_POOL_IGNORE_HOW)
     patches = (scene or {}).get("patches") or {}
+    by_class = (scene or {}).get("patch_dist_by_class")
+    use_by_class = isinstance(by_class, dict)
     dist_maps = (scene or {}).get("patch_dist")
     if dist_maps is None:
         dist_maps = {}
     for i, name in enumerate(objects):
         grid_p = np.asarray(patches.get(name) or [], dtype=np.float32)
         if grid_p.ndim != 2:
+            continue
+        if use_by_class:
+            dist_p = _finite_dist_map(by_class.get(name))
+            pooled, ignore, _unused = pool_gt_to_grid(grid_p, ig, None, grid)
+            present[i] = pooled
+            if dist_p is None:
+                log_d[i] = np.where(pooled > 0.5, math.log(8.0), 0.0)
+            else:
+                filled = np.where(np.isfinite(dist_p), dist_p, np.inf).astype(np.float32)
+                pooled_d = pool_to_grid(filled, grid, GT_POOL_DIST_HOW)
+                known = np.isfinite(pooled_d)
+                log_d[i] = np.where(known, np.log(np.maximum(pooled_d, 0.05)), 0.0)
             continue
         dist_p = dist_maps.get(name) if isinstance(dist_maps, dict) else None
         pooled, ignore, dist = pool_gt_to_grid(grid_p, ig, dist_p, grid)
@@ -539,6 +553,26 @@ def patch_targets(scene: dict, objects: list[str], pool: int, grid: tuple[int, i
         else:
             log_d[i] = np.where(pooled > 0.5, np.log(np.maximum(dist, 0.05)), 0.0)
     return present, log_d, ignore
+
+
+def _finite_dist_map(dist_p):
+    """2D distance grid with null cells removed. None when the class has no map."""
+    if dist_p is None:
+        return None
+    raw = np.array(dist_p, dtype=object)
+    if raw.ndim != 2:
+        return None
+    out = np.full(raw.shape, np.nan, np.float32)
+    for i in range(raw.shape[0]):
+        for j in range(raw.shape[1]):
+            val = raw[i, j]
+            if val is None:
+                continue
+            try:
+                out[i, j] = float(val)
+            except (TypeError, ValueError):
+                continue
+    return out
 
 
 def distance_bins_of(cfg: dict | None = None) -> tuple[float, float]:

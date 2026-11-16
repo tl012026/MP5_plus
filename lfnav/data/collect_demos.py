@@ -82,6 +82,19 @@ def _write_legacy(out: Path, task: TaskSpec, seed: int, rec: dict, events: list,
     atomic_write_json(out / task.id / f"{seed}.json", {"bucket": bucket})
 
 
+def apply_difficulty_max_steps(cfg: dict, difficulty: str) -> dict:
+    """Copy cfg and, for a difficulty that sets max_steps, use that episode cap."""
+    table = (cfg.get("difficulty_table") or {}).get(str(difficulty)) or {}
+    raw = table.get("max_steps")
+    if raw is None:
+        return cfg
+    out = dict(cfg)
+    judge = dict(out.get("judge") or {})
+    judge["max_steps"] = int(raw)
+    out["judge"] = judge
+    return out
+
+
 def collect(cfg, tasks, seeds, out: Path, backend: str = "fake") -> dict:
     out.mkdir(parents=True, exist_ok=True)
     saved = {"success": 0, "failure": 0, "skipped": 0}
@@ -89,6 +102,7 @@ def collect(cfg, tasks, seeds, out: Path, backend: str = "fake") -> dict:
     cfg = dict(cfg)
     cfg["backend"] = backend
     difficulty = str(cfg.get("difficulty") or "easy")
+    cfg = apply_difficulty_max_steps(cfg, difficulty)
     save_frames = bool(cfg.get("save_decision_frames", False))
     session = EnvReuse(cfg)
     try:

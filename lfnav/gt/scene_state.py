@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 
-from lfnav.aggregate import aggregate_object, distance_bin
+from lfnav.aggregate import aggregate_object, column_direction, distance_bin
 from lfnav.geom import patch_grid
 from lfnav.gt.camera import patch_ignore
 from lfnav.obsutil import lookup, scalar
@@ -30,6 +30,98 @@ CANDIDATE_BIOME_IDS = {
     "roofed_forest": 29,
     "savanna": 35,
 }
+
+
+OCCLUDER_NAMES = ("tallgrass", "tall_grass", "double_plant")
+
+
+def is_occluder_name(raw) -> bool:
+    """tallgrass and double_plant hide whatever is behind them. grass block does not."""
+    if raw is None:
+        return False
+    text = str(raw).strip().lower()
+    if text.startswith("minecraft:"):
+        text = text[len("minecraft:"):]
+    text = text.replace(" ", "_")
+    return text in OCCLUDER_NAMES
+
+
+def _hits_of(ray: dict) -> list[tuple]:
+    raw_hits = ray.get("hits") if isinstance(ray, dict) else None
+    if isinstance(raw_hits, list) and raw_hits:
+        out = []
+        for hit in raw_hits:
+            if not isinstance(hit, dict):
+                continue
+            raw = hit.get("raw")
+            if raw is None:
+                raw = hit.get("label")
+            dist = hit.get("distance")
+            try:
+                dist = None if dist is None else float(dist)
+            except (TypeError, ValueError):
+                dist = None
+            if raw is None and dist is None:
+                continue
+            out.append((raw, dist))
+        if out:
+            return out
+    raw = ray.get("raw")
+    if raw is None:
+        raw = ray.get("label")
+    dist = ray.get("distance")
+    try:
+        dist = None if dist is None else float(dist)
+    except (TypeError, ValueError):
+        dist = None
+    if raw is None and dist is None:
+        return []
+    return [(raw, dist)]
+
+
+def _closer(prev, dist):
+    if dist is None:
+        return prev
+    if prev is None or float(dist) < float(prev):
+        return float(dist)
+    return prev
+
+
+def occluder_at_stop(scene, max_dist: float = 3.0) -> bool:
+    """True when a non-HUD center-third cell hits tallgrass or double_plant within max_dist."""
+    if hasattr(scene, "occluder"):
+        occ = scene.occluder
+        dist = scene.patch_dist
+        ignore = scene.ignore
+    else:
+        data = scene or {}
+        occ = data.get("occluder")
+        dist = data.get("patch_dist")
+        ignore = data.get("ignore")
+    if not occ or not occ[0]:
+        return False
+    n_h = len(occ)
+    n_w = len(occ[0])
+    for i in range(n_h):
+        for j in range(n_w):
+            if column_direction(j, n_w) != "center":
+                continue
+            if ignore and i < len(ignore) and j < len(ignore[i]) and ignore[i][j]:
+                continue
+            try:
+                marked = float(occ[i][j]) >= 0.5
+            except (TypeError, ValueError):
+                marked = False
+            if not marked:
+                continue
+            cell = None if dist is None or i >= len(dist) or j >= len(dist[i]) else dist[i][j]
+            try:
+                cell = None if cell is None else float(cell)
+            except (TypeError, ValueError):
+                cell = None
+            if cell is not None and cell <= float(max_dist):
+                return True
+    return False
 
 
 def resolve_label(raw, aliases: dict, objects: list[str]) -> str | None:
@@ -181,16 +273,28 @@ def scene_state_from_obs(obs: dict, cfg: dict) -> SceneState:
     mid = float((cfg.get("distance_bins") or {}).get("mid", 10))
     present = {name: [[0.0 for _ in range(n_w)] for _ in range(n_h)] for name in objects}
     dist = {name: [[None for _ in range(n_w)] for _ in range(n_h)] for name in objects}
+    occluder = [[0.0 for _ in range(n_w)] for _ in range(n_h)]
+    patch_dist = [[None for _ in range(n_w)] for _ in range(n_h)]
+    by_class = {name: [[None for _ in range(n_w)] for _ in range(n_h)] for name in objects}
     ignored = patch_ignore(int(height), int(width), n_h, n_w, cfg.get("camera_calib") or {})
     rays = lookup(obs, keys.get("aligned_rays"), []) or []
     for ray in rays:
-        name = resolve_label(ray.get("label"), aliases, objects)
-        if name is None:
-            continue
         i, j = int(ray["row"]), int(ray["col"])
         if not (0 <= i < n_h and 0 <= j < n_w):
             continue
+        for raw, hit_dist in _hits_of(ray):
+            if is_occluder_name(raw):
+                occluder[i][j] = 1.0
+            if hit_dist is None:
+                continue
+            patch_dist[i][j] = _closer(patch_dist[i][j], hit_dist)
+            hit_name = resolve_label(raw, aliases, objects)
+            if hit_name is not None:
+                by_class[hit_name][i][j] = _closer(by_class[hit_name][i][j], hit_dist)
         if ignored[i][j]:
+            continue
+        name = resolve_label(ray.get("label"), aliases, objects)
+        if name is None:
             continue
         present[name][i][j] = 1.0
         dist[name][i][j] = distance_bin(float(ray.get("distance", mid + 1)), near, mid)
@@ -210,4 +314,7 @@ def scene_state_from_obs(obs: dict, cfg: dict) -> SceneState:
         unknown=unknown,
         ignore=ignored,
         patches=present,
+        occluder=occluder,
+        patch_dist=patch_dist,
+        patch_dist_by_class=by_class,
     )
