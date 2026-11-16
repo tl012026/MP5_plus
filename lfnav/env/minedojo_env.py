@@ -166,11 +166,11 @@ def ray_hits(block_name, block_distance, entity_name, entity_distance, miss_name
     if not _is_miss(block_name, miss_names):
         dist = _distance(block_distance)
         if dist is not None:
-            hits.append({"raw": ray_raw(block_name), "distance": dist})
+            hits.append({"raw": ray_raw(block_name), "distance": dist, "kind": "block"})
     if not _is_miss(entity_name, miss_names):
         dist = _distance(entity_distance)
         if dist is not None:
-            hits.append({"raw": ray_raw(entity_name), "distance": dist})
+            hits.append({"raw": ray_raw(entity_name), "distance": dist, "kind": "entity"})
     hits.sort(key=lambda hit: hit["distance"])
     return hits
 
@@ -208,7 +208,7 @@ def peaceful_command_sent(meta: dict | None) -> bool:
 
 def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
     """Turn MineDojo's parallel ray arrays into aligned and wide lfnav rays."""
-    from lfnav.gt.scene_state import resolve_label
+    from lfnav.gt.scene_state import resolve_label, split_ray_hits
 
     fields = ((cfg.get("obs_keys") or {}).get("ray_fields") or {})
     miss_names = {str(name).strip().lower() for name in (fields.get("miss_names") or ["", "air", "null", "none"])}
@@ -246,8 +246,10 @@ def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
     if n_sub <= 1:
         for offset, (row, col) in enumerate(cells):
             label, dist, raw, hits = one(start + offset)
+            visible, occluded = split_ray_hits(hits)
             aligned.append({
                 "row": row, "col": col, "label": label, "distance": dist, "raw": raw, "hits": hits,
+                "visible_hits": visible, "occluded_hits": occluded,
             })
         if stop != start + len(cells):
             raise RuntimeError("aligned ray span does not match the patch cells")
@@ -261,8 +263,13 @@ def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
             closest = (None, None, None)
             unlabeled = (None, None)
             along = []
+            visible_all = []
+            occluded_all = []
             for s in range(per):
                 label, dist, raw, hits = one(start + cell_i * per + s)
+                visible, occluded = split_ray_hits(hits)
+                visible_all.extend(visible)
+                occluded_all.extend(occluded)
                 along.extend(hits)
                 if dist is None:
                     continue
@@ -279,11 +286,13 @@ def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
                 aligned.append({
                     "row": row, "col": col,
                     "label": None, "distance": unlabeled[1], "raw": unlabeled[0], "hits": along,
+                    "visible_hits": visible_all, "occluded_hits": occluded_all,
                 })
                 continue
             primary, pdist, praw = closest
             aligned.append({
                 "row": row, "col": col, "label": primary, "distance": pdist, "raw": praw, "hits": along,
+                "visible_hits": visible_all, "occluded_hits": occluded_all,
             })
             for name, (dist, raw) in by_obj.items():
                 if name != primary:
@@ -298,6 +307,7 @@ def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
     w0, _w1 = plan["wide"]
     for offset, (pitch, yaw) in enumerate(plan["wide_angles_deg"]):
         label, dist, raw, hits = one(w0 + offset)
+        visible, occluded = split_ray_hits(hits)
         wide.append({
             "pitch": pitch,
             "yaw": yaw,
@@ -306,6 +316,8 @@ def convert_rays(rays: dict, plan: dict, cfg: dict) -> dict:
             "distance": dist,
             "raw": raw,
             "hits": hits,
+            "visible_hits": visible,
+            "occluded_hits": occluded,
         })
     return {"aligned": aligned, "wide": wide}
 

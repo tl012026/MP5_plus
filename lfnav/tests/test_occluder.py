@@ -12,69 +12,120 @@ torch.set_num_threads(4)
 
 from lfnav.config import load_config
 from lfnav.data.collect_demos import apply_difficulty_max_steps
-from lfnav.env.fake import FakeMineDojoEnv
-from lfnav.gt.judge import judge_episode
+from lfnav.env.minedojo_env import convert_rays
 from lfnav.gt.scene_state import is_occluder_name, occluder_at_stop, scene_state_from_obs
 from lfnav.policy.c2nav import patch_targets, vis_labels
 from lfnav.policy.train_c2nav import animal_occluder_supervision, nav_loss, occluder_frac_of
-from lfnav.types import TaskSpec
 
 
 class OccluderRayTest(unittest.TestCase):
-    def test_tallgrass_in_front_of_cow_is_ignored_for_animals(self):
+    def _one_cell(self, block_name, block_dist, entity_name, entity_dist):
         cfg = load_config()
-        cfg["aligned_subrays"] = 1
-        self.assertIn("tallgrass", cfg["labels"]["aliases"]["grass"])
-        self.assertNotIn("double_plant", cfg["labels"]["aliases"]["grass"])
-        env = FakeMineDojoEnv(cfg, {
-            "blocks": {(0, 2): "tallgrass", (3, 3): "grass block", (-3, 4): "double_plant"},
-            "entities": [{"name": "cow", "x": 0.0, "z": 5.0, "radius": 0.35}],
-        })
-        obs = env.reset()
-        scene = scene_state_from_obs(obs, cfg)
-        both = None
-        grass_block = None
-        plant = None
-        n_h, n_w = len(scene.occluder), len(scene.occluder[0])
-        for i in range(n_h):
-            for j in range(n_w):
-                cow_d = scene.patch_dist_by_class["cow"][i][j]
-                hud = bool(scene.ignore[i][j])
-                if both is None and scene.occluder[i][j] >= 0.5 and cow_d is not None and not hud:
-                    both = (i, j, cow_d)
-                if grass_block is None and scene.patch_dist_by_class["grass"][i][j] is not None and scene.occluder[i][j] < 0.5:
-                    grass_block = (i, j)
-                if plant is None and scene.occluder[i][j] >= 0.5 and scene.patch_dist_by_class["grass"][i][j] is None:
-                    plant = (i, j)
-        self.assertIsNotNone(both)
-        i, j, cow_d = both
-        self.assertLess(scene.patch_dist[i][j], cow_d)
-        self.assertGreaterEqual(scene.patches["grass"][i][j], 0.5)
-        self.assertLess(scene.patches["cow"][i][j], 0.5)
-        self.assertIsNotNone(grass_block)
-        self.assertIsNotNone(plant)
-        self.assertFalse(is_occluder_name("grass block"))
-        self.assertTrue(is_occluder_name("double_plant"))
+        plan = {
+            "aligned": (0, 1),
+            "wide": (1, 1),
+            "rows_cols": [(0, 0)],
+            "wide_angles_deg": [],
+            "subrays": 1,
+        }
+        rays = {
+            "block_name": [block_name],
+            "block_distance": [block_dist],
+            "entity_name": [entity_name],
+            "entity_distance": [entity_dist],
+        }
+        converted = convert_rays(rays, plan, cfg)
+        key = (cfg.get("obs_keys") or {}).get("aligned_rays") or "lfnav_rays"
+        scene = scene_state_from_obs({key: converted["aligned"]}, cfg)
         data = scene.to_dict()
         objects = list(cfg["labels"]["objects"])
+        n_h, n_w = len(scene.occluder), len(scene.occluder[0])
         present, log_d, ignore = patch_targets(data, objects, 1, (n_h, n_w))
         vis, vis_ig = vis_labels(present, ignore)
         mask, vis2, ig2 = animal_occluder_supervision(
             data, objects, present, ignore, vis, vis_ig, occluder_frac_of(cfg),
         )
         cow = objects.index("cow")
-        grass = objects.index("grass")
-        self.assertGreaterEqual(float(mask[cow, i, j]), 0.5)
-        self.assertLess(float(mask[grass, i, j]), 0.5)
-        self.assertAlmostEqual(float(log_d[cow, i, j]), math.log(cow_d), places=4)
-        self.assertAlmostEqual(float(log_d[grass, i, j]), math.log(scene.patch_dist[i][j]), places=4)
-        self.assertEqual(float(vis2[cow]), 1.0)
-        self.assertEqual(float(ig2[cow]), 0.0)
-        clear = np.argwhere(mask[cow] < 0.5)
-        self.assertGreater(len(clear), 0)
-        self.assertTrue(occluder_at_stop(scene, max_dist=3.0))
-        verdict = judge_episode(TaskSpec(id="t", source="", description="", target="cow"), True, 4, scene, 5.0, 4.0, [0], [1])
-        self.assertNotIn("occluder_at_stop", verdict)
+        return {
+            "cfg": cfg,
+            "ray": converted["aligned"][0],
+            "scene": scene,
+            "objects": objects,
+            "cow": cow,
+            "present": present,
+            "log_d": log_d,
+            "mask": mask,
+            "vis": vis2,
+            "vis_ig": ig2,
+        }
+
+    def test_tallgrass_hides_cow(self):
+        out = self._one_cell("tallgrass", 1.5, "cow", 2.5)
+        ray = out["ray"]
+        cow = out["cow"]
+        self.assertEqual([(hit["raw"], hit["distance"]) for hit in ray["visible_hits"]], [("tallgrass", 1.5)])
+        self.assertEqual([(hit["raw"], hit["distance"]) for hit in ray["occluded_hits"]], [("cow", 2.5)])
+        self.assertIsNone(out["scene"].patch_dist_by_class["cow"][0][0])
+        self.assertEqual(out["scene"].patch_dist_by_class["grass"][0][0], 1.5)
+        self.assertGreaterEqual(out["scene"].occluded_by_class["cow"][0][0], 0.5)
+        self.assertEqual(float(out["present"][cow, 0, 0]), 0.0)
+        self.assertEqual(float(out["log_d"][cow, 0, 0]), 0.0)
+        self.assertGreaterEqual(float(out["mask"][cow, 0, 0]), 0.5)
+        self.assertEqual(float(out["vis"][cow]), 0.0)
+        self.assertEqual(float(out["vis_ig"][cow]), 1.0)
+        self.assertLess(float(out["mask"][out["objects"].index("grass"), 0, 0]), 0.5)
+        self.assertIn("tallgrass", out["cfg"]["labels"]["aliases"]["grass"])
+        self.assertFalse(is_occluder_name("grass block"))
+
+    def test_solid_block_hides_cow_as_negative(self):
+        out = self._one_cell("dirt", 1.5, "cow", 2.5)
+        ray = out["ray"]
+        cow = out["cow"]
+        self.assertEqual(ray["visible_hits"][0]["raw"], "dirt")
+        self.assertEqual(ray["occluded_hits"], [])
+        self.assertIsNone(out["scene"].patch_dist_by_class["cow"][0][0])
+        self.assertLess(out["scene"].occluded_by_class["cow"][0][0], 0.5)
+        self.assertEqual(float(out["present"][cow, 0, 0]), 0.0)
+        self.assertEqual(float(out["log_d"][cow, 0, 0]), 0.0)
+        self.assertLess(float(out["mask"][cow, 0, 0]), 0.5)
+        self.assertEqual(float(out["vis"][cow]), 0.0)
+        self.assertEqual(float(out["vis_ig"][cow]), 0.0)
+
+    def test_cow_in_front_is_visible(self):
+        out = self._one_cell("air", 9.0, "cow", 2.0)
+        cow = out["cow"]
+        self.assertEqual([(hit["raw"], hit["distance"]) for hit in out["ray"]["visible_hits"]], [("cow", 2.0)])
+        self.assertEqual(out["ray"]["occluded_hits"], [])
+        self.assertEqual(out["scene"].patch_dist_by_class["cow"][0][0], 2.0)
+        self.assertLess(out["scene"].occluded_by_class["cow"][0][0], 0.5)
+        self.assertGreaterEqual(float(out["present"][cow, 0, 0]), 0.5)
+        self.assertAlmostEqual(float(out["log_d"][cow, 0, 0]), math.log(2.0), places=5)
+        self.assertLess(float(out["mask"][cow, 0, 0]), 0.5)
+        self.assertEqual(float(out["vis"][cow]), 1.0)
+        self.assertEqual(float(out["vis_ig"][cow]), 0.0)
+
+    def test_subrays_are_split_then_merged(self):
+        cfg = load_config()
+        plan = {
+            "aligned": (0, 4),
+            "wide": (4, 4),
+            "rows_cols": [(0, 0)],
+            "wide_angles_deg": [],
+            "subrays": 2,
+        }
+        rays = {
+            "block_name": ["tallgrass", "air", "air", "air"],
+            "block_distance": [1.5, 9.0, 9.0, 9.0],
+            "entity_name": ["cow", "cow", "null", "null"],
+            "entity_distance": [4.0, 2.0, 0.0, 0.0],
+        }
+        ray = convert_rays(rays, plan, cfg)["aligned"][0]
+        visible = [(hit["raw"], hit["distance"]) for hit in ray["visible_hits"]]
+        occluded = [(hit["raw"], hit["distance"]) for hit in ray["occluded_hits"]]
+        self.assertIn(("tallgrass", 1.5), visible)
+        self.assertIn(("cow", 2.0), visible)
+        self.assertIn(("cow", 4.0), occluded)
+        self.assertNotIn(("cow", 4.0), visible)
 
     def test_unseen_animal_with_near_occluders_skips_frame_vis(self):
         objects = ["pig", "cow", "sheep", "chicken", "grass"]

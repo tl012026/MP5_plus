@@ -46,6 +46,60 @@ def is_occluder_name(raw) -> bool:
     return text in OCCLUDER_NAMES
 
 
+def split_ray_hits(hits) -> tuple[list, list]:
+    """Sort one subray. The closest hit is visible. An entity behind only occluders is occluded."""
+    cleaned = []
+    for hit in hits or []:
+        if not isinstance(hit, dict):
+            continue
+        raw = hit.get("raw")
+        if raw is None:
+            raw = hit.get("label")
+        dist = hit.get("distance")
+        try:
+            dist_f = None if dist is None else float(dist)
+        except (TypeError, ValueError):
+            dist_f = None
+        if raw is None and dist_f is None:
+            continue
+        item = {"raw": raw, "distance": dist_f}
+        if hit.get("kind") is not None:
+            item["kind"] = hit.get("kind")
+        cleaned.append(item)
+    cleaned.sort(key=lambda item: (item["distance"] is None, float(item["distance"] or 0.0)))
+    if not cleaned:
+        return [], []
+    visible = [dict(cleaned[0])]
+    occluded = []
+    for idx in range(1, len(cleaned)):
+        hit = cleaned[idx]
+        if str(hit.get("kind") or "") != "entity":
+            continue
+        if hit["distance"] is None:
+            continue
+        front = [
+            prev for prev in cleaned[:idx]
+            if prev["distance"] is not None and float(prev["distance"]) < float(hit["distance"])
+        ]
+        if front and all(is_occluder_name(prev.get("raw")) for prev in front):
+            occluded.append(dict(hit))
+    return visible, occluded
+
+
+def _ray_visibility(ray: dict) -> tuple[list, list]:
+    """Use stored per-subray classes when convert_rays wrote them. Otherwise split hits."""
+    if isinstance(ray, dict) and ("visible_hits" in ray or "occluded_hits" in ray):
+        return list(ray.get("visible_hits") or []), list(ray.get("occluded_hits") or [])
+    raw_hits = ray.get("hits") if isinstance(ray, dict) else None
+    if isinstance(raw_hits, list) and raw_hits:
+        return split_ray_hits(raw_hits)
+    raw = ray.get("raw") if isinstance(ray, dict) else None
+    if raw is None and isinstance(ray, dict):
+        raw = ray.get("label")
+    dist = ray.get("distance") if isinstance(ray, dict) else None
+    return split_ray_hits([{"raw": raw, "distance": dist}])
+
+
 def _hits_of(ray: dict) -> list[tuple]:
     raw_hits = ray.get("hits") if isinstance(ray, dict) else None
     if isinstance(raw_hits, list) and raw_hits:
@@ -276,6 +330,7 @@ def scene_state_from_obs(obs: dict, cfg: dict) -> SceneState:
     occluder = [[0.0 for _ in range(n_w)] for _ in range(n_h)]
     patch_dist = [[None for _ in range(n_w)] for _ in range(n_h)]
     by_class = {name: [[None for _ in range(n_w)] for _ in range(n_h)] for name in objects}
+    occluded = {name: [[0.0 for _ in range(n_w)] for _ in range(n_h)] for name in objects}
     ignored = patch_ignore(int(height), int(width), n_h, n_w, cfg.get("camera_calib") or {})
     rays = lookup(obs, keys.get("aligned_rays"), []) or []
     for ray in rays:
@@ -288,9 +343,18 @@ def scene_state_from_obs(obs: dict, cfg: dict) -> SceneState:
             if hit_dist is None:
                 continue
             patch_dist[i][j] = _closer(patch_dist[i][j], hit_dist)
-            hit_name = resolve_label(raw, aliases, objects)
+        visible_hits, occluded_hits = _ray_visibility(ray)
+        for hit in visible_hits:
+            hit_dist = hit.get("distance")
+            if hit_dist is None:
+                continue
+            hit_name = resolve_label(hit.get("raw"), aliases, objects)
             if hit_name is not None:
                 by_class[hit_name][i][j] = _closer(by_class[hit_name][i][j], hit_dist)
+        for hit in occluded_hits:
+            hit_name = resolve_label(hit.get("raw"), aliases, objects)
+            if hit_name is not None:
+                occluded[hit_name][i][j] = 1.0
         if ignored[i][j]:
             continue
         name = resolve_label(ray.get("label"), aliases, objects)
@@ -317,4 +381,5 @@ def scene_state_from_obs(obs: dict, cfg: dict) -> SceneState:
         occluder=occluder,
         patch_dist=patch_dist,
         patch_dist_by_class=by_class,
+        occluded_by_class=occluded,
     )

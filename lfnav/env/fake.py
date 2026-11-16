@@ -10,7 +10,7 @@ import math
 import numpy as np
 
 from lfnav.geom import aligned_subrays_n, patch_grid, ray_directions, subray_grid_from_cfg
-from lfnav.gt.scene_state import biome_id_for_name, is_occluder_name
+from lfnav.gt.scene_state import biome_id_for_name, is_occluder_name, split_ray_hits
 from lfnav.env.minedojo_env import CHAT_WHITELIST, INVALID_CMD, ray_raw
 
 
@@ -286,11 +286,12 @@ class FakeMineDojoEnv:
                 found = self._hits_along(wx, wz, self.max_ray)
                 if not found:
                     continue
-                label, dist = found[0]
+                label, dist = found[0]["raw"], found[0]["distance"]
+                visible, occluded = split_ray_hits(found)
                 hits.append({
                     "row": i, "col": j, "label": label, "distance": dist,
                     "pitch": ry, "raw": ray_raw(label),
-                    "hits": [{"raw": ray_raw(name), "distance": d} for name, d in found],
+                    "hits": found, "visible_hits": visible, "occluded_hits": occluded,
                 })
         return hits
 
@@ -308,14 +309,19 @@ class FakeMineDojoEnv:
                 closest = None
                 pitch = None
                 along = []
+                visible_all = []
+                occluded_all = []
                 for rx, ry, rz in dirs:
                     wx = rz * forward[0] + rx * right[0]
                     wz = rz * forward[1] + rx * right[1]
                     found = self._hits_along(wx, wz, self.max_ray)
                     if not found:
                         continue
+                    visible, occluded = split_ray_hits(found)
+                    visible_all.extend(visible)
+                    occluded_all.extend(occluded)
                     along.extend(found)
-                    label, dist = found[0]
+                    label, dist = found[0]["raw"], found[0]["distance"]
                     raw = ray_raw(label)
                     if label not in by_obj or dist < by_obj[label][0]:
                         by_obj[label] = (dist, raw)
@@ -328,7 +334,7 @@ class FakeMineDojoEnv:
                 hits.append({
                     "row": i, "col": j, "label": primary, "distance": pdist,
                     "pitch": pitch, "raw": praw,
-                    "hits": [{"raw": ray_raw(name), "distance": dist} for name, dist in along],
+                    "hits": along, "visible_hits": visible_all, "occluded_hits": occluded_all,
                 })
                 for name, (dist, raw) in by_obj.items():
                     if name != primary:
@@ -343,15 +349,16 @@ class FakeMineDojoEnv:
             found = self._hits_along(forward[0], forward[1], self.wide_range)
             if not found:
                 continue
-            label, dist = found[0]
+            label, dist = found[0]["raw"], found[0]["distance"]
+            visible, occluded = split_ray_hits(found)
             hits.append({
                 "yaw_offset": deg, "label": label, "distance": dist, "raw": ray_raw(label),
-                "hits": [{"raw": ray_raw(name), "distance": d} for name, d in found],
+                "hits": found, "visible_hits": visible, "occluded_hits": occluded,
             })
         return hits
 
     def _hits_along(self, dx, dz, limit):
-        """Hits along one ray. tallgrass and double_plant do not hide what is behind them."""
+        """Hits along one ray. Occluders stay in the list so a mob behind them is still recorded."""
         norm = math.hypot(dx, dz)
         if norm < 1e-6:
             return []
@@ -369,12 +376,12 @@ class FakeMineDojoEnv:
             if not name:
                 continue
             dist = float(s)
-            blocks.append((name, dist))
+            blocks.append({"raw": ray_raw(name), "distance": dist, "kind": "block"})
             if not is_occluder_name(name):
                 solid_dist = dist
                 break
         limit_dist = float(limit) if solid_dist is None else solid_dist
-        found = [(name, dist) for name, dist in blocks if dist <= limit_dist + 1e-6]
+        found = [hit for hit in blocks if hit["distance"] <= limit_dist + 1e-6]
         for ent in self.entities:
             ex = float(ent["x"]) - self.pos[0]
             ez = float(ent["z"]) - self.pos[2]
@@ -383,15 +390,15 @@ class FakeMineDojoEnv:
                 continue
             perp = abs(ex * dz - ez * dx)
             if perp <= float(ent.get("radius", 0.4)):
-                found.append((ent["name"], float(t)))
-        found.sort(key=lambda item: item[1])
+                found.append({"raw": ray_raw(ent["name"]), "distance": float(t), "kind": "entity"})
+        found.sort(key=lambda item: item["distance"])
         return found
 
     def _march(self, dx, dz, limit):
         found = self._hits_along(dx, dz, limit)
         if not found:
             return None
-        return found[0]
+        return found[0]["raw"], found[0]["distance"]
 
     def distance_to(self, name: str):
         import math as _math

@@ -229,10 +229,93 @@ def _class_hit(dist_grid, non_hud: np.ndarray) -> bool:
     return False
 
 
+def _marked_non_hud(grid, non_hud: np.ndarray) -> bool:
+    if grid is None:
+        return False
+    raw = np.array(grid, dtype=object)
+    if raw.ndim != 2 or raw.shape != non_hud.shape:
+        return False
+    for i in range(raw.shape[0]):
+        for j in range(raw.shape[1]):
+            if not non_hud[i, j]:
+                continue
+            try:
+                marked = float(raw[i, j]) >= 0.5
+            except (TypeError, ValueError):
+                marked = False
+            if marked:
+                return True
+    return False
+
+
+def _binary_grid(grid, shape) -> np.ndarray | None:
+    if grid is None:
+        return None
+    raw = np.array(grid, dtype=object)
+    if raw.ndim != 2 or raw.shape != shape:
+        return None
+    out = np.zeros(shape, np.float32)
+    for i in range(raw.shape[0]):
+        for j in range(raw.shape[1]):
+            try:
+                if float(raw[i, j]) >= 0.5:
+                    out[i, j] = 1.0
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
 def animal_occluder_supervision(scene, objects, present, ignore, vis, vis_ig, frac: float):
-    """Ignore occluded animal cells. Old scenes without occluder are returned unchanged."""
-    if not isinstance(scene, dict) or "occluder" not in scene:
+    """Ignore animal cells hidden by tall grass. Old scenes keep the previous rule."""
+    if not isinstance(scene, dict):
         return None, vis, vis_ig
+    if "occluded_by_class" in scene:
+        return _visible_occluded_supervision(scene, objects, present, ignore, vis, vis_ig)
+    if "occluder" not in scene:
+        return None, vis, vis_ig
+    return _legacy_occluder_supervision(scene, objects, present, ignore, vis, vis_ig, frac)
+
+
+def _visible_occluded_supervision(scene, objects, present, ignore, vis, vis_ig):
+    occluded = scene.get("occluded_by_class")
+    if not isinstance(occluded, dict):
+        return None, vis, vis_ig
+    vis = np.array(vis, np.float32, copy=True)
+    vis_ig = np.array(vis_ig, np.float32, copy=True)
+    sample = next(iter(occluded.values()), None)
+    if sample is None:
+        shape = tuple(int(v) for v in present.shape[1:])
+    else:
+        arr = np.array(sample, dtype=object)
+        shape = tuple(int(v) for v in arr.shape) if arr.ndim == 2 else tuple(int(v) for v in present.shape[1:])
+    hud = np.asarray(scene.get("ignore") if scene.get("ignore") is not None else [], dtype=np.float32)
+    if hud.ndim != 2 or hud.shape != shape:
+        hud = np.zeros(shape, np.float32)
+    non_hud = hud < 0.5
+    by_class = scene.get("patch_dist_by_class")
+    if not isinstance(by_class, dict):
+        by_class = {}
+    animals = set(ANIMAL_CLASSES)
+    mask = np.zeros(present.shape, np.float32)
+    grid = (int(present.shape[1]), int(present.shape[2]))
+    for i, name in enumerate(objects):
+        if str(name) not in animals or i >= vis.shape[0]:
+            continue
+        if _class_hit(by_class.get(name), non_hud):
+            if vis_ig[i] < 0.5:
+                vis[i] = 1.0
+        elif _marked_non_hud(occluded.get(name), non_hud):
+            vis_ig[i] = 1.0
+        native = _binary_grid(occluded.get(name), shape)
+        if native is None:
+            continue
+        pooled = pool_to_grid(native, grid, "max")
+        if pooled.shape == mask[i].shape:
+            mask[i] = (pooled >= 0.5).astype(np.float32)
+    return mask, vis, vis_ig
+
+
+def _legacy_occluder_supervision(scene, objects, present, ignore, vis, vis_ig, frac: float):
     occ = np.asarray(scene.get("occluder"), dtype=np.float32)
     if occ.ndim != 2 or occ.size == 0:
         return None, vis, vis_ig

@@ -68,6 +68,7 @@ class SceneState:
     occluder: list = field(default_factory=list)
     patch_dist: list = field(default_factory=list)
     patch_dist_by_class: dict = field(default_factory=dict)
+    occluded_by_class: dict = field(default_factory=dict)
 
     def object(self, name: str) -> ObjectBelief:
         raw = self.objects.get(name)
@@ -95,6 +96,9 @@ class SceneState:
             "patch_dist_by_class": {
                 name: [list(row) for row in grid] for name, grid in (self.patch_dist_by_class or {}).items()
             },
+            "occluded_by_class": {
+                name: [list(row) for row in grid] for name, grid in (self.occluded_by_class or {}).items()
+            },
         }
 
     @classmethod
@@ -114,6 +118,10 @@ class SceneState:
             patch_dist_by_class={
                 name: [list(row) for row in grid]
                 for name, grid in (data.get("patch_dist_by_class") or {}).items()
+            },
+            occluded_by_class={
+                name: [list(row) for row in grid]
+                for name, grid in (data.get("occluded_by_class") or {}).items()
             },
         )
 

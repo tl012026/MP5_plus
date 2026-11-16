@@ -548,12 +548,13 @@ def patch_targets(scene: dict, objects: list[str], pool: int, grid: tuple[int, i
             dist_p = _finite_dist_map(by_class.get(name))
             pooled, ignore, _unused = pool_gt_to_grid(grid_p, ig, None, grid)
             present[i] = pooled
-            if dist_p is None:
+            if dist_p is None or dist_p.shape != grid_p.shape:
                 log_d[i] = np.where(pooled > 0.5, math.log(8.0), 0.0)
             else:
-                filled = np.where(np.isfinite(dist_p), dist_p, np.inf).astype(np.float32)
+                positive = grid_p > 0.5
+                filled = np.where(np.isfinite(dist_p) & positive, dist_p, np.inf).astype(np.float32)
                 pooled_d = pool_to_grid(filled, grid, GT_POOL_DIST_HOW)
-                known = np.isfinite(pooled_d)
+                known = np.isfinite(pooled_d) & (pooled > 0.5)
                 log_d[i] = np.where(known, np.log(np.maximum(pooled_d, 0.05)), 0.0)
             continue
         dist_p = dist_maps.get(name) if isinstance(dist_maps, dict) else None
