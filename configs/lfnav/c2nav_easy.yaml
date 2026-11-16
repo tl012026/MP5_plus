@@ -34,6 +34,11 @@ c2nav:
   explore_temp: 1.0
   train_a_only: true
   stop_near_tau: 0.5
+  hard_neg:
+    enable: false
+    vis_tau: 0.7
+    max_pred_dist: 8.0
+    weight: 3.0
   init_checkpoint: /scratch/${USER}/lfnav/ckpt/c2nav_easy_r3/epoch_13.pt
   torch_threads: 2
   ckpt_dir: c2nav_easy_r3

@@ -843,6 +843,167 @@ def _mask_unseen_logits(logits, weight):
     return torch.where(valid.unsqueeze(0), logits, fill)
 
 
+def hard_neg_of(cfg: dict | None = None) -> dict:
+    raw = _nav_dict(cfg).get("hard_neg")
+    if raw is None:
+        raw = {}
+    enable = raw.get("enable")
+    vis_tau = raw.get("vis_tau")
+    max_pred_dist = raw.get("max_pred_dist")
+    weight = raw.get("weight")
+    return {
+        "enable": False if enable is None else bool(enable),
+        "vis_tau": 0.7 if vis_tau is None else float(vis_tau),
+        "max_pred_dist": 8.0 if max_pred_dist is None else float(max_pred_dist),
+        "weight": 3.0 if weight is None else float(weight),
+    }
+
+
+def hard_negative_mask(vis_p, pred_dist, gt_vis, vis_ignore, vis_tau: float, max_pred_dist: float) -> np.ndarray:
+    """Hard negative: predicted visible and near, while the class is absent and not ignored."""
+    pred_vis = np.asarray(vis_p, dtype=np.float64)
+    dist = np.asarray(pred_dist, dtype=np.float64)
+    gt = np.asarray(gt_vis, dtype=np.float64)
+    ignored = np.asarray(vis_ignore, dtype=np.float64)
+    return (pred_vis >= float(vis_tau)) & (dist <= float(max_pred_dist)) & (gt < 0.5) & (ignored < 0.5)
+
+
+def _predict_vis_dist(model, rows: list[NavSample], tokens, device, batch_size: int = 16):
+    import torch
+
+    if not rows:
+        return np.zeros((0, 0), np.float64), np.zeros((0, 0), np.float64)
+    k = int(np.asarray(rows[0].present).shape[0])
+    vis_p = np.zeros((len(rows), k), np.float64)
+    dist = np.zeros((len(rows), k), np.float64)
+    was_training = bool(model.training)
+    model.eval()
+    with torch.no_grad():
+        for start in range(0, len(rows), int(batch_size)):
+            chunk = rows[start : start + int(batch_size)]
+            batch = _to_torch(collate(chunk, tokens, False, random.Random(0)), device)
+            pred = model.perception(batch["tokens"])
+            vis_p[start : start + len(chunk)] = torch.sigmoid(pred["vis_logit"]).detach().cpu().numpy()
+            log_d = pred["target_log_dist"].detach().clamp(-20.0, 20.0)
+            dist[start : start + len(chunk)] = torch.exp(log_d).cpu().numpy()
+    if was_training:
+        model.train()
+    return vis_p, dist
+
+
+def mine_hard_negatives(model, rows: list[NavSample], tokens, device, objects: list[str], vis_tau: float, max_pred_dist: float) -> list[dict]:
+    vis_p, dist = _predict_vis_dist(model, rows, tokens, device)
+    found = []
+    k = len(objects)
+    for i, row in enumerate(rows):
+        gt, ignored = _row_vis(row, k)
+        mask = hard_negative_mask(vis_p[i], dist[i], gt, ignored, vis_tau, max_pred_dist)
+        for c in np.flatnonzero(mask):
+            found.append({
+                "feat_store": int(row.feat_store),
+                "row": int(row.row),
+                "class_index": int(c),
+                "class_name": str(objects[int(c)]),
+                "episode_id": str(row.episode_id),
+                "vis_p": float(vis_p[i, int(c)]),
+                "pred_dist": float(dist[i, int(c)]),
+            })
+    return found
+
+
+def hard_neg_counts(found: list[dict], objects: list[str]) -> dict:
+    counts = {str(name): 0 for name in objects}
+    for rec in found:
+        name = str(rec["class_name"])
+        counts[name] = counts.get(name, 0) + 1
+    return counts
+
+
+def hard_neg_weights(rows: list[NavSample], keys: set, weight: float, n_obj: int) -> np.ndarray:
+    out = np.ones((len(rows), int(n_obj)), np.float32)
+    scale = float(weight)
+    for i, row in enumerate(rows):
+        for c in range(int(n_obj)):
+            if (int(row.feat_store), int(row.row), int(c)) in keys:
+                out[i, c] = scale
+    return out
+
+
+def hard_neg_epoch_report(model, rows: list[NavSample], tokens, device, objects: list[str], hard_val: list[dict], report_tau: float = 0.7) -> dict:
+    k = len(objects)
+    vis_p, dist = _predict_vis_dist(model, rows, tokens, device)
+    loc = {(int(row.feat_store), int(row.row)): i for i, row in enumerate(rows)}
+    fpr = {}
+    recall = {}
+    hard_fpr = {}
+    tp = fp = fn = 0
+    for c, name in enumerate(objects):
+        if not rows:
+            fpr[str(name)] = {"value": None, "n": 0}
+            recall[str(name)] = {"value": None, "n": 0}
+            hard_fpr[str(name)] = {"value": None, "n": 0}
+            continue
+        gt = np.stack([_row_vis(row, k)[0][c] for row in rows])
+        ignored = np.stack([_row_vis(row, k)[1][c] for row in rows])
+        keep = ignored < 0.5
+        pred = vis_p[:, c] >= float(report_tau)
+        neg = keep & (gt < 0.5)
+        pos = keep & (gt >= 0.5)
+        n_neg = int(neg.sum())
+        n_pos = int(pos.sum())
+        fpr[str(name)] = {
+            "value": None if n_neg == 0 else float(pred[neg].mean()),
+            "n": n_neg,
+        }
+        recall[str(name)] = {
+            "value": None if n_pos == 0 else float(pred[pos].mean()),
+            "n": n_pos,
+        }
+        tp += int((pred & pos).sum())
+        fp += int((pred & neg).sum())
+        fn += int((~pred & pos).sum())
+        hits = []
+        for rec in hard_val:
+            if int(rec["class_index"]) != int(c):
+                continue
+            i = loc.get((int(rec["feat_store"]), int(rec["row"])))
+            if i is None:
+                continue
+            hits.append(bool(vis_p[i, c] >= float(report_tau)))
+        hard_fpr[str(name)] = {
+            "value": None if not hits else float(np.mean(np.asarray(hits, np.float64))),
+            "n": len(hits),
+        }
+    n_pos_all = tp + fn
+    errs = []
+    for i, row in enumerate(rows):
+        if float(row.target_dist_mask) <= 0.5:
+            continue
+        # Compare in log space so a label of exactly 3 blocks stays inside the bin.
+        if float(row.target_log_dist) > math.log(3.0) + 1e-5:
+            continue
+        true = math.exp(float(row.target_log_dist))
+        t_i = int(row.target_index)
+        if t_i < 0 or t_i >= dist.shape[1]:
+            continue
+        errs.append(abs(float(dist[i, t_i]) - true))
+    return {
+        "tau": float(report_tau),
+        "fpr": fpr,
+        "hard_fpr": hard_fpr,
+        "recall": recall,
+        "recall_all": {
+            "value": None if n_pos_all == 0 else tp / float(n_pos_all),
+            "n": n_pos_all,
+            "fp": fp,
+        },
+        "dist_le_3_median": {
+            "median": None if not errs else float(np.median(np.asarray(errs, np.float64))),
+            "n": len(errs),
+        },
+    }
+
+
 def nav_loss(out, batch, weights, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth: float, vis_w=None, dist_bin_w=None, skip_c: bool = False):
     import torch
     from torch.nn import functional as F
@@ -864,6 +1025,9 @@ def nav_loss(out, batch, weights, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth
         bce = F.binary_cross_entropy_with_logits(present, y, reduction="none")
         pw = pos_w.view(1, k, 1, 1)
         bce = torch.where(y > 0.5, bce * pw, bce)
+        hn = batch.get("hard_neg_w")
+        if hn is not None:
+            bce = bce * hn.to(dtype=bce.dtype).view(b, k, 1, 1)
         loss_p = (bce * valid).sum() / valid.sum().clamp_min(1.0)
         mask_d = (y > 0.5) & (valid > 0.5)
         if mask_d.any():
@@ -885,6 +1049,8 @@ def nav_loss(out, batch, weights, pos_w, mode_w, turn_w, fwd_w, stop_pos, smooth
         if vis_w is None:
             vis_w = torch.ones(k, device=present.device, dtype=present.dtype)
         bce_v = torch.where(y_vis > 0.5, bce_v * vis_w.view(1, k), bce_v)
+        if hn is not None:
+            bce_v = bce_v * hn.to(dtype=bce_v.dtype)
         loss_vis = (bce_v * valid_v).sum() / valid_v.sum().clamp_min(1.0)
         y_bin = batch.get("dist_bin")
         m_bin = batch.get("dist_bin_mask")
@@ -1704,6 +1870,35 @@ def train_loop(
     use_flip = bool(aug.get("flip"))
     best_pack = None
     skip_a = bool(c_only)
+    hard_cfg = hard_neg_of(cfg)
+    hard_on = bool(train_a_only and hard_cfg["enable"])
+    hard_keys: set = set()
+    val_hard: list[dict] = []
+    report_rows = list(val) + list(extra_val)
+    if hard_on:
+        objects = list(spec["objects"])
+        found = mine_hard_negatives(
+            model, list(train) + list(extra_train), token_arg, device, objects,
+            hard_cfg["vis_tau"], hard_cfg["max_pred_dist"],
+        )
+        val_hard = mine_hard_negatives(
+            model, report_rows, token_arg, device, objects,
+            hard_cfg["vis_tau"], hard_cfg["max_pred_dist"],
+        )
+        hard_keys = {(int(rec["feat_store"]), int(rec["row"]), int(rec["class_index"])) for rec in found}
+        train_counts = hard_neg_counts(found, objects)
+        val_counts = hard_neg_counts(val_hard, objects)
+        print("c2nav hard_neg train " + json.dumps(train_counts), flush=True)
+        print("c2nav hard_neg val " + json.dumps(val_counts), flush=True)
+        atomic_write_json(out / "hard_neg.json", {
+            "train": found,
+            "val": val_hard,
+            "train_counts": train_counts,
+            "val_counts": val_counts,
+            "vis_tau": hard_cfg["vis_tau"],
+            "max_pred_dist": hard_cfg["max_pred_dist"],
+            "weight": hard_cfg["weight"],
+        })
     for epoch in range(start_epoch, epochs + 1):
         model.train()
         epoch_rows = list(train)
@@ -1721,7 +1916,10 @@ def train_loop(
         n_b = 0
         for start in range(0, len(order), batch_size):
             chunk = [epoch_rows[i] for i in order[start : start + batch_size]]
-            batch = _to_torch(collate(chunk, token_arg, use_flip, rng), device, bearings=bearings)
+            batch_np = collate(chunk, token_arg, use_flip, rng)
+            if hard_on:
+                batch_np["hard_neg_w"] = hard_neg_weights(chunk, hard_keys, hard_cfg["weight"], len(spec["objects"]))
+            batch = _to_torch(batch_np, device, bearings=bearings)
             opt.zero_grad()
             out_b = heads_out(model, batch, skip_a=skip_a)
             loss, parts = nav_loss(
@@ -1769,6 +1967,11 @@ def train_loop(
         metrics["loss_parts"] = avg_parts
         brief = _brief_val(metrics, extra_metrics)
         print(f"c2nav val epoch {epoch} {json.dumps(brief, default=str)}", flush=True)
+        if hard_on:
+            report = hard_neg_epoch_report(
+                model, report_rows, token_arg, device, list(spec["objects"]), val_hard, report_tau=0.7,
+            )
+            print(f"c2nav hard_neg epoch {epoch} {json.dumps(report, default=str)}", flush=True)
         vis_extra = None if extra_metrics is None else extra_metrics.get("vis_auc")
         vis_extra_v = vis_extra.get("value") if isinstance(vis_extra, dict) else vis_extra
         print(f"a_extra val vis_auc={vis_extra_v}", flush=True)
