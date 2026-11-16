@@ -17,6 +17,7 @@ from lfnav.policy.c2nav import (
     OBS_GT,
     STOP_GATE_BELOW_TAU,
     STOP_GATE_CONDITIONS,
+    STOP_GATE_CONFIRMING,
     STOP_GATE_NOT_VISIBLE,
     STOP_GATE_STOP,
     STOP_GATE_TOO_FAR,
@@ -34,13 +35,22 @@ from lfnav.policy.c2nav import (
     sample_turn_index,
     softmax_turn,
     spec_from_cfg,
+    stop_confirm_of,
     stop_max_dist_of,
     stop_policy_of,
     stop_requires_visible_of,
     top_k_turn_probs,
 )
 from lfnav.policy.state_tracker import STEPS_NORM, TargetObs, replay
-from lfnav.policy.c2nav_labels import FORWARD_BINS, MODE_NAMES, N_TURN, TURN_BINS, invert_waypoint, turn_center, turn_index
+from lfnav.policy.c2nav_labels import (
+    FORWARD_BINS,
+    MODE_NAMES,
+    N_TURN,
+    TURN_BINS,
+    invert_waypoint,
+    turn_center,
+    turn_index,
+)
 from lfnav.types import PolicyInput
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -406,6 +416,95 @@ class StopGateTest(unittest.TestCase):
         self.assertEqual(out.info.get("stop_gate"), STOP_GATE_CONDITIONS)
         self.assertTrue(out.info.get("visible"))
         self.assertEqual(int(agent.n_stop_blocked), 1)
+
+
+def _watch_c_action(agent):
+    import torch
+
+    real = agent.model.policy
+
+    def wrapped(geom, s_vec, cond):
+        out = real(geom, s_vec, cond)
+        agent._seen_turn = int(torch.argmax(out["turn"][0]).item())
+        agent._seen_fwd = int(torch.argmax(out["forward"][0]).item())
+        return out
+
+    agent.model.policy = wrapped
+
+
+class StopConfirmTest(unittest.TestCase):
+    def _agent(self, n):
+        agent = _gt_agent({"c2nav": {"obs_source": "gt", "stop_confirm": n, "explore_sample": False}})
+        _force_p_stop(agent, 0.9)
+        _watch_c_action(agent)
+        return agent
+
+    def _passed(self, agent, reset):
+        return _act(agent, visible=True, match=FOUND_MATCH, dist_num=2.5, reset=reset)
+
+    def _blocked(self, agent, reset):
+        return _act(agent, visible=False, match=FOUND_MATCH, dist_num=2.5, reset=reset)
+
+    def _c_chunk(self, agent, out):
+        expected = invert_waypoint(agent._seen_turn, agent._seen_fwd)[:12] or ["noop"]
+        self.assertEqual(list(out.action_chunk), list(expected))
+        self.assertEqual(int(out.info["turn_index"]), int(agent._seen_turn))
+
+    def test_two_passes_stop(self):
+        agent = self._agent(2)
+        first = self._passed(agent, reset=True)
+        self.assertFalse(first.stop)
+        self.assertEqual(first.info.get("stop_gate"), STOP_GATE_CONFIRMING)
+        self.assertEqual(int(agent.stop_streak), 1)
+        self._c_chunk(agent, first)
+        second = self._passed(agent, reset=False)
+        self.assertTrue(second.stop)
+        self.assertEqual(second.info.get("stop_gate"), STOP_GATE_STOP)
+        self.assertEqual(int(agent.stop_streak), 2)
+
+    def test_pass_block_pass_does_not_stop(self):
+        agent = self._agent(2)
+        first = self._passed(agent, reset=True)
+        self.assertFalse(first.stop)
+        self.assertEqual(first.info.get("stop_gate"), STOP_GATE_CONFIRMING)
+        blocked = self._blocked(agent, reset=False)
+        self.assertFalse(blocked.stop)
+        self.assertEqual(blocked.info.get("stop_gate"), STOP_GATE_NOT_VISIBLE)
+        self.assertEqual(int(agent.stop_streak), 0)
+        again = self._passed(agent, reset=False)
+        self.assertFalse(again.stop)
+        self.assertEqual(again.info.get("stop_gate"), STOP_GATE_CONFIRMING)
+        self.assertEqual(int(agent.stop_streak), 1)
+        self._c_chunk(agent, again)
+
+    def test_pass_then_block_clears_streak(self):
+        agent = self._agent(3)
+        first = self._passed(agent, reset=True)
+        self.assertEqual(int(agent.stop_streak), 1)
+        self.assertEqual(first.info.get("stop_gate"), STOP_GATE_CONFIRMING)
+        blocked = self._blocked(agent, reset=False)
+        self.assertFalse(blocked.stop)
+        self.assertEqual(int(agent.stop_streak), 0)
+        self.assertEqual(blocked.info.get("stop_gate"), STOP_GATE_NOT_VISIBLE)
+
+    def test_stop_confirm_one_matches_previous_behavior(self):
+        self.assertEqual(int(stop_confirm_of({})), 1)
+        self.assertEqual(int(stop_confirm_of({"c2nav": {}})), 1)
+        self.assertEqual(int(stop_confirm_of({"c2nav": {"stop_confirm": None}})), 1)
+        self.assertEqual(int(stop_confirm_of({"c2nav": {"stop_confirm": 0}})), 0)
+        agent = self._agent(1)
+        self.assertEqual(int(agent.stop_confirm), 1)
+        default = _gt_agent()
+        self.assertEqual(int(default.stop_confirm), 1)
+        out = self._passed(agent, reset=True)
+        self.assertTrue(out.stop)
+        self.assertEqual(out.info.get("stop_gate"), STOP_GATE_STOP)
+        self.assertEqual(int(agent.stop_streak), 1)
+        blocked = self._blocked(agent, reset=False)
+        self.assertFalse(blocked.stop)
+        self.assertTrue(blocked.action_chunk)
+        self.assertEqual(blocked.info.get("stop_gate"), STOP_GATE_NOT_VISIBLE)
+        self.assertEqual(int(agent.stop_streak), 0)
 
 
 PEAKED_TURN = np.asarray([0.0, 1.0, 0.5, 2.0, 0.1, 0.2, 3.0, 0.0, 0.0, 0.4], np.float64)

@@ -25,6 +25,7 @@ OBS_PRED = "pred"
 OBS_GT = "gt"
 DECISION_ACTION_CAP = 12
 STOP_GATE_STOP = "stop"
+STOP_GATE_CONFIRMING = "confirming"
 STOP_GATE_NOT_VISIBLE = "blocked_not_visible"
 STOP_GATE_CONDITIONS = "blocked_conditions"
 STOP_GATE_TOO_FAR = "blocked_too_far"
@@ -364,6 +365,16 @@ def ckpt_dir_of(cfg: dict | None = None) -> str:
     if raw is None:
         return "c2nav_easy"
     return str(raw)
+
+
+def stop_confirm_of(cfg: dict | None = None) -> int:
+    nav = (cfg or {}).get("c2nav")
+    if nav is None:
+        nav = {}
+    raw = nav.get("stop_confirm")
+    if raw is None:
+        return 1
+    return int(raw)
 
 
 def stop_max_dist_of(cfg: dict | None = None) -> float:
@@ -1212,8 +1223,10 @@ class C2NavAgent(Policy):
         self.obs_source = obs_source_of(self.cfg)
         self.stop_requires_visible = stop_requires_visible_of(self.cfg)
         self.stop_max_dist = stop_max_dist_of(self.cfg)
+        self.stop_confirm = stop_confirm_of(self.cfg)
         self.stop_policy = stop_policy_of(self.cfg)
         self.stop_near_tau = stop_near_tau_of(self.cfg)
+        self.stop_streak = 0
         self.explore_sample = explore_sample_of(self.cfg)
         self.explore_temp = explore_temp_of(self.cfg)
         self._episode_seed = None
@@ -1305,6 +1318,7 @@ class C2NavAgent(Policy):
         self.n_stop_blocked_not_visible = 0
         self.n_stop_blocked_conditions = 0
         self.n_stop_blocked_too_far = 0
+        self.stop_streak = 0
         self.encode_calls = 0
         self.time_encode = 0.0
         self.time_policy = 0.0
@@ -1593,6 +1607,13 @@ class C2NavAgent(Policy):
         elif gate == STOP_GATE_TOO_FAR:
             self.n_stop_blocked_too_far += 1
             self.n_stop_blocked += 1
+        if gate == STOP_GATE_STOP:
+            self.stop_streak += 1
+        else:
+            self.stop_streak = 0
+        if gate == STOP_GATE_STOP and self.stop_streak < int(self.stop_confirm):
+            info["stop_gate"] = STOP_GATE_CONFIRMING
+            gate = STOP_GATE_CONFIRMING
         self.last_info = info
         self.time_policy += time.perf_counter() - t_pol
         if gate == STOP_GATE_STOP:

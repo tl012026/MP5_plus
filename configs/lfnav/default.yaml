@@ -114,6 +114,7 @@ c2nav:
   explore_temp: 1.0
   train_a_only: false
   stop_near_tau: 0.5
+  stop_confirm: 1
   hard_neg:
     enable: false
     vis_tau: 0.7
