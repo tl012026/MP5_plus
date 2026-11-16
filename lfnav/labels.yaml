@@ -37,10 +37,9 @@ distances:
 # Probe voxels used "grass block" and "dirt". Rays used "air" / "null" for misses.
 # log/leaves/wood are trees. grass block/tallgrass/grass are grass.
 # flowing water and water are water. dirt is not in the vocabulary.
-occluder_names:
-  - tallgrass
-  - tall_grass
-  - double_plant
+# MineDojo ray names are lowercase display names: "grass" = tallgrass/fern, "plant" = double_plant
+# (double tallgrass, sunflower, lilac...), "flower" = small flowers, "grass block" = ground (NOT an occluder).
+occluder_names: [grass, plant, flower, dead bush, tallgrass, tall grass, double_plant]
 aliases:
   tree: [log, leaves, wood]
   grass: [grass block, tallgrass, tall grass, grass]

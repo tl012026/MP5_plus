@@ -151,6 +151,14 @@ class OccluderRayTest(unittest.TestCase):
         again = SceneState.from_dict(scene.to_dict())
         self.assertEqual(again.hit_names, scene.hit_names)
 
+    def test_minedojo_display_names_in_labels(self):
+        cfg = load_config()
+        names = occluder_names_of(cfg)
+        for raw in ("grass", "plant", "flower", "dead bush", "tallgrass", "tall grass", "double_plant"):
+            self.assertTrue(is_occluder_name(raw, names), raw)
+        self.assertFalse(is_occluder_name("grass block", names))
+        self.assertFalse(is_occluder_name("minecraft:Grass Block", names))
+
     def test_custom_occluder_names(self):
         self.assertTrue(is_occluder_name("minecraft:Tall Grass", ("tall_grass",)))
         self.assertFalse(is_occluder_name("tallgrass", ("dirt",)))
