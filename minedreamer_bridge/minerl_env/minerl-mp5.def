@@ -1,0 +1,65 @@
+BootStrap: docker
+From: ubuntu:20.04
+
+# nvcr.io/nvidia/cudagl images are no longer pullable (access denied, 2026-11-16); plain ubuntu:20.04 +
+# libglvnd is enough because torch wheels bundle CUDA and --nv injects the driver (EGL for VirtualGL).
+# Trimmed from Zhoues/minerl-apptainer base-vgl-env.def (the prebuilt base-vgl-env.sif is gone).
+# Kept: Xvfb, VirtualGL 3.1, OpenJDK 8, Python 3.10, PyTorch 1.12.1 (cu113),
+#       Zhoues/minerl (MineRL 1.0 + chat), gym@9180d12, Zhoues/MineCLIP, gym==0.19 gym3 attrs opencv.
+# Dropped: desktop apps, libreoffice, VA-API ppa deb. Changed: Miniforge instead of Miniconda
+#          (no channel ToS prompt), torch from pip wheels, LLM libraries pinned to spring-2024
+#          versions (MineDreamer release) instead of -U.
+
+%post
+    set -eux
+    export DEBIAN_FRONTEND=noninteractive
+    true
+    apt-get update
+    apt-get install --no-install-recommends -y locales
+    locale-gen en_US.UTF-8
+    apt-get install --no-install-recommends -y \
+        build-essential ca-certificates curl wget git file bzip2 gzip xz-utils zip unzip zstd jq \
+        xvfb x11-utils x11-xserver-utils xserver-xorg-core mesa-utils libgl1-mesa-dri libglu1-mesa libglvnd0 libegl1 libgles2 libopengl0 \
+        libgtk-3-bin libpulse0 libxdamage1 libjpeg-dev zlib1g-dev libxml2-dev \
+        openjdk-8-jdk ffmpeg netcat iproute2
+    update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
+
+    VGL=3.1
+    curl -fsSL -o /tmp/vgl.deb "https://sourceforge.net/projects/virtualgl/files/${VGL}/virtualgl_${VGL}_amd64.deb/download" \
+        && apt-get install -y --no-install-recommends /tmp/vgl.deb || echo "VirtualGL skipped"
+    rm -f /tmp/vgl.deb
+    rm -rf /var/lib/apt/lists/*
+
+    curl -fsSL -o /tmp/miniforge.sh https://github.com/conda-forge/miniforge/releases/download/24.3.0-0/Miniforge3-24.3.0-0-Linux-x86_64.sh
+    bash /tmp/miniforge.sh -b -p /opt/conda
+    rm /tmp/miniforge.sh
+    . /opt/conda/etc/profile.d/conda.sh
+    conda create -y -n minerl python=3.10
+    conda activate minerl
+
+    pip install --no-cache-dir "pip<24.1" "setuptools==65.5.0" "wheel==0.38.4"
+    pip install --no-cache-dir torch==1.12.1+cu113 torchvision==0.13.1+cu113 torchaudio==0.12.1 \
+        --extra-index-url https://download.pytorch.org/whl/cu113
+
+    # MineRL itself is NOT built here: its gradle build is installed afterwards into
+    # /scratch/jl16678/env/minerl/site (writable, resumable). See ../install_minerl.sh.
+    pip install --no-cache-dir "numpy<1.24" "gym>=0.19,<=0.23.1" "opencv-python<4.9" setuptools==65.5.0 \
+        tqdm requests ipython lxml psutil Pyro4 getch coloredlogs pillow dill daemoniker \
+        xmltodict==0.12.0 inflection jinja2 imagehash flaky pyglet
+
+    pip install --no-cache-dir git+https://github.com/openai/gym.git@9180d12e1b66e7e2a1a622614f787a6ec147ac40
+    pip install --no-cache-dir git+https://github.com/Zhoues/MineCLIP
+    pip install --no-cache-dir gym==0.19 gym3 attrs opencv-python
+
+    pip install --no-cache-dir pyyaml gdown tqdm "accelerate==0.29.3" "wandb==0.16.6" ipdb chardet "torch==1.12.1+cu113" --extra-index-url https://download.pytorch.org/whl/cu113 \
+        "openai==1.23.6" "langchain==0.1.16" "langchain-community==0.0.34" "langchain-openai==0.1.3" \
+        "langchain-experimental==0.0.57" "chromadb==0.4.24" "tiktoken==0.6.0" "open_clip_torch==2.24.0"
+    pip install --no-cache-dir importlib_resources==5.0.0
+    pip check || true
+    python -c "import torch, gym, mineclip, numpy; print('torch', torch.__version__, 'gym', gym.__version__, 'numpy', numpy.__version__)"
+
+%environment
+    export LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8 TZ=UTC
+    export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+    export VGL_DISPLAY=egl NVIDIA_DRIVER_CAPABILITIES=all
+    export PATH=/opt/conda/envs/minerl/bin:/opt/conda/bin:$PATH

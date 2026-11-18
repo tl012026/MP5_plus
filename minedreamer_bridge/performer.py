@@ -48,7 +48,10 @@ def _pose(obs: dict):
     loc = (obs or {}).get("location_stats")
     if not loc:
         return None
-    return {"pos": [round(float(v), 3) for v in loc.get("pos", [])],
+    pos = loc.get("pos")
+    if pos is None and "xpos" in loc:          # MineRL 1.0 reports xpos/ypos/zpos, MineDojo reports pos
+        pos = [loc["xpos"], loc["ypos"], loc["zpos"]]
+    return {"pos": [round(float(v), 3) for v in (pos if pos is not None else [])],
             "yaw": round(float(loc.get("yaw", 0.0)), 2), "pitch": round(float(loc.get("pitch", 0.0)), 2)}
 
 

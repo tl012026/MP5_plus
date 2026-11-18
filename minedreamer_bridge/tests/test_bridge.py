@@ -173,6 +173,7 @@ class Mc116Test(unittest.TestCase):
         self.assertEqual(setup["preferred_spawn_biome"], "plains")
         self.assertEqual(sorted(setup["inventory"], key=lambda r: r["type"]),
                          [{"type": "coal", "quantity": 6}, {"type": "dirt", "quantity": 6}])
+        self.assertEqual(setup["init_commands"][0], "/gamerule sendCommandFeedback false")
         cmds = " | ".join(setup["init_commands"])
         for frag in ("/time set 18000", "doDaylightCycle false", "/weather rain", "summon minecraft:pig", "setblock"):
             self.assertIn(frag, cmds)

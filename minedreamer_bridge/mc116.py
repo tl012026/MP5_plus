@@ -78,7 +78,9 @@ def task_setup(env_cfg: dict | None = None, episode: dict | None = None, seed: i
     for row in inventory:                       # MineDojo uses slots; MineRL wants one row per type
         merged[row["type"]] = merged.get(row["type"], 0) + row["quantity"]
     biome = episode.get("specified_biome") or env_cfg.get("specified_biome")
-    cmds = []
+    # Command feedback is drawn as chat text over the frame (seen in the 2026-11-16 MineRL smoke test);
+    # turn it off first so STEVE-1, MineCLIP and the percipient see a clean picture.
+    cmds = ["/gamerule sendCommandFeedback false"]
     start_time = episode.get("start_time") or ("night" if env_cfg.get("start_at_night") else None)
     if start_time:
         cmds += [f"/time set {TIME_TICKS[start_time]}", "/gamerule doDaylightCycle false"]
@@ -106,8 +108,9 @@ class CommandCrafter:
 
     name = "command_craft"
 
-    def __init__(self, env):
+    def __init__(self, env, max_settle_steps: int = 40):
         self.env = env
+        self.max_settle_steps = int(max_settle_steps)
 
     def plan(self, action: dict, inventory: dict) -> dict:
         args = action.get("args") or {}
@@ -145,8 +148,12 @@ class CommandCrafter:
         before = count_mp5(inventory, plan["item"])
         for cmd in plan["commands"]:
             self.env.execute_cmd(cmd)
-        obs = self.env.settle()
-        after = count_mp5(obs.get("inventory") or {}, plan["item"])
+        # MineRL applies chat commands on later ticks; poll a few no-op steps (smoke test 2026-11-16)
+        for _ in range(self.max_settle_steps):
+            obs = self.env.settle()
+            after = count_mp5(obs.get("inventory") or {}, plan["item"])
+            if after - before >= plan["count"]:
+                break
         ok = after - before >= plan["count"]
         return {"ok": ok, "reason": "" if ok else f"{plan['item']} did not appear after the commands",
                 "commands": plan["commands"], "obs": obs}
