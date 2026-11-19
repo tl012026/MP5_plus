@@ -70,6 +70,8 @@ def run_episode(task_file, seed, config, out_dir, env=None):
     Run one task file as one episode. The planner-performer-patroller loop is unchanged.
     env: optional already-created env (tests inject a fake). Otherwise MineDojo is constructed.
     """
+    # Resolve CLI paths against the caller's cwd before switching to prompt files.
+    task_file = Path(task_file).expanduser().resolve()
     out_dir = Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     # load_prompt() and task relative paths assume cwd is MP5_agent/agent/
@@ -127,6 +129,7 @@ def run_episode(task_file, seed, config, out_dir, env=None):
             use_history_workflow=False,
             ckpt_dir=str(runtime.out_dir),
             model_cfg=config["models"]["memory"],
+            embedding_cfg=config.get("embeddings"),
         )
         patroller = Patroller(
             openai_key=openai_key, memory=memory,
