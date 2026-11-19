@@ -28,6 +28,21 @@ def create_chat_openai(model_cfg):
     return ChatOpenAI(
         model_name=model_cfg["model_name"],
         temperature=model_cfg.get("temperature", 0),
+        openai_api_key=key,
+        openai_api_base=resolve_base_url(model_cfg.get("base_url")),
+    )
+
+
+def create_openai_embeddings(embedding_cfg=None):
+    from langchain.embeddings.openai import OpenAIEmbeddings
+    if embedding_cfg is None:
+        return OpenAIEmbeddings()
+    return OpenAIEmbeddings(
+        model=embedding_cfg["model_name"],
+        openai_api_base=resolve_base_url(embedding_cfg.get("base_url")),
+        openai_api_key=resolve_api_key(),
+        # Provider-prefixed model IDs are not tokenizer names.
+        tiktoken_model_name="text-embedding-ada-002",
     )
 
 

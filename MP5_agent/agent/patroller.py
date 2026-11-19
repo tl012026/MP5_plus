@@ -22,6 +22,13 @@ class Patroller:
 
 
     def check_task_success(self, task_information, max_retries=5):
+        """Check completion with at most max_retries total model calls.
+
+        Exhaustion is a checker error, not evidence that the game task failed.
+        run_episode records the propagated RuntimeError as outcome='error'.
+        """
+        if max_retries <= 0:
+            raise RuntimeError("Patroller completion check exhausted its attempt budget")
         check_system = load_prompt("check_system")
         check_query = load_prompt("check_query").format(
             task_information=task_to_description_prompt(task_information), 
@@ -40,9 +47,13 @@ class Patroller:
             latency = time.time() - t0
 
             check_dict = fix_and_parse_json(check_info)
-            assert check_dict["success"] in [True, False]
-            if "suggestion" not in check_dict:
-                check_dict["suggestion"] = ""
+            if not isinstance(check_dict, dict) or type(check_dict.get("success")) is not bool:
+                raise ValueError("Patroller response must contain a boolean success")
+            for field in ("feedback", "suggestion"):
+                if field not in check_dict:
+                    check_dict[field] = ""
+                elif not isinstance(check_dict[field], str):
+                    raise ValueError(f"Patroller {field} must be a string")
 
             log_info(f"Check Result: {check_dict}")
 
@@ -63,9 +74,11 @@ class Patroller:
             return check_dict
 
         except Exception as e:
-            log_info(f"Error arises in Checker part: {e} Trying again!\n\n")
+            if max_retries <= 1:
+                raise RuntimeError("Patroller completion check exhausted its attempt budget") from e
+            log_info(f"Checker call failed; {max_retries - 1} attempts remain.\n")
             return self.check_task_success(
-                messages=messages,
+                task_information=task_information,
                 max_retries=max_retries - 1,
             ) 
 
