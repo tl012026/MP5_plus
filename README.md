@@ -99,7 +99,7 @@ Do not edit `MP5_agent/agent/structured_actions copy.py`. `LAMM/`, weights, `*.s
 - MineLLM code: [IranQin/LAMM](https://github.com/IranQin/LAMM), cloned as `LAMM/`.
 - Weights, pinned in `models.lock.json`: [IranQin/MineLLM](https://huggingface.co/IranQin/MineLLM) (`Mine_52k_Vicuna_13b_v1.5_epoch_3_mlp2x_gelu/pytorch_model.pt`), [lmsys/vicuna-13b-v1.5](https://huggingface.co/lmsys/vicuna-13b-v1.5), and `mineclip_image_encoder_vit-B_196tokens.pth`.
 - From `LAMM/src`, the server expects `../ckpt/<folder>/pytorch_model.pt`, `../model_zoo/vicuna_ckpt/13b_v1.5/`, `../model_zoo/mineclip_ckpt/mineclip_image_encoder_vit-B_196tokens.pth`, and `../images/`.
-- Start with `python mllm_api_mc_v1.5.py` in `LAMM/src`. It listens on port 25541. `POST /image` takes `file`, `text`, and `is_del`, and returns `{"answer": ...}`. fp16 needs about 27 GB. Do not use LAMM's `src/scripts/mllm_api_slurm.sh`.
+- Start with `python mllm_api_mc_v1.5.py` in `LAMM/src`. It listens on port 25541. `POST /image` takes `file`, `text`, and `is_del`, and returns `{"answer": ...}`. fp16 needs about 27 GB. Do not use LAMM's `src/scripts/mllm_api_slurm.sh`. In jobs, use `slurm/minellm_server.sh`; see `docs/minellm_service.md`.
 - Offline perception data: [IranQin/MP5_dataset](https://huggingface.co/datasets/IranQin/MP5_dataset).
 
 ## Environment
@@ -110,7 +110,6 @@ Python ≥ 3.9, JDK 8, Xvfb, [MineDojo](https://docs.minedojo.org/sections/getti
 
 - Patroller retry-on-exception uses the wrong call signature (original code).
 - `openai.api_base` is process-wide.
-- MineLLM flags in `slurm/eval_gpu_minellm.sbatch` are placeholders.
 - `lfnav` camera field of view, several observation keys, and action vectors are still unconfirmed.
 
 ## Citation
