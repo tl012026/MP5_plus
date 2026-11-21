@@ -37,7 +37,7 @@ Requeue-safe: finished `OUT/<task>/<seed>.json` files are skipped.
 
 ## Integration test (MineLLM + agent)
 
-`integration_episode.sh` runs one episode end to end: it checks `OPENAI_API_KEY`, starts MineLLM and waits for the port, waits for host memory to settle, runs `run_agent.py` in the MineDojo image with `configs/openrouter.yaml` (a copy with `eval.max_steps=2000`), stops MineLLM, and writes `/scratch/wz2999/integration_test/summary_<jobid>.md`. Two wrappers call it:
+`integration_episode.sh` runs one episode end to end: it checks `OPENAI_API_KEY`, starts MineLLM and waits for the port, waits for host memory to settle, runs `run_agent.py` in the MineDojo image with `configs/openrouter.yaml` (a copy with `eval.max_steps` set to `MAX_STEPS`: 12000 in the A100 job, 2000 in the rehearsal), stops MineLLM, and writes `/scratch/wz2999/integration_test/summary_<jobid>.md`. Two wrappers call it:
 
 - `integration_rehearsal_cpu.sbatch`: CPU partition, `tools/fake_minellm_server.py` instead of MineLLM. Run this first.
 - `integration_wooden_pickaxe.sbatch`: A100, real MineLLM.
