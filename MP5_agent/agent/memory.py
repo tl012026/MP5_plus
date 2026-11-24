@@ -1,5 +1,5 @@
 from utils import *
-from llm_factory import create_chat_openai
+from llm_factory import create_chat_openai, create_openai_embeddings
 
 class Memory:
     
@@ -13,6 +13,7 @@ class Memory:
         retrieval_top_k=2,
         temperature=0,
         model_cfg=None,
+        embedding_cfg=None,
     ):
         ## Long Memory
         self.inventory = {}
@@ -32,7 +33,7 @@ class Memory:
         f_mkdir(f"{self.ckpt_dir}/memory/workflow_vectordb_{self.ckpt_id}")
         self.workflow_vectordb = Chroma(
             collection_name=f"workflow_vectordb_{self.ckpt_id}",
-            embedding_function=OpenAIEmbeddings(),
+            embedding_function=create_openai_embeddings(embedding_cfg),
             persist_directory=f"{ckpt_dir}/memory/workflow_vectordb_{self.ckpt_id}",
         )
 

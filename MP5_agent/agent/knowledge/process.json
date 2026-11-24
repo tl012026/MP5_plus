@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "coverage": "wood tier only; simulator-validated, not Minecraft-validated",
+  "records": {
+    "wood": {
+      "kind": "mine",
+      "output_item": "log",
+      "output_count": 1,
+      "material": null,
+      "tool": null,
+      "platform": null,
+      "enabled": true,
+      "source": "Local WoodWorld simulator contract; real MineDojo behavior pending validation"
+    },
+    "planks": {
+      "kind": "craft",
+      "output_item": "planks",
+      "output_count": 4,
+      "material": {
+        "log": 1
+      },
+      "tool": null,
+      "platform": null,
+      "enabled": true,
+      "source": "Local WoodWorld simulator and existing wood task; not author-released Knowledge Memory"
+    },
+    "stick": {
+      "kind": "craft",
+      "output_item": "stick",
+      "output_count": 4,
+      "material": {
+        "planks": 2
+      },
+      "tool": null,
+      "platform": null,
+      "enabled": true,
+      "source": "Local WoodWorld simulator and existing wood task; not author-released Knowledge Memory"
+    },
+    "crafting table": {
+      "kind": "craft",
+      "output_item": "crafting table",
+      "output_count": 1,
+      "material": {
+        "planks": 4
+      },
+      "tool": null,
+      "platform": null,
+      "enabled": true,
+      "source": "Local WoodWorld simulator and existing wood task; not author-released Knowledge Memory"
+    },
+    "wooden pickaxe": {
+      "kind": "craft",
+      "output_item": "wooden pickaxe",
+      "output_count": 1,
+      "material": {
+        "planks": 3,
+        "stick": 2
+      },
+      "tool": null,
+      "platform": "crafting table",
+      "enabled": true,
+      "source": "Local WoodWorld simulator and existing wood task; not author-released Knowledge Memory"
+    }
+  }
+}
