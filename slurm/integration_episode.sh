@@ -104,6 +104,28 @@ for f in "$SIF" "$ENV_FILE" "$BASE_CONFIG" "$TASK" "$MP5_ROOT/slurm/minellm_serv
 done
 command -v singularity >/dev/null || fail "singularity not found on $(node_name)"
 
+# Record exactly which task file this run used.
+say ""; say "## Task file"; say ""
+say "- Path: \`$TASK\`"
+say "- Source: $([ "${TASK_SOURCE:-}" = TASK_FILE ] && echo 'TASK_FILE (set at submission)' || echo 'default (handwritten task in the repo)')"
+say "- sha256: \`$(sha256sum "$TASK" | cut -d' ' -f1)\`; copied to \`$RUN_DIR/task_used.json\`"
+cp "$TASK" "$RUN_DIR/task_used.json"
+case "/$TASK/" in
+    */process/*) ;;
+    *) say "- **WARNING: path has no 'process' directory; run_agent.py will not check the final inventory (success=None).**" ;;
+esac
+PARSER_DIR=$(dirname "$(dirname "$TASK")")
+if [ -f "$PARSER_DIR/validation.json" ]; then
+    say "- Parser run: \`$PARSER_DIR\`; validation: \`$(python3 -I -c 'import json,sys; v=json.load(open(sys.argv[1])); print({k: v.get(k) for k in ("passed", "status")})' "$PARSER_DIR/validation.json" 2>&1)\`"
+fi
+say "- Subgoals (file order, which is reverse execution order):"
+python3 -I -c '
+import json, sys
+for i, t in enumerate(json.load(open(sys.argv[1]))):
+    print("  %d. %s x%s  material=%s  tool=%s  platform=%s" % (
+        i, t.get("task"), t.get("quantity"), t.get("material"), t.get("tool"), t.get("platform")))
+' "$TASK" >> "$SUMMARY" 2>&1 || fail "task file is not valid JSON: $TASK"
+
 code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 https://openrouter.ai/api/v1/models || true)
 say "- OpenRouter reachability (\`GET /api/v1/models\`, no key): HTTP $code"
 [ "$code" = "200" ] || fail "cannot reach openrouter.ai from $(node_name) (HTTP $code)"
