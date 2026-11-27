@@ -1,0 +1,68 @@
+# Conditional object search in AI2-THOR.
+# near_threshold_m is the horizontal (x/z) distance between object centers.
+
+near_threshold_m: 0.6
+lights_off_probability: 0.5
+closed_containers: [Fridge, Cabinet, Drawer, Microwave, Box, Safe]
+
+# Tasks per room inside one level. These four numbers sum to 50.
+level_room_counts:
+  kitchen: 15
+  bedroom: 15
+  living: 10
+  bathroom: 10
+
+rooms:
+  kitchen:
+    name: kitchen
+    scene_ids: [FloorPlan1, FloorPlan2, FloorPlan3, FloorPlan4, FloorPlan5, FloorPlan6, FloorPlan7, FloorPlan8, FloorPlan9, FloorPlan10, FloorPlan11, FloorPlan12, FloorPlan13, FloorPlan14, FloorPlan15, FloorPlan16, FloorPlan17, FloorPlan18, FloorPlan19, FloorPlan20, FloorPlan21, FloorPlan22, FloorPlan23, FloorPlan24, FloorPlan25, FloorPlan26, FloorPlan27, FloorPlan28, FloorPlan29, FloorPlan30]
+    targets: [Bread, Pan, Mug, Bowl, Apple, Tomato, SoapBottle]
+    open_surfaces: [CounterTop, DiningTable, SinkBasin, StoveBurner]
+    anchors: [Sink, StoveBurner, CoffeeMachine, Toaster]
+  living:
+    name: living room
+    scene_ids: [FloorPlan201, FloorPlan202, FloorPlan203, FloorPlan204, FloorPlan205, FloorPlan206, FloorPlan207, FloorPlan208, FloorPlan209, FloorPlan210, FloorPlan211, FloorPlan212, FloorPlan213, FloorPlan214, FloorPlan215, FloorPlan216, FloorPlan217, FloorPlan218, FloorPlan219, FloorPlan220, FloorPlan221, FloorPlan222, FloorPlan223, FloorPlan224, FloorPlan225, FloorPlan226, FloorPlan227, FloorPlan228, FloorPlan229, FloorPlan230]
+    targets: [Laptop, RemoteControl, KeyChain, Box]
+    open_surfaces: [SideTable, CoffeeTable, Sofa, Shelf]
+    anchors: [Television, FloorLamp, HousePlant]
+  bedroom:
+    name: bedroom
+    scene_ids: [FloorPlan301, FloorPlan302, FloorPlan303, FloorPlan304, FloorPlan305, FloorPlan306, FloorPlan307, FloorPlan308, FloorPlan309, FloorPlan310, FloorPlan311, FloorPlan312, FloorPlan313, FloorPlan314, FloorPlan315, FloorPlan316, FloorPlan317, FloorPlan318, FloorPlan319, FloorPlan320, FloorPlan321, FloorPlan322, FloorPlan323, FloorPlan324, FloorPlan325, FloorPlan326, FloorPlan327, FloorPlan328, FloorPlan329, FloorPlan330]
+    targets: [Laptop, Book, CellPhone, AlarmClock, KeyChain]
+    open_surfaces: [Desk, SideTable, Bed, Shelf]
+    anchors: [DeskLamp, AlarmClock, Pillow]
+  bathroom:
+    name: bathroom
+    scene_ids: [FloorPlan401, FloorPlan402, FloorPlan403, FloorPlan404, FloorPlan405, FloorPlan406, FloorPlan407, FloorPlan408, FloorPlan409, FloorPlan410, FloorPlan411, FloorPlan412, FloorPlan413, FloorPlan414, FloorPlan415, FloorPlan416, FloorPlan417, FloorPlan418, FloorPlan419, FloorPlan420, FloorPlan421, FloorPlan422, FloorPlan423, FloorPlan424, FloorPlan425, FloorPlan426, FloorPlan427, FloorPlan428, FloorPlan429, FloorPlan430]
+    targets: [SoapBottle, SoapBar, SprayBottle, ToiletPaper]
+    open_surfaces: [CounterTop, SinkBasin, Toilet]
+    anchors: [Sink, Toilet]
+
+# Core states. true_action makes the property true, false_action makes it false.
+# Bread cannot be unsliced; a sliced distractor is never required.
+states:
+  Laptop:
+    property: isOpen
+    true_action: OpenObject
+    false_action: CloseObject
+    text: open
+  Book:
+    property: isOpen
+    true_action: OpenObject
+    false_action: CloseObject
+    text: open
+  Bread:
+    property: isSliced
+    true_action: SliceObject
+    false_action: null
+    text: sliced
+  Pan:
+    property: isDirty
+    true_action: DirtyObject
+    false_action: CleanObject
+    text: dirty
+  CellPhone:
+    property: isToggled
+    true_action: ToggleObjectOn
+    false_action: ToggleObjectOff
+    text: switched-on
